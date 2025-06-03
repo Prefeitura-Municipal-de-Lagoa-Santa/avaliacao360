@@ -1,53 +1,60 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue'; // Removido defineProps e PropType pois não estavam sendo usados diretamente aqui para props complexas
-import { Link, usePage } from '@inertiajs/vue3';
+import { ref, computed } from 'vue';
+// Adicionado 'router' para requisições programáticas com Inertia
+import { Link, usePage, router } from '@inertiajs/vue3';
+import {
+  Dialog,
+  DialogTrigger,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+  DialogClose,
+} from '@/components/ui/dialog'; // Seus imports do Dialog
 
 interface NavItem {
   label: string;
-  href: string; // href é obrigatório para navegação com Link
-  routeName: string; // Nome da rota para verificação com route().current()
-  action?: () => void; // Para itens que disparam ações JS (não usado neste exemplo de nav)
+  href: string;
+  routeName: string;
+  action?: () => void;
 }
-
-// Props para o layout, se necessário (ex: título da página)
-// Se você precisar passar o título da página do controller, descomente e defina as props
-// const props = defineProps({
-//   pageTitle: {
-//     type: String,
-//     default: 'Dashboard',
-//   },
-// });
 
 const navItems = ref<NavItem[]>([
   { label: 'Dashboard', href: '/dashboard', routeName: 'dashboard' },
-  { label: 'Avaliação', href: '/evalutions', routeName: 'evalutions' }, // Assumindo que as rotas têm esses nomes
+  { label: 'Avaliação', href: '/evalutions', routeName: 'evalutions' },
   { label: 'Relatórios', href: '/reports', routeName: 'reports' },
   { label: 'Calendário', href: '/calendar', routeName: 'calendar' },
   { label: 'Configurações', href: '/configs', routeName: 'configs' },
 ]);
 
-// Função global route() injetada pelo Ziggy
-// Esta declaração ajuda o TypeScript a entender que route() existe globalmente
-// Você precisará ter o Ziggy configurado corretamente no seu projeto.
 declare function route(name?: string, params?: any, absolute?: boolean, ziggy?: any): any;
 
 const isActive = (itemRouteName: string, itemHref: string) => {
-  // Verifica se a função route() está disponível
   if (typeof route === 'function' && route().current) {
-    // Se o nome da rota for 'dashboard' e a rota atual for 'dashboard', é ativo.
-    // Ou se o nome da rota atual corresponder ao itemRouteName.
     if (itemRouteName === 'dashboard' && route().current('dashboard')) {
-        return true;
+      return true;
     }
     return route().current(itemRouteName);
   }
-  // Fallback se route() não estiver disponível (menos preciso)
   const page = usePage();
   return page.url.startsWith(itemHref);
 };
 
-
-// Lógica para o menu mobile, notificações, etc. pode ser adicionada aqui
+// Função para executar o logout após confirmação no Dialog
+const executeLogout = () => {
+  router.post(route('logout'), {
+    onSuccess: () => {
+      // A página deve recarregar ou redirecionar conforme a resposta do backend,
+      // o que naturalmente fechará o dialog.
+      // console.log('Logout realizado com sucesso!');
+    },
+    onError: (errors) => {
+      console.error('Erro ao fazer logout:', errors);
+      // Você pode querer tratar erros aqui, talvez exibindo uma notificação.
+    },
+  });
+};
 </script>
 
 <template>
@@ -55,10 +62,10 @@ const isActive = (itemRouteName: string, itemHref: string) => {
     <div class="app-container bg-white rounded-2xl shadow-xl w-full max-w-4xl overflow-hidden flex flex-col">
       <header class="header bg-white p-5 sm:p-6 border-b border-gray-200 flex justify-between items-center">
         <div class="flex items-center gap-3">
-          <svg class="w-6 h-6 text-gray-600 cursor-pointer" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"></path>
-          </svg>
-          <div class="text-xl font-semibold text-gray-800">Software</div>
+          <div>
+            <img src="/images/logo.png" alt="Logo da Prefeitura de Lagoa Santa" class="w-auto h-8 cursor-pointer">
+          </div>
+          <div class="text-xl font-semibold text-gray-800">Prefeitura Municipal de Lagoa Santa</div>
         </div>
         <div class="flex items-center gap-4">
           <svg class="w-6 h-6 text-gray-500 cursor-pointer hover:text-indigo-600 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"></path></svg>
@@ -69,9 +76,45 @@ const isActive = (itemRouteName: string, itemHref: string) => {
 
       <div class="px-6 sm:px-8 py-4 bg-white border-b border-gray-200 flex flex-col sm:flex-row justify-between items-start sm:items-center">
         <h1 class="text-2xl font-bold text-gray-800 mb-2 sm:mb-0">Avaliação de desempenho 360°</h1>
-        <button class="px-4 py-2 bg-indigo-100 text-indigo-700 rounded-lg font-medium text-sm hover:bg-indigo-200 transition-colors">
-          Ver mais
-        </button>
+        
+        <Dialog>
+          <DialogTrigger as-child>
+            <button
+              class="px-4 py-2 bg-red-500 text-white rounded-lg font-medium text-sm hover:bg-red-700 transition-colors card-icon-logout flex items-center"
+              title="Sair do sistema"
+            >
+              Sair
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-5 h-5 ml-0.5"> 
+                <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0013.5 3h-6a2.25 2.25 0 00-2.25 2.25v13.5A2.25 2.25 0 007.5 21h6a2.25 2.25 0 002.25-2.25V15m3 0l3-3m0 0l-3-3m3 3H9" />
+              </svg>
+            </button>
+          </DialogTrigger>
+          <DialogContent class="sm:max-w-md bg-white">
+            <DialogHeader>
+              <DialogTitle class="text-lg font-semibold text-gray-900">Confirmar</DialogTitle>
+              <DialogDescription class="mt-2 text-sm text-gray-600">
+                Tem certeza que deseja sair do sistema?
+              </DialogDescription>
+            </DialogHeader>
+            <DialogFooter class="mt-6 flex flex-col-reverse sm:flex-row sm:justify-end sm:space-x-2">
+              <DialogClose as-child>
+                <button 
+                  type="button" 
+                  class="w-full sm:w-auto inline-flex justify-center rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 sm:mt-0"
+                >
+                  Cancelar
+                </button>
+              </DialogClose>
+              <button
+                @click="executeLogout"
+                type="button"
+                class="w-full sm:w-auto inline-flex justify-center rounded-md border border-transparent bg-red-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2 mt-3 sm:mt-0"
+              >
+                Sim, Sair
+              </button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </div>
 
       <nav class="nav-bar bg-gray-50 p-3 sm:p-4 border-b border-gray-200 flex gap-3 sm:gap-4 overflow-x-auto">
@@ -90,22 +133,9 @@ const isActive = (itemRouteName: string, itemHref: string) => {
       </nav>
 
       <main class="content p-6 sm:p-8 flex-grow">
-        <slot /> </main>
+        <slot /> 
+      </main>
     </div>
   </div>
 </template>
 
-<style scoped>
-/* Estilos específicos do layout, se necessário. Tailwind é priorizado. */
-.app-container {
-  min-height: calc(100vh - 4rem); /* Ajuste para padding do body */
-}
-
-.nav-bar::-webkit-scrollbar {
-  display: none; /* Chrome, Safari, Opera */
-}
-.nav-bar {
-  -ms-overflow-style: none;  /* IE and Edge */
-  scrollbar-width: none; /* Firefox */
-}
-</style>
