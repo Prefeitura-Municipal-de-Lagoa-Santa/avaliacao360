@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import DashboardLayout from '@/layouts/DashboardLayout.vue';
-import DashboardCard from '@/Components/DashboardCard.vue';
+import DashboardCard from '@/components/DashboardCard.vue';
 import { Head } from '@inertiajs/vue3'; // Para gerenciar o <head> da página
+import * as icons from 'lucide-vue-next';
 
 // Importar SVGs como componentes ou usar inline SVG
 // Exemplo de como poderia ser um SVG inline ou importado
@@ -16,7 +17,7 @@ const dashboardData = {
   completedAssessments: 12,
   pendingAssessments: 3,
   overallProgress: '85%',
-  nextDeadline: '25/06',
+  nextDeadline: '25/06 - 30/06',
 };
 
 function showDetailsForDeadline() {
@@ -33,11 +34,45 @@ function showDetailsForDeadline() {
   <Head title="Dashboard" />
   <DashboardLayout pageTitle="Dashboard de Avaliação">
     <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-        
+        <DashboardCard
+        :value="dashboardData.completedAssessments"
+        label="Autoavaliação"
+        iconBgColor="#1d82c4"
+        :buttonAction="showDetailsForDeadline"
+        buttonText="Começar agora"
+      >
+        <template #icon>
+          <icons.ListChecks>
+          </icons.ListChecks>
+          <div ></div>
+        </template>
+      </DashboardCard>
+      <DashboardCard
+        :value="dashboardData.completedAssessments"
+        label="Avaliação Chefia"
+        iconBgColor="#ef4444"
+        buttonText="Começar agora"
+        :buttonAction="showDetailsForDeadline"
+      >
+        <template #icon>
+          <icons.ListChecks>
+          </icons.ListChecks>
+          <div ></div>
+        </template>
+      </DashboardCard>
+      <DashboardCard
+        :value="dashboardData.nextDeadline"
+        label="Prazo"
+        iconBgColor="#ef4444"
+        buttonText="Ver Detalhes"
+        :buttonAction="showDetailsForDeadline"
+      >
+        <template #icon>
+          <icons.CalendarDays>
+          </icons.CalendarDays>
+        </template>
+      </DashboardCard>
     </div>
   </DashboardLayout>
 </template>
 
-<style scoped>
-/* Estilos específicos para a página do dashboard, se necessário */
-</style>
