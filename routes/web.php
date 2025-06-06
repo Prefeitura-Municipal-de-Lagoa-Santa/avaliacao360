@@ -5,7 +5,7 @@ use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
 
 Route::get('/', function () {
-    return Inertia::render('Welcome');
+    return Inertia::render('welcome');
 })->name('home');
 
 // Route::get('dashboard', function () {
@@ -14,7 +14,15 @@ Route::get('/', function () {
 
 Route::get('/dashboard', [DashboardController::class, 'index'])->name('dashboard');
 
-Route::get('/evalutions', [DashboardController::class, 'evalution'])->name('evalutions');
+Route::get('/evaluations', [DashboardController::class, 'evaluation'])->name('evaluations');
+
+Route::get('/pdi', [DashboardController::class, 'pdi'])->name('pdi');
+
+Route::get('/reports', [DashboardController::class, 'reports'])->name('reports');
+
+Route::get('/calendar', [DashboardController::class, 'calendar'])->name('calendar');
+
+Route::get('/configs', [DashboardController::class, 'configs'])->name('configs');
 
 require __DIR__.'/settings.php';
 require __DIR__.'/auth.php';

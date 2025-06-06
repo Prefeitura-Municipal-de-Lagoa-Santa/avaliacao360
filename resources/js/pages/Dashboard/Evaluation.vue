@@ -14,7 +14,7 @@ const CalendarIcon = `<svg class="w-8 h-8" fill="none" stroke="currentColor" vie
 
 // Dados para os cards (poderiam vir do controller Laravel via props)
 const dashboardData = {
-  completedAssessments: 12,
+  
   pendingAssessments: 3,
   overallProgress: '85%',
   nextDeadline: '25/06 - 30/06',
@@ -35,7 +35,7 @@ function showDetailsForDeadline() {
   <DashboardLayout pageTitle="Dashboard de Avaliação">
     <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
         <DashboardCard
-        :value="dashboardData.completedAssessments"
+        
         label="Autoavaliação"
         iconBgColor="#1d82c4"
         :buttonAction="showDetailsForDeadline"
@@ -48,7 +48,7 @@ function showDetailsForDeadline() {
         </template>
       </DashboardCard>
       <DashboardCard
-        :value="dashboardData.completedAssessments"
+        
         label="Avaliação Chefia"
         iconBgColor="#ef4444"
         buttonText="Começar agora"
@@ -60,6 +60,20 @@ function showDetailsForDeadline() {
           <div ></div>
         </template>
       </DashboardCard>
+      <DashboardCard
+        
+        label="Minhas Avaliações"
+        iconBgColor="#ef4444"
+        buttonText="Ver Resultados"
+        :buttonAction="showDetailsForDeadline"
+      >
+        <template #icon>
+          <icons.ListChecks>
+          </icons.ListChecks>
+          <div ></div>
+        </template>
+      </DashboardCard>
+      
       <DashboardCard
         :value="dashboardData.nextDeadline"
         label="Prazo"

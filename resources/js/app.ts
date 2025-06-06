@@ -1,4 +1,5 @@
 import '../css/app.css'; // Seu CSS principal, incluindo Tailwind
+import '../css/custom.css'; // Seu CSS principal, incluindo Tailwind
 
 import { createApp, h, DefineComponent } from 'vue';
 import { createInertiaApp, Link, Head } from '@inertiajs/vue3';

@@ -25,7 +25,8 @@ interface NavItem {
 
 const navItems = ref<NavItem[]>([
   { label: 'Dashboard', href: '/dashboard', routeName: 'dashboard' },
-  { label: 'Avaliação', href: '/evalutions', routeName: 'evalutions' },
+  { label: 'Avaliação', href: '/evaluations', routeName: 'evaluations' },
+  { label: 'PDI', href: '/pdi', routeName: 'pdi' },
   { label: 'Relatórios', href: '/reports', routeName: 'reports' },
   { label: 'Calendário', href: '/calendar', routeName: 'calendar' },
   { label: 'Configurações', href: '/configs', routeName: 'configs' },
@@ -121,7 +122,7 @@ watch(isMobileMenuOpen, (isOpen) => {
           </Link>
           
         </template>
-         <div class="button-logout ml-auto"> <Dialog>
+         <div class="button-logout ml-44"> <Dialog>
           <DialogTrigger as-child>
             <button
               class="px-4 py-2 bg-red-500 text-white rounded-lg font-medium text-sm hover:bg-red-700 transition-colors card-icon-logout flex items-center"

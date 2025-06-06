@@ -31,7 +31,7 @@ class DashboardController extends Controller
         ]);
     }
 
-    public function evalution(): Response
+    public function evaluation(): Response
     {
         // Você pode passar dados do backend para o frontend aqui
         $dashboardStats = [
@@ -41,9 +41,73 @@ class DashboardController extends Controller
             'nextDeadline' => '25/06/2024', // Exemplo de dado
         ];
 
-        return Inertia::render('Dashboard/Evalution', [
+        return Inertia::render('Dashboard/Evaluation', [
             'stats' => $dashboardStats, // Esses dados estarão disponíveis como props no componente Dashboard/Index.vue
             // Outros dados necessários para a página
         ]);
     }
+
+    public function pdi(): Response
+    {
+        // Você pode passar dados do backend para o frontend aqui
+        $dashboardStats = [
+            'completedAssessments' => 12,
+            'pendingAssessments' => 3,
+            'overallProgress' => '85%',
+            'nextDeadline' => '25/06/2024', // Exemplo de dado
+        ];
+
+        return Inertia::render('Dashboard/PDI', [
+            'stats' => $dashboardStats, // Esses dados estarão disponíveis como props no componente Dashboard/Index.vue
+            // Outros dados necessários para a página
+        ]);
+    }
+
+     public function calendar(): Response
+    {
+        // Você pode passar dados do backend para o frontend aqui
+        $dashboardStats = [
+            'completedAssessments' => 12,
+            'pendingAssessments' => 3,
+            'overallProgress' => '85%',
+            'nextDeadline' => '25/06/2024', // Exemplo de dado
+        ];
+
+        return Inertia::render('Dashboard/Calendar', [
+            'stats' => $dashboardStats, // Esses dados estarão disponíveis como props no componente Dashboard/Index.vue
+            // Outros dados necessários para a página
+        ]);
+    }
+
+    public function reports(): Response
+    {
+        // Você pode passar dados do backend para o frontend aqui
+        $dashboardStats = [
+            'completedAssessments' => 12,
+            'pendingAssessments' => 3,
+            'overallProgress' => '85%',
+            'nextDeadline' => '25/06/2024', // Exemplo de dado
+        ];
+
+        return Inertia::render('Dashboard/Reports', [
+            'stats' => $dashboardStats, // Esses dados estarão disponíveis como props no componente Dashboard/Index.vue
+            // Outros dados necessários para a página
+        ]);
+    }
+
+    public function configs(): Response
+    {
+        // Você pode passar dados do backend para o frontend aqui
+        $dashboardStats = [
+            'completedAssessments' => 12,
+            'pendingAssessments' => 3,
+            'overallProgress' => '85%',
+            'nextDeadline' => '25/06/2024', // Exemplo de dado
+        ];
+
+        return Inertia::render('Dashboard/Configs', [
+            'stats' => $dashboardStats, // Esses dados estarão disponíveis como props no componente Dashboard/Index.vue
+            // Outros dados necessários para a página
+        ]);
+    }    
 }
