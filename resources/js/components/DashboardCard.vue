@@ -26,7 +26,7 @@ const iconWrapperStyle = computed(() => {
     >
       <slot name="icon"></slot>
     </div>
-    <div class="value text-4xl font-bold text-indigo-600 mb-2">{{ props.value }}</div>
+    <div class="value text-2xl font-bold text-indigo-400 mb-2">{{ props.value }}</div>
     <div class="label text-base text-gray-600 mb-4">{{ props.label }}</div>
     <div
       v-if="props.chartPlaceholderText"
@@ -37,7 +37,7 @@ const iconWrapperStyle = computed(() => {
     <button
       v-if="props.buttonText && props.buttonAction"
       @click="props.buttonAction"
-      class="card-button mt-5 px-6 py-2 bg-indigo-600 text-white rounded-lg font-medium hover:bg-indigo-700 transition-colors"
+      class="card-button mt-5 px-6 py-2 bg-sky-700/75 text-white rounded-lg font-medium hover:bg-sky-800 transition-colors"
     >
       {{ props.buttonText }}
     </button>
