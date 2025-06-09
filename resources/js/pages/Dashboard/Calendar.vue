@@ -88,7 +88,7 @@ const calendarGridDays = computed(() => {
   <DashboardLayout pageTitle="Calendário de Eventos">
     <div class="calendar-container bg-white p-4 sm:p-6 rounded-lg shadow">
       <div class="calendar-header">
-        <button @click="previousMonth" class="px-3 py-2 sm:px-4 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 transition-colors flex items-center text-sm font-medium">
+        <button @click="previousMonth" class="px-3 py-2 sm:px-4 bg-indigo-500 text-white rounded-md hover:bg-indigo-600 transition-colors flex items-center text-sm font-medium">
           <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path>
           </svg>
@@ -97,7 +97,7 @@ const calendarGridDays = computed(() => {
         <h2 class="text-base sm:text-xl font-semibold text-gray-800 capitalize text-center">
           {{ displayedMonthYear }}
         </h2>
-        <button @click="nextMonth" class="px-3 py-2 sm:px-4 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 transition-colors flex items-center text-sm font-medium">
+        <button @click="nextMonth" class="px-3 py-2 sm:px-4 bg-indigo-500 text-white rounded-md hover:bg-indigo-600 transition-colors flex items-center text-sm font-medium">
           <span class="hidden sm:inline mr-1"></span>
           <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path>

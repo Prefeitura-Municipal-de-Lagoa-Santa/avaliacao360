@@ -14,15 +14,22 @@
   box-sizing: border-box;
 }
 
-@media (min-width: 640px) { /* sm breakpoint */
+@media (min-width: 640px) {
+
+  /* sm breakpoint */
   .body {
-    padding: 1.5rem; /* p-6 */
+    padding: 1.5rem;
+    /* p-6 */
     align-items: center;
   }
 }
-@media (min-width: 768px) { /* md breakpoint */
+
+@media (min-width: 768px) {
+
+  /* md breakpoint */
   .body {
-    padding: 2rem; /* p-8 */
+    padding: 2rem;
+    /* p-8 */
   }
 }
 
@@ -38,10 +45,14 @@
   flex-direction: column;
 }
 
-@media (min-width: 640px) { /* sm breakpoint */
+@media (min-width: 640px) {
+
+  /* sm breakpoint */
   .app-container {
     min-height: 0;
   }
+
+  
 }
 
 /* ======================================== */
@@ -54,6 +65,15 @@
   border-radius: 0.75rem;
   box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -2px rgba(0, 0, 0, 0.1);
   border: 1px solid #e5e7eb;
+}
+
+@media(max-width: 640px){
+  .setting-item {
+    flex-direction: column;   /* Muda a direção do flex para coluna */
+    align-items: flex-start;  /* Alinha os itens à esquerda */
+    gap: 0.75rem;
+    margin: 50px;             
+  }
 }
 
 .settings-section h3 {
@@ -73,7 +93,7 @@
   color: black;
 }
 
-.setting-item + .setting-item {
+.setting-item+.setting-item {
   border-top: 1px solid #f3f4f6;
 }
 
@@ -95,17 +115,36 @@
 
 /* Estilo PADRÃO para <button> dentro de .setting-item */
 .setting-item button {
+  /* Estilos existentes */
   padding: 0.5rem 1rem;
   border-radius: 0.375rem;
-  background-color: #1b598c; /* Cor azul padrão */
+  border: 1px solid rgba(0, 0, 0, 0.05);
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -2px rgba(0, 0, 0, 0.06);
+  transition: all 0.15s ease-in-out;
+  background-color: #3d7eb4;
   color: white;
   border: none;
   cursor: pointer;
   transition: background-color 0.2s;
+  /* Adicionei a transição que estava faltando */
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  position: relative;
+  top: 0;
+  
 }
 
 .setting-item button:hover {
-  background-color: #4338ca; /* Mantido o hover roxo para o botão padrão */
+  background-color: #1407aa;
+  transform: translateY(-2px); /* Move o botão 2px para cima */
+  box-shadow: 0 7px 10px -1px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.07);
+  /* Mantido o hover roxo para o botão padrão */
+}
+
+.setting-item button:active {
+  transform: translateY(1px); /* Move o botão 1px para baixo */
+  box-shadow: 0 2px 3px -1px rgba(0, 0, 0, 0.1), 0 1px 2px -1px rgba(0, 0, 0, 0.06);
 }
 
 .form-section {
@@ -128,24 +167,56 @@
 
 /* Garante que botões no grupo não tenham borda herdada */
 .setting-item .button-group button {
-  border: none;
+  border: 3px;
+  border-color: #000000;
+   width: 100%;
+   justify-content: center;
 }
 
 /* Estilos específicos que sobrescrevem o botão padrão */
 .button-group .btn-yellow {
-  background-color: #f59e0b;
-  color: white;
+  background-color: white;
+  color: #fcb224;
 }
+
 .button-group .btn-yellow:hover {
-  background-color: #d97706;
+  background-color: #f0decb;
 }
 
 .button-group .btn-green {
-  background-color: #16a34a;
-  color: white;
+  background-color: white;
+  color: #16a34a;
 }
+
 .button-group .btn-green:hover {
-  background-color: #15803d;
+  background-color: #9fe0b7;
+}
+
+.button-group .btn-blue {
+  background-color: white;
+  color: #408ebe;
+}
+
+.button-group .btn-blue:hover {
+  background-color: #b0dce9;
+}
+
+.button-group .btn-orange {
+  background-color: white;
+  color: #e0662e;
+}
+
+.button-group .btn-orange:hover {
+  background-color: #e7d1c4;
+}
+
+.button-group .btn-pine {
+  background-color: white;
+  color: #234f22;
+}
+
+.button-group .btn-pine:hover {
+  background-color: #b4e2b4;
 }
 
 /* ======================================== */
@@ -154,6 +225,7 @@
 .capitalize {
   text-transform: capitalize;
 }
+
 .calendar-container {
   margin: 0 auto;
 }
@@ -199,6 +271,7 @@
   border: 1px solid #e5e7eb;
   transition: background-color 0.2s;
 }
+
 .calendar-day:not(.empty):hover {
   background-color: #f9fafb;
 }
@@ -237,13 +310,16 @@
   cursor: pointer;
   transition: all 0.2s ease-in-out;
 }
+
 .event:hover {
   background-color: #a5b4fc;
 }
+
 .event.highlight {
   background-color: #fecaca;
   color: #991b1b;
 }
+
 .event.highlight:hover {
   background-color: #fca5a5;
 }
@@ -295,10 +371,12 @@
   visibility: hidden;
   transition: opacity 0.3s ease, visibility 0.3s ease;
 }
+
 .message-box-overlay.show {
   opacity: 1;
   visibility: visible;
 }
+
 .message-box {
   background-color: white;
   padding: 1.5rem 2rem;
@@ -308,15 +386,18 @@
   max-width: 400px;
   width: 90%;
 }
+
 .message-box h3 {
   font-size: 1.125rem;
   font-weight: 600;
   margin-bottom: 0.5rem;
 }
+
 .message-box p {
   color: #4b5563;
   margin-bottom: 1.25rem;
 }
+
 .message-box button {
   padding: 0.5rem 1.5rem;
   background-color: #1b598c;
