@@ -29,10 +29,21 @@ class AuthenticatedSessionController extends Controller
      */
     public function store(LoginRequest $request): RedirectResponse
     {
+
+        // Ajuste para o campo do LDAP (ex: sAMAccountName)
+        $credentials = [
+            'sAMAccountName' => $request->input('username'),
+            'password' => $request->input('password'),
+        ];
+
+        if (Auth::attempt($credentials)) {
+            $request->authenticate();
+            $request->session()->regenerate();
+            return redirect()->intended(route('dashboard', absolute: false));
+        }
+
         $request->authenticate();
-
         $request->session()->regenerate();
-
         return redirect()->intended(route('dashboard', absolute: false));
     }
 
@@ -46,6 +57,6 @@ class AuthenticatedSessionController extends Controller
         $request->session()->invalidate();
         $request->session()->regenerateToken();
 
-        return redirect('/');
+        return redirect('/login');
     }
 }
