@@ -36,7 +36,7 @@ function showDetailsForDeadline() {
     <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
       
       <DashboardCard
-        :value="dashboardData.completedAssessments"
+        
         label="Pactuação"
         iconBgColor="#10b981"
         :buttonAction="showDetailsForDeadline"
@@ -48,7 +48,7 @@ function showDetailsForDeadline() {
       </DashboardCard>
 
       <DashboardCard
-        :value="dashboardData.pendingAssessments"
+        
         label="Cumprimento de Metas"
         iconBgColor="#f97316"
         :buttonAction="showDetailsForDeadline"

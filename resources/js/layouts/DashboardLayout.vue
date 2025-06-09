@@ -106,7 +106,7 @@ watch(isMobileMenuOpen, (isOpen) => {
       </header>
 
       <div class="px-6 sm:px-8 py-4 bg-white border-b border-gray-200 flex flex-col sm:flex-row justify-between items-start sm:items-center">
-        <h1 class="text-2xl font-bold text-gray-800 mb-2 sm:mb-0">Avaliação de desempenho 360°</h1>
+        <h1 class="text-2xl font-bold text-gray-800 mb-2 sm:mb-0">Avaliação de desempenho</h1>
       </div>
         <nav class="nav-bar bg-gray-50 p-3 sm:p-4 border-b border-gray-200 hidden sm:flex gap-3 sm:gap-4 overflow-x-auto">
         <template v-for="(item) in navItems" :key="item.routeName">
@@ -229,53 +229,3 @@ watch(isMobileMenuOpen, (isOpen) => {
      </div>
   </div>
 </template>
-
-<style scoped>
-.body {
-  font-family: 'Inter', sans-serif;
-  /* Gradiente de fundo usando as cores da logo: azul escuro e azul claro */
-  background: linear-gradient(to bottom right, #2E3A6C, #4EC0E6);
-  display: flex;
-  justify-content: center;
-  align-items: flex-start; /* Changed from center to flex-start to accommodate longer content */
-  min-height: 100vh;
-  margin: 0;
-  padding: 20px; /* Default padding for smaller screens */
-  box-sizing: border-box;
-}
-
-@media (min-width: 640px) { /* sm breakpoint */
-  .body {
-    padding: 1.5rem; /* p-6 */
-    align-items: center; /* Vertically center on sm and up if content fits */
-  }
-}
-@media (min-width: 768px) { /* md breakpoint */
-  .body {
-    padding: 2rem; /* p-8 */
-  }
-}
-
-
-.app-container {
-  background-color: #ffffff;
-  border-radius: 20px; /* Tailwind: rounded-2xl */
-  /* height: 100%; REMOVE fixed height to allow content to grow */
-  min-height: calc(100vh - 40px); /* Adjust based on body padding */
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1); /* Tailwind: shadow-xl */
-  width: 100%;
-  max-width: 1024px; /* Tailwind: max-w-4xl */
-  overflow: hidden; /* Still needed for child elements like the menu if not using fixed positioning correctly */
-  display: flex;
-  flex-direction: column;
-}
-
-
-@media (min-width: 640px) { /* sm breakpoint */
-  .app-container {
-     min-height: 0; /* Reset min-height if you want it to shrink on larger screens with less content */
-     /* Or keep it if you prefer a consistent minimum size */
-  }
-}
-
-</style>
