@@ -100,7 +100,7 @@ function hideMessage() {
             <div class="button-group">
                 <button class="btn-blue"><span>Visualizar</span><component :is="icons.EyeIcon" class="size-5" /></button>
                 <button class="btn-yellow"><span>Editar</span><component :is="icons.FilePenLineIcon" class="size-5" /></button>
-                <button class="btn-green" @click="activeFormType = 'autoavaliacao'"><span>Criar</span><component :is="icons.PlusCircleIcon" class="size-5" /></button>
+                <button class="btn-green" @click="activeFormType = 'autoavaliacao'"><span>Criar</span><component :is="icons.PlusIcon" class="size-5" /></button>
             </div>
           </div>
           <div class="setting-item">
@@ -108,7 +108,7 @@ function hideMessage() {
             <div class="button-group">
                 <button class="btn-blue"><span>Visualizar</span><component :is="icons.EyeIcon" class="size-5" /></button>
                 <button class="btn-yellow"><span>Editar</span><component :is="icons.FilePenLineIcon" class="size-5" /></button>
-                <button class="btn-green" @click="activeFormType = 'chefia'"><span>Criar</span><component :is="icons.PlusCircleIcon" class="size-5" /></button>
+                <button class="btn-green" @click="activeFormType = 'chefia'"><span>Criar</span><component :is="icons.PlusIcon" class="size-5" /></button>
             </div>
           </div>
         </div>
@@ -120,7 +120,7 @@ function hideMessage() {
             <div class="button-group">
                 <button class="btn-blue"><span>Visualizar</span><component :is="icons.EyeIcon" class="size-5" /></button>
                 <button class="btn-yellow"><span>Editar</span><component :is="icons.FilePenLineIcon" class="size-5" /></button>
-                <button class="btn-green" @click="activeFormType = 'pactuacao'"><span>Criar</span><component :is="icons.PlusCircleIcon" class="size-5" /></button>
+                <button class="btn-green" @click="activeFormType = 'pactuacao'"><span>Criar</span><component :is="icons.PlusIcon" class="size-5" /></button>
             </div>
           </div>
           <div class="setting-item">
@@ -128,7 +128,7 @@ function hideMessage() {
             <div class="button-group">
                 <button class="btn-blue"><span>Visualizar</span><component :is="icons.EyeIcon" class="size-5" /></button>
                 <button class="btn-yellow"><span>Editar</span><component :is="icons.FilePenLineIcon" class="size-5" /></button>
-                <button class="btn-green" @click="activeFormType = 'metas'"><span>Criar</span><component :is="icons.PlusCircleIcon" class="size-5" /></button>
+                <button class="btn-green" @click="activeFormType = 'metas'"><span>Criar</span><component :is="icons.PlusIcon" class="size-5" /></button>
             </div>
           </div>
         </div>

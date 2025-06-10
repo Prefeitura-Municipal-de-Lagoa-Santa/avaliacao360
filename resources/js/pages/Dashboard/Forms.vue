@@ -120,23 +120,3 @@ function handleCancel() {
   </div>
 </template>
 
-<style scoped>
-/* Seu CSS aqui. Apenas corrigi o nome da classe principal para corresponder ao template */
-.detail-page-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem; }
-.back-btn { display: flex; align-items: center; padding: 0.5rem 1rem; background-color: #6366f1; color: white; border-radius: 0.5rem; font-weight: 500; font-size: 0.875rem; transition: background-color 0.2s; }
-.back-btn:hover { background-color: #4f46e5; }
-.back-btn:disabled { background-color: #9ca3af; cursor: not-allowed; }
-.form-creator-container { background-color: #f9fafb; padding: 1.5rem; border-radius: 0.5rem; border: 1px solid #e5e7eb; }
-.question-row { display: flex; align-items: center; padding: 0.5rem 0; gap: 1rem; }
-.form-textarea, .form-input { width: 100%; border: 1px solid #d1d5db; border-radius: 0.375rem; padding: 0.5rem 0.75rem; background-color: white; transition: border-color 0.2s, box-shadow 0.2s; }
-.form-textarea:focus, .form-input:focus { outline: none; border-color: #4f46e5; box-shadow: 0 0 0 2px rgba(79, 70, 229, 0.3); }
-.weight-input { max-width: 80px; text-align: center; }
-.remove-question-btn { background: none; border: none; color: #ef4444; cursor: pointer; transition: color 0.2s; }
-.remove-question-btn:hover { color: #dc2626; }
-.remove-question-btn:disabled { color: #9ca3af; cursor: not-allowed; }
-.btn-green, .btn-gray, .btn-blue { padding: 0.6rem 1.2rem; border-radius: 8px; font-weight: 500; display: inline-flex; align-items: center; justify-content: center; transition: background-color 0.2s; }
-.btn-green { background-color: #22c55e; color: white; }
-.btn-blue { background-color: #3b82f6; color: white; }
-.btn-gray { background-color: #6b7280; color: white; }
-
-</style>
