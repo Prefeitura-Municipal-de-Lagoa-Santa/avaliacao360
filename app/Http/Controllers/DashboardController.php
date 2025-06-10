@@ -3,7 +3,7 @@
 // Descrição: Controller Laravel para servir a página do Dashboard via Inertia.
 
 namespace App\Http\Controllers;
-
+use App\Models\Form;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -95,19 +95,15 @@ class DashboardController extends Controller
         ]);
     }
 
-    public function configs(): Response
+    public function configs()
     {
-        // Você pode passar dados do backend para o frontend aqui
-        $dashboardStats = [
-            'completedAssessments' => 12,
-            'pendingAssessments' => 3,
-            'overallProgress' => '85%',
-            'nextDeadline' => '25/06/2024', // Exemplo de dado
-        ];
+        // Busca a lista de formulários no banco
+        $forms = Form::latest()->get();
 
+        // Renderiza a página de Configs e envia a lista como uma prop
         return Inertia::render('Dashboard/Configs', [
-            'stats' => $dashboardStats, // Esses dados estarão disponíveis como props no componente Dashboard/Index.vue
-            // Outros dados necessários para a página
+            'forms' => $forms,
         ]);
+       
     }    
 }
