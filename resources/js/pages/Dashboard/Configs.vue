@@ -1,76 +1,56 @@
+// resources/js/Pages/Dashboard/Configs.vue
+
 <script setup lang="ts">
 import { ref, computed } from 'vue';
 import { Head, usePage, router } from '@inertiajs/vue3';
 import DashboardLayout from '@/layouts/DashboardLayout.vue';
 import * as icons from 'lucide-vue-next';
-import FormCreator from '@/pages/Dashboard/Forms.vue';
 
-// --- LÓGICA DAS NOTIFICAÇÕES (FLASH MESSAGES) ---
+// 1. Props recebidas do DashboardController
+const props = defineProps<{
+  forms: Record<string, { id: number; name: string; type: string; year: string; questions: any[] }>;
+}>();
+
 const page = usePage();
 const flash = computed(() => page.props.flash as { success?: string; error?: string });
 
+// 2. Estado da página
+const selectedYear = ref(String(new Date().getFullYear())); // Ano atual por padrão
 
-// --- ESTADO DA PÁGINA ---
-const activeFormType = ref<string | null>(null);
-const selectedYear = ref('2025');
-const isSaving = ref(false); // Estado de carregamento
-
-const formTitles: Record<string, string> = {
-  autoavaliacao: 'Criar Formulário de Autoavaliação',
-  chefia: 'Criar Formulário de Avaliação Chefia',
-  pactuacao: 'Criar Formulário de Pactuação (PDI)',
-  metas: 'Criar Formulário de Cumprimento de Metas (PDI)',
+// 3. Lógica para encontrar formulários existentes
+const getFormForType = (type: string) => {
+  const key = `${selectedYear.value}_${type}`;
+  return props.forms[key] || null;
 };
 
-const formCreatorTitle = computed(() => {
-  return activeFormType.value ? formTitles[activeFormType.value] : '';
-});
-
-
-// --- MÉTODOS DE MANIPULAÇÃO DE EVENTOS ---
-function handleCancel() {
-  activeFormType.value = null;
+// 4. Métodos de navegação
+function handleCreate(type: string) {
+  router.get(route('configs.create', { year: selectedYear.value, type: type }));
 }
 
-function handleSave(questions: Array<{ text: string; weight: number | null }>) {
-  if (!activeFormType.value) return;
-
-  const endpoint = '/formularios';
-  const formTitle = formTitles[activeFormType.value];
-
-  router.post(endpoint, {
-      title: formTitle,
-      year: selectedYear.value,
-      type: activeFormType.value,
-      questions: questions,
-    }, {
-      onStart: () => { isSaving.value = true; },
-      onFinish: () => { isSaving.value = false; },
-      onError: (errors) => {
-        console.error('Erros:', errors);
-        const firstError = Object.values(errors)[0];
-        showMessage(firstError, 'Erro de Validação');
-      },
-    });
+function handleEdit(formId: number) {
+  router.get(route('configs.edit', { formulario: formId }));
 }
 
-// --- LÓGICA DA CAIXA DE MENSAGEM (para ações locais) ---
+function handleView(formId: number) {
+  // A rota 'show' pode levar para uma página de visualização apenas
+  router.get(route('configs.show', { formulario: formId }));
+}
+
+// Lógica da mensagem de notificação (pode ser mantida)
 const isMessageBoxVisible = ref(false);
 const messageBoxTitle = ref('');
 const messageBoxContent = ref('');
-
 function showMessage(message: string, title: string = "Notificação") {
   messageBoxTitle.value = title;
   messageBoxContent.value = message;
   isMessageBoxVisible.value = true;
 }
-
-function hideMessage() {
-  isMessageBoxVisible.value = false;
-}
+function hideMessage() { isMessageBoxVisible.value = false; }
 </script>
 
 <template>
+
   <Head title="Configurações" />
   <DashboardLayout pageTitle="Configurações">
 
@@ -81,7 +61,7 @@ function hideMessage() {
       {{ flash.error }}
     </div>
 
-    <div v-if="!activeFormType" class="space-y-8 max-w-4xl mx-auto">
+    <div class="space-y-8 max-w-4xl mx-auto">
       <div class="settings-section">
         <h3>Formulários</h3>
         <div class="setting-item">
@@ -95,61 +75,143 @@ function hideMessage() {
 
         <div class="form-section">
           <h4>AVALIAÇÃO</h4>
+
           <div class="setting-item">
             <label>Formulário de Autoavaliação:</label>
             <div class="button-group">
-                <button class="btn-blue"><span>Visualizar</span><component :is="icons.EyeIcon" class="size-5" /></button>
-                <button class="btn-yellow"><span>Editar</span><component :is="icons.FilePenLineIcon" class="size-5" /></button>
-                <button class="btn-green" @click="activeFormType = 'autoavaliacao'"><span>Criar</span><component :is="icons.PlusIcon" class="size-5" /></button>
+
+              <button v-if="getFormForType('autoavaliacao')" @click="handleView(getFormForType('autoavaliacao').id)"
+                class="btn-blue">
+                <span>Visualizar</span>
+                <component :is="icons.EyeIcon" class="size-5" />
+              </button>
+
+              <button v-if="getFormForType('autoavaliacao')" @click="handleEdit(getFormForType('autoavaliacao').id)"
+                class="btn-yellow">
+                <span>Editar</span>
+                <component :is="icons.FilePenLineIcon" class="size-5" />
+              </button>
+
+              <button v-else @click="handleCreate('autoavaliacao')" class="btn-green">
+                <span>Criar</span>
+                <component :is="icons.PlusIcon" class="size-5" />
+              </button>
+
             </div>
           </div>
+
           <div class="setting-item">
-            <label>Formulário de Avaliação Chefia:</label>
+            <label>Formulário de Avaliação do Servidor:</label>
             <div class="button-group">
-                <button class="btn-blue"><span>Visualizar</span><component :is="icons.EyeIcon" class="size-5" /></button>
-                <button class="btn-yellow"><span>Editar</span><component :is="icons.FilePenLineIcon" class="size-5" /></button>
-                <button class="btn-green" @click="activeFormType = 'chefia'"><span>Criar</span><component :is="icons.PlusIcon" class="size-5" /></button>
+
+              <button v-if="getFormForType('servidor')" @click="handleView(getFormForType('servidor').id)" class="btn-blue">
+                <span>Visualizar</span>
+                <component :is="icons.EyeIcon" class="size-5" />
+              </button>
+
+              <button v-if="getFormForType('servidor')" @click="handleEdit(getFormForType('servidor').id)"
+                class="btn-yellow">
+                <span>Editar</span>
+                <component :is="icons.FilePenLineIcon" class="size-5" />
+              </button>
+
+              <button v-else @click="handleCreate('servidor')" class="btn-green">
+                <span>Criar</span>
+                <component :is="icons.PlusIcon" class="size-5" />
+              </button>
+
             </div>
           </div>
         </div>
+        <div class="setting-item">
+            <label>Formulário de Avaliação do Superior:</label>
+            <div class="button-group">
+
+              <button v-if="getFormForType('chefia')" @click="handleView(getFormForType('chefia').id)" class="btn-blue">
+                <span>Visualizar</span>
+                <component :is="icons.EyeIcon" class="size-5" />
+              </button>
+
+              <button v-if="getFormForType('chefia')" @click="handleEdit(getFormForType('chefia').id)"
+                class="btn-yellow">
+                <span>Editar</span>
+                <component :is="icons.FilePenLineIcon" class="size-5" />
+              </button>
+
+              <button v-else @click="handleCreate('chefia')" class="btn-green">
+                <span>Criar</span>
+                <component :is="icons.PlusIcon" class="size-5" />
+              </button>
+
+            </div>
+          </div>
 
         <div class="form-section">
           <h4>PDI - PLANO DE DESENVOLVIMENTO INDIVIDUAL</h4>
           <div class="setting-item">
             <label>Formulário de Pactuação (PDI):</label>
             <div class="button-group">
-                <button class="btn-blue"><span>Visualizar</span><component :is="icons.EyeIcon" class="size-5" /></button>
-                <button class="btn-yellow"><span>Editar</span><component :is="icons.FilePenLineIcon" class="size-5" /></button>
-                <button class="btn-green" @click="activeFormType = 'pactuacao'"><span>Criar</span><component :is="icons.PlusIcon" class="size-5" /></button>
+
+              <button v-if="getFormForType('pactuacao')" @click="handleView(getFormForType('pactuacao').id)" class="btn-blue">
+                <span>Visualizar</span>
+                <component :is="icons.EyeIcon" class="size-5" />
+              </button>
+
+              <button v-if="getFormForType('pactuacao')" @click="handleEdit(getFormForType('pactuacao').id)"
+                class="btn-yellow">
+                <span>Editar</span>
+                <component :is="icons.FilePenLineIcon" class="size-5" />
+              </button>
+
+              <button v-else @click="handleCreate('pactuacao')" class="btn-green">
+                <span>Criar</span>
+                <component :is="icons.PlusIcon" class="size-5" />
+              </button>
+
             </div>
           </div>
           <div class="setting-item">
             <label>Formulário de Cumprimento de Metas (PDI):</label>
             <div class="button-group">
-                <button class="btn-blue"><span>Visualizar</span><component :is="icons.EyeIcon" class="size-5" /></button>
-                <button class="btn-yellow"><span>Editar</span><component :is="icons.FilePenLineIcon" class="size-5" /></button>
-                <button class="btn-green" @click="activeFormType = 'metas'"><span>Criar</span><component :is="icons.PlusIcon" class="size-5" /></button>
+
+              <button v-if="getFormForType('metas')" @click="handleView(getFormForType('metas').id)" class="btn-blue">
+                <span>Visualizar</span>
+                <component :is="icons.EyeIcon" class="size-5" />
+              </button>
+
+              <button v-if="getFormForType('metas')" @click="handleEdit(getFormForType('metas').id)"
+                class="btn-yellow">
+                <span>Editar</span>
+                <component :is="icons.FilePenLineIcon" class="size-5" />
+              </button>
+
+              <button v-else @click="handleCreate('metas')" class="btn-green">
+                <span>Criar</span>
+                <component :is="icons.PlusIcon" class="size-5" />
+              </button>
+
             </div>
           </div>
+          
         </div>
 
         <div class="form-section">
-            <div class="setting-item">
-                <label>Liberar formulários:</label>
-                <div class="button-group">
-                    <button class="btn-orange" @click="showMessage('Função para definir prazo em desenvolvimento.')">
-                        <span>Prazo</span>
-                        <component :is="icons.ClockIcon" class="size-5" />
-                    </button>
-                    <button class="btn-pine" @click="showMessage('Função para liberar formulário em desenvolvimento.')">
-                        <span>Liberar</span>
-                        <component :is="icons.SendIcon" class="size-5" />
-                    </button>
-                </div>
+          <div class="setting-item">
+            <label>Liberar formulários:</label>
+            <div class="button-group">
+              <button class="btn-orange" @click="showMessage('Função para definir prazo em desenvolvimento.')">
+                <span>Prazo</span>
+                <component :is="icons.ClockIcon" class="size-5" />
+              </button>
+              <button class="btn-pine" @click="showMessage('Função para liberar formulário em desenvolvimento.')">
+                <span>Liberar</span>
+                <component :is="icons.SendIcon" class="size-5" />
+              </button>
             </div>
+          </div>
         </div>
       </div>
-      
+
       <div class="settings-section">
         <h3>Usuários</h3>
         <div class="setting-item">
@@ -169,15 +231,6 @@ function hideMessage() {
       </div>
     </div>
 
-    <div v-else>
-      <FormCreator
-        :title="formCreatorTitle"
-        :is-saving="isSaving"
-        @cancel="handleCancel"
-        @save="handleSave"
-      />
-    </div>
-
     <div v-if="isMessageBoxVisible" class="message-box-overlay show">
       <div class="message-box">
         <h3>{{ messageBoxTitle }}</h3>
@@ -187,4 +240,3 @@ function hideMessage() {
     </div>
   </DashboardLayout>
 </template>
-
