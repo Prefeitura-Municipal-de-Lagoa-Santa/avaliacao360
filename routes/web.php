@@ -25,13 +25,15 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('/configs', [DashboardController::class, 'configs'])->name('configs');
 
     // 2. ROTAS DE AÇÃO: O FormController cuida das ações específicas do formulário.
-    
+
     Route::get('/configs/form/create', [FormController::class, 'create'])->name('configs.create');
     Route::post('/configs/form', [FormController::class, 'store'])->name('configs.store');
     Route::get('/configs/form/{formulario}', [FormController::class, 'show'])->name('configs.show');
     Route::get('/configs/form/{formulario}/editar', [FormController::class, 'edit'])->name('configs.edit');
     Route::put('/configs/form/{formulario}', [FormController::class, 'update'])->name('configs.update');
     Route::delete('/configs/form/{formulario}', [FormController::class, 'destroy'])->name('configs.destroy');
+    Route::post('/configs/forms/prazo', [FormController::class, 'setPrazo'])->name('configs.prazo.store');
+    Route::post('/configs/forms/liberar', [FormController::class, 'setLiberar'])->name('configs.liberar.store');
 
 
 
@@ -39,6 +41,6 @@ Route::middleware(['auth', 'verified'])->group(function () {
 });
 
 // Este arquivo cuida das configurações de PERFIL do usuário
-require __DIR__.'/settings.php';
+require __DIR__ . '/settings.php';
 
-require __DIR__.'/auth.php';
+require __DIR__ . '/auth.php';

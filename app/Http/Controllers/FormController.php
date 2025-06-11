@@ -7,6 +7,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
 use Inertia\Inertia;
+use Carbon\Carbon;
 
 class FormController extends Controller
 {
@@ -99,15 +100,46 @@ class FormController extends Controller
         return redirect()->route('configs')->with('success', 'Ação realizada com sucesso!');
     }
 
-    /**
-     * Remove the specified resource from storage.
-     * (Exclui o formulário)
-     */
-    public function destroy(Form $formulario)
-    {
-        $formulario->delete();
-        return redirect()->route('configs')->with('success', 'Ação realizada com sucesso!');
-    }
+   public function setPrazo(Request $request)
+{
+    $validated = $request->validate([
+        'year' => 'required|digits:4',
+        'group' => ['required', Rule::in(['avaliacao', 'pdi'])],
+        'term' => 'required|date',
+    ]);
+
+    $formTypes = $validated['group'] === 'avaliacao'
+        ? ['autoavaliacao', 'chefia']
+        : ['pactuacao', 'metas'];
+
+    Form::where('year', $validated['year'])
+        ->whereIn('type', $formTypes)
+        ->update(['term' => $validated['term']]);
+
+    return back()->with('success', 'Prazo definido com sucesso!');
+}
+
+public function setLiberar(Request $request)
+{
+    $validated = $request->validate([
+        'year' => 'required|digits:4',
+        'group' => ['required', Rule::in(['avaliacao', 'pdi'])],
+    ]);
+
+    $formTypes = $validated['group'] === 'avaliacao'
+        ? ['autoavaliacao', 'chefia']
+        : ['pactuacao', 'metas'];
+
+    Form::where('year', $validated['year'])
+        ->whereIn('type', $formTypes)
+        ->update([
+            'release' => true,
+            'release_data' => Carbon::now(),
+        ]);
+
+    return back()->with('success', 'Formulários liberados com sucesso!');
+}
+
 
     // O seu método store() continua aqui, sem alterações...
     public function store(Request $request)
