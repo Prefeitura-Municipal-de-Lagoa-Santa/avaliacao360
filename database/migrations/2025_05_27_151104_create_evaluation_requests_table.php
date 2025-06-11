@@ -17,15 +17,25 @@ return new class extends Migration
             $table->id();
             $table->string('type', 45); // Tipo do pedido de avaliação
 
-            // Chave estrangeira para a tabela 'evaluations'
-            $table->foreignId('evaluation_id')
-                  ->constrained('evaluations')
+            // <<< CORREÇÃO APLICADA AQUI >>>
+            // Definição explícita da chave estrangeira, como solicitado.
+
+            // Chave estrangeira para a tabela 'evaluations'.
+            // Assumindo que a chave primária 'id' em 'evaluations' é do tipo UUID.
+            // Se for um BIGINT, altere a linha abaixo para ->unsignedBigInteger('evaluation_id');
+            $table->unsignedBigInteger('evaluation_id'); 
+            $table->foreign('evaluation_id')
+                  ->references('id')
+                  ->on('evaluations')
                   ->onDelete('cascade');
 
-            // Chave estrangeira para a tabela 'users' (usuário que vai realizar a avaliação)
-            $table->foreignId('evaluator_user_id')
-                  ->constrained('users')
+            // Chave estrangeira para a tabela 'users'
+            $table->unsignedBigInteger('evaluator_user_id');
+            $table->foreign('evaluator_user_id')
+                  ->references('id')
+                  ->on('users')
                   ->onDelete('cascade');
+
             $table->timestamps();
         });
     }
