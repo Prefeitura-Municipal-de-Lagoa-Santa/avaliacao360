@@ -74,9 +74,9 @@ return [
                 'model' => App\Models\User::class,
                 'sync_passwords' => false,
                 'sync_attributes' => [
-                    'email' => 'userPrincipalName',
                     'name' => 'cn',
                     'username' => 'sAMAccountName',
+                    'registration_number' => 'description',
                 ]
             ],
         ],

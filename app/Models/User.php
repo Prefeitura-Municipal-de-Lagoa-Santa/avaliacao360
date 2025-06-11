@@ -11,25 +11,37 @@ use LdapRecord\Laravel\Auth\LdapAuthenticatable;
 
 class User extends Authenticatable implements LdapAuthenticatable
 {
-    /** @use HasFactory<\Database\Factories\UserFactory> */
     use HasFactory, Notifiable, AuthenticatesWithLdap;
 
     /**
      * The attributes that are mass assignable.
      *
-     * @var list<string>
+     * @var array<int, string>
      */
     protected $fillable = [
         'name',
         'username',
         'email',
         'password',
+        // --- CAMPOS MESCLADOS PARA O UPLOAD DE CSV ---
+        'registration_number',
+        'bond_type',
+        'functional_status',
+        'cpf',
+        'rg_number',
+        'admission_date',
+        'dismissal_date',
+        'current_position',
+        'current_function',
+        'allocation_code',
+        'allocation_name',
+        // --- FIM DA MESCLAGEM ---
     ];
 
     /**
      * The attributes that should be hidden for serialization.
      *
-     * @var list<string>
+     * @var array<int, string>
      */
     protected $hidden = [
         'password',
@@ -46,6 +58,10 @@ class User extends Authenticatable implements LdapAuthenticatable
         return [
             'email_verified_at' => 'datetime',
             'password' => 'hashed',
+            // --- CASTS MESCLADOS PARA DATAS ---
+            'admission_date' => 'date',
+            'dismissal_date' => 'date',
+            // --- FIM DA MESCLAGEM ---
         ];
     }
 }
