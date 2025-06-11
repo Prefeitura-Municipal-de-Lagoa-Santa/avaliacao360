@@ -1,26 +1,25 @@
-import '../css/app.css'; // Seu CSS principal, incluindo Tailwind
-import '../css/custom.css'; // Seu CSS principal, incluindo Tailwind
+import '../css/app.css';
+import '../css/custom.css';
 
 import { createApp, h, DefineComponent } from 'vue';
 import { createInertiaApp, Link, Head } from '@inertiajs/vue3';
 import { resolvePageComponent } from 'laravel-vite-plugin/inertia-helpers';
-// import { ZiggyVue } from '../../vendor/tightenco/ziggy/dist/vue.m'; // Se estiver usando Ziggy para rotas
 
 const appName = import.meta.env.VITE_APP_NAME || 'Laravel';
 
 createInertiaApp({
     title: (title) => `${title} - ${appName}`,
-    resolve: (name) => resolvePageComponent(`./Pages/${name}.vue`, import.meta.glob<DefineComponent>('./Pages/**/*.vue')),
+    // A linha abaixo é a que foi corrigida
+    resolve: (name) => resolvePageComponent(`./pages/${name}.vue`, import.meta.glob<DefineComponent>('./pages/**/*.vue')),
     setup({ el, App, props, plugin }) {
         createApp({ render: () => h(App, props) })
             .use(plugin)
-            .component('Link', Link) // Registrar globalmente se usado frequentemente
-            .component('Head', Head) // Registrar globalmente
-            // .use(ZiggyVue) // Se estiver usando Ziggy
+            .component('Link', Link)
+            .component('Head', Head)
             .mount(el);
     },
     progress: {
-        color: '#4F46E5', // Cor da barra de progresso do Inertia
+        color: '#4F46E5',
         showSpinner: true,
     },
 });
