@@ -1,11 +1,12 @@
 <script setup lang="ts">
-import { ref, computed, watch } from 'vue'; // Importar watch
+import { ref, computed, watch } from 'vue';
 import * as icons from 'lucide-vue-next';
 
-// 1. Props: Adicionamos 'isSaving' para receber o estado do pai
+// 1. Props: Adicionar 'initialQuestions'
 const props = defineProps<{
   title: string;
-  isSaving: boolean; // <-- NOVA PROP
+  isSaving: boolean;
+  initialQuestions?: Array<{ text: string; weight: number | null }>; // <-- NOVA PROP
 }>();
 
 // 2. Emits: Continua igual
@@ -14,20 +15,20 @@ const emit = defineEmits<{
   (e: 'cancel'): void;
 }>();
 
+// 3. Lógica Interna: Inicializar com 'initialQuestions' se existirem
+const questions = ref(
+  props.initialQuestions && props.initialQuestions.length > 0
+    ? JSON.parse(JSON.stringify(props.initialQuestions)) // Deep copy
+    : [{ text: '', weight: null }]
+);
 
-// --- Lógica Interna ---
-const questions = ref([
-  { text: '', weight: null }
-]);
-// Ref para a mensagem de erro de validação local
-const validationError = ref<string | null>(null); // <-- NOVA REF DE ERRO
+const validationError = ref<string | null>(null);
 
 const totalWeight = computed(() => {
   return questions.value.reduce((sum, q) => sum + (Number(q.weight) || 0), 0);
 });
 
-// Watcher para limpar o erro automaticamente quando o usuário corrigir o peso
-watch(totalWeight, () => { // <-- NOVO WATCHER
+watch(totalWeight, () => {
     validationError.value = null;
 });
 
@@ -41,19 +42,15 @@ function removeQuestion(index: number) {
   }
 }
 
-// 3. Funções de Evento Atualizadas
 function handleSave() {
-  // Validação local sem alert()
   if (totalWeight.value !== 100) {
-    validationError.value = 'A soma dos pesos de todas as questões deve ser exatamente 100%.'; // <-- ATUALIZA O ERRO
+    validationError.value = 'A soma dos pesos de todas as questões deve ser exatamente 100%.';
     return;
   }
-  // Se a validação passar, emite o evento
   emit('save', questions.value);
 }
 
 function handleCancel() {
-  // Não permite cancelar enquanto estiver salvando
   if (props.isSaving) return;
   emit('cancel');
 }

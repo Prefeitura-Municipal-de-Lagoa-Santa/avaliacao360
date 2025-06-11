@@ -19,7 +19,16 @@ class Form extends Model
         'name',
         'year',
         'type',
+        'term',
+        'release',
+        'release_data',
     ];
+
+    protected $casts = [
+    'release' => 'boolean',
+    'release_data' => 'datetime',
+    'term' => 'datetime',
+];
 
     /**
      * Get all of the questions for the Form.
@@ -30,4 +39,6 @@ class Form extends Model
     {
         return $this->hasMany(Question::class);
     }
+
+    
 }

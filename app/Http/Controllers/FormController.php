@@ -7,6 +7,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
 use Inertia\Inertia;
+use Carbon\Carbon;
 
 class FormController extends Controller
 {
@@ -24,11 +25,21 @@ class FormController extends Controller
         ]);
     }
 
+    public function show(Form $formulario)
+{
+    $formulario->load('questions');
+
+    // Linha correta, sem o prefixo 'pages/'
+    return Inertia::render('Dashboard/FormViewPage', [
+        'form' => $formulario,
+    ]);
+}
+
     public function create(Request $request)
     {
         // Valida se o tipo e ano foram passados na URL
         $validated = $request->validate([
-            'type' => ['required', Rule::in(['autoavaliacao', 'chefia', 'pactuacao', 'metas'])],
+            'type' => ['required', Rule::in(['autoavaliacao', 'chefia', 'servidor', 'pactuacao', 'metas'])],
             'year' => 'required|digits:4',
         ]);
 
@@ -89,18 +100,88 @@ class FormController extends Controller
         return redirect()->route('configs')->with('success', 'Ação realizada com sucesso!');
     }
 
-    /**
-     * Remove the specified resource from storage.
-     * (Exclui o formulário)
-     */
-    public function destroy(Form $formulario)
-    {
-        $formulario->delete();
-        return redirect()->route('configs')->with('success', 'Ação realizada com sucesso!');
-    }
+   public function setPrazo(Request $request)
+{
+    $validated = $request->validate([
+        'year' => 'required|digits:4',
+        'group' => ['required', Rule::in(['avaliacao', 'pdi'])],
+        'term' => 'required|date',
+    ]);
+
+    $formTypes = $validated['group'] === 'avaliacao'
+        ? ['autoavaliacao', 'chefia']
+        : ['pactuacao', 'metas'];
+
+    Form::where('year', $validated['year'])
+        ->whereIn('type', $formTypes)
+        ->update(['term' => $validated['term']]);
+
+    return back()->with('success', 'Prazo definido com sucesso!');
+}
+
+public function setLiberar(Request $request)
+{
+    $validated = $request->validate([
+        'year' => 'required|digits:4',
+        'group' => ['required', Rule::in(['avaliacao', 'pdi'])],
+    ]);
+
+    $formTypes = $validated['group'] === 'avaliacao'
+        ? ['autoavaliacao', 'chefia']
+        : ['pactuacao', 'metas'];
+
+    Form::where('year', $validated['year'])
+        ->whereIn('type', $formTypes)
+        ->update([
+            'release' => true,
+            'release_data' => Carbon::now(),
+        ]);
+
+    return back()->with('success', 'Formulários liberados com sucesso!');
+}
+
 
     // O seu método store() continua aqui, sem alterações...
     public function store(Request $request)
-    { /* ... seu código ... */
+{
+    $validatedData = $request->validate([
+        'title' => 'required|string|max:100',
+        'year' => 'required|digits:4',
+        'type' => ['required', 'string', Rule::in(['autoavaliacao', 'chefia','servidor', 'pactuacao', 'metas'])],
+        'questions' => 'required|array|min:1',
+        'questions.*.text' => 'required|string',
+        'questions.*.weight' => 'required|integer|min:0|max:100',
+    ]);
+
+       
+
+
+    // 2. Validação do peso total
+    $totalWeight = collect($validatedData['questions'])->sum('weight');
+    if ($totalWeight !== 100) {
+        // Retorna para a página anterior com um erro
+        return back()->withErrors(['questions' => 'A soma dos pesos de todas as questões deve ser exatamente 100.'])->withInput();
     }
+
+    // 3. Lógica de criação no banco de dados
+    DB::transaction(function () use ($validatedData) {
+        // Cria o formulário principal
+        $form = Form::create([
+            'name' => $validatedData['title'],
+            'year' => $validatedData['year'],
+            'type' => $validatedData['type'],
+        ]);
+
+        // Cria as questões associadas
+        foreach ($validatedData['questions'] as $questionData) {
+            $form->questions()->create([
+                'text_content' => $questionData['text'],
+                'weight' => $questionData['weight'],
+            ]);
+        }
+    });
+
+    // 4. Redireciona para a página de configurações com mensagem de sucesso
+    return redirect()->route('configs')->with('success', 'Formulário criado com sucesso!');
+}
 }

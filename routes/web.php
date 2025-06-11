@@ -23,6 +23,16 @@ Route::middleware(['auth', 'verified', EnsureCpfIsFilled::class])->group(functio
 
     Route::get('/configs', [DashboardController::class, 'configs'])->name('configs');
 
+    Route::get('/configs/form/create', [FormController::class, 'create'])->name('configs.create');
+    Route::post('/configs/form', [FormController::class, 'store'])->name('configs.store');
+    Route::get('/configs/form/{formulario}', [FormController::class, 'show'])->name('configs.show');
+    Route::get('/configs/form/{formulario}/editar', [FormController::class, 'edit'])->name('configs.edit');
+    Route::put('/configs/form/{formulario}', [FormController::class, 'update'])->name('configs.update');
+    Route::delete('/configs/form/{formulario}', [FormController::class, 'destroy'])->name('configs.destroy');
+    Route::post('/configs/forms/prazo', [FormController::class, 'setPrazo'])->name('configs.prazo.store');
+    Route::post('/configs/forms/liberar', [FormController::class, 'setLiberar'])->name('configs.liberar.store');
+
+
 
     // Rota para enviar o arquivo e obter o preview
     Route::post('/users/upload/preview', [UserController::class, 'previewUpload'])
@@ -34,7 +44,7 @@ Route::middleware(['auth', 'verified', EnsureCpfIsFilled::class])->group(functio
         ->name('users.upload.confirm');
 
     require __DIR__ . '/settings.php';
-    
+
     Route::get('/profile/cpf', [UserController::class, 'cpf'])->name('profile.cpf');
 });
 
