@@ -97,13 +97,10 @@ class DashboardController extends Controller
 
     public function configs()
     {
-        // Busca a lista de formulários no banco
-        $forms = Form::latest()->get();
-
-        // Renderiza a página de Configs e envia a lista como uma prop
         return Inertia::render('Dashboard/Configs', [
-            'forms' => $forms,
+            'forms' => Form::with('questions')->get()->keyBy(function ($form) {
+                return $form->year . '_' . $form->type;
+            }),
         ]);
-       
-    }    
+    }   
 }
