@@ -7,6 +7,8 @@ use App\Jobs\ProcessUserUpload; // Importa o novo Job
 use Illuminate\Http\Request;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Redirect;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
@@ -240,5 +242,24 @@ class UserController extends Controller
             'user' => $user, // Esses dados estarão disponíveis como props no componente Dashboard/Index.vue
             // Outros dados necessários para a página
         ]);
+    }
+
+
+    public function cpfUpdate(Request $request)
+    {
+        $user = Auth::user();
+
+        // Validação dos dados recebidos do formulário
+        $validated = $request->validate([
+            'cpf' => ['cpf'],
+        ]);
+        
+        // Atualiza o CPF do usuário
+        $user->forceFill([
+            'cpf' => $validated['cpf'],
+        ])->save();
+
+        // Redireciona o usuário para o dashboard com uma mensagem de sucesso
+        return Redirect::route('dashboard')->with('success', 'CPF atualizado com sucesso!');
     }
 }

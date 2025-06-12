@@ -11,8 +11,8 @@ Route::get('/', function () {
     return Inertia::render('welcome');
 })->name('home');
 
-Route::get('/dashboard', [DashboardController::class, 'index'])->name('dashboard');
 Route::middleware(['auth', 'verified', EnsureCpfIsFilled::class])->group(function () {
+    Route::get('/dashboard', [DashboardController::class, 'index'])->name('dashboard');
 
     Route::get('/evaluations', [DashboardController::class, 'evaluation'])->name('evaluations');
 
@@ -47,6 +47,8 @@ Route::middleware(['auth', 'verified', EnsureCpfIsFilled::class])->group(functio
     require __DIR__ . '/settings.php';
 
     Route::get('/profile/cpf', [UserController::class, 'cpf'])->name('profile.cpf');
+
 });
+Route::put('/profile/cpf', [UserController::class, 'cpfUpdate'])->name('profile.cpf.update');
 
 require __DIR__ . '/auth.php';
