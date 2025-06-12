@@ -19,7 +19,8 @@ class Form extends Model
         'name',
         'year',
         'type',
-        'term',
+        'term_first',
+        'term_end',
         'release',
         'release_data',
     ];
@@ -27,7 +28,8 @@ class Form extends Model
     protected $casts = [
     'release' => 'boolean',
     'release_data' => 'datetime',
-    'term' => 'datetime',
+    'term_first' => 'datetime',
+    'term_end' => 'datetime',
 ];
 
     /**

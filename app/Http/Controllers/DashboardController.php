@@ -97,10 +97,19 @@ class DashboardController extends Controller
 
     public function configs()
     {
+        // A chave aqui é o ->keyBy(...). Ele organiza os formulários
+        // em um formato que o Vue consegue ler rapidamente.
+        $forms = Form::with('questions')->get()->keyBy(function ($form) {
+            return $form->year . '_' . $form->type;
+        });
+
+        // Lógica para buscar os anos únicos que já implementamos
+        $existingYears = Form::select('year')->distinct()->pluck('year');
+
+        // Passa os dados no formato correto para a view
         return Inertia::render('Dashboard/Configs', [
-            'forms' => Form::with('questions')->get()->keyBy(function ($form) {
-                return $form->year . '_' . $form->type;
-            }),
+            'forms' => $forms,
+            'existingYears' => $existingYears,
         ]);
-    }   
+    }
 }

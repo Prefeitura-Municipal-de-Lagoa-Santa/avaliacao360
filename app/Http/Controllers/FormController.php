@@ -100,21 +100,28 @@ class FormController extends Controller
         return redirect()->route('configs')->with('success', 'Ação realizada com sucesso!');
     }
 
-   public function setPrazo(Request $request)
+ public function setPrazo(Request $request)
 {
+    // 1. Validar as duas datas recebidas do formulário
     $validated = $request->validate([
         'year' => 'required|digits:4',
         'group' => ['required', Rule::in(['avaliacao', 'pdi'])],
-        'term' => 'required|date',
+        'term_first' => 'required|date',
+        'term_end' => 'required|date|after_or_equal:term_first',
     ]);
 
+    // 2. Definir para quais tipos de formulário a regra se aplica
     $formTypes = $validated['group'] === 'avaliacao'
-        ? ['autoavaliacao', 'chefia']
+        ? ['autoavaliacao', 'chefia', 'servidor'] // Incluído 'servidor'
         : ['pactuacao', 'metas'];
 
+    // 3. Atualizar todos os formulários do grupo de uma só vez
     Form::where('year', $validated['year'])
         ->whereIn('type', $formTypes)
-        ->update(['term' => $validated['term']]);
+        ->update([
+            'term_first' => $validated['term_first'],
+            'term_end' => $validated['term_end']
+        ]);
 
     return back()->with('success', 'Prazo definido com sucesso!');
 }
@@ -127,8 +134,8 @@ public function setLiberar(Request $request)
     ]);
 
     $formTypes = $validated['group'] === 'avaliacao'
-        ? ['autoavaliacao', 'chefia']
-        : ['pactuacao', 'metas'];
+        ? ['autoavaliacao', 'chefia', 'servidor']
+        : ['pactuacao'];
 
     Form::where('year', $validated['year'])
         ->whereIn('type', $formTypes)
@@ -147,7 +154,7 @@ public function setLiberar(Request $request)
     $validatedData = $request->validate([
         'title' => 'required|string|max:100',
         'year' => 'required|digits:4',
-        'type' => ['required', 'string', Rule::in(['autoavaliacao', 'chefia','servidor', 'pactuacao', 'metas'])],
+        'type' => ['required', 'string', Rule::in(['autoavaliacao', 'chefia', 'servidor', 'pactuacao'])],
         'questions' => 'required|array|min:1',
         'questions.*.text' => 'required|string',
         'questions.*.weight' => 'required|integer|min:0|max:100',

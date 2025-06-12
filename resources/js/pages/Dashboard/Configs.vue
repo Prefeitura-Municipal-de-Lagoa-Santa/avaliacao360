@@ -4,7 +4,9 @@ import { Head, usePage, router } from '@inertiajs/vue3';
 import DashboardLayout from '@/layouts/DashboardLayout.vue';
 import * as icons from 'lucide-vue-next';
 
-// 1. Props recebidas do Controller (agora com os novos campos)
+// DEFINIÇÃO DAS PROPS
+// VERSÃO CORRIGIDA
+
 const props = defineProps<{
   forms: Record<string, {
     id: number;
@@ -13,116 +15,104 @@ const props = defineProps<{
     year: string;
     release: boolean;
     release_data: string | null;
-    term: string | null;
-    questions: any[];
+    term_first: string | null;
+    term_end: string | null;
   }>;
+  existingYears: Array<string | number>;
 }>();
 
-// --- LÓGICA DE NOTIFICAÇÕES (FLASH MESSAGES) ---
+// ESTADO DA PÁGINA
 const page = usePage();
 const flash = computed(() => page.props.flash as { success?: string; error?: string });
+const selectedYear = ref(String(new Date().getFullYear()));
 
-// --- ESTADO DA PÁGINA ---
-const selectedYear = ref(String(new Date().getFullYear())); // Ano atual por padrão
-
-// --- ESTADO DO MODAL DE PRAZO ---
+// ESTADO DO MODAL DE PRAZO
 const isPrazoModalVisible = ref(false);
 const prazoGroup = ref<'avaliacao' | 'pdi' | null>(null);
-const prazoDate = ref('');
+const prazoDateInicio = ref('');
+const prazoDateFim = ref('');
 
-// --- COMPUTED PROPERTIES PARA GERENCIAR O ESTADO DOS GRUPOS ---
+// PROPRIEDADES COMPUTADAS
+const yearOptions = computed(() => {
+  const currentYear = new Date().getFullYear();
+  const nextYear = currentYear + 1;
+  const yearsSet = new Set([currentYear, nextYear, ...(props.existingYears || []).map(year => Number(year))]);
+  return Array.from(yearsSet).sort((a, b) => b - a);
+});
+
 const formsForSelectedYear = computed(() => {
-  return Object.values(props.forms).filter(form => form.year === selectedYear.value);
+  return Object.values(props.forms).filter(form => String(form.year) === selectedYear.value);
 });
 
-// Verifica se o grupo AVALIAÇÃO (autoavaliacao, servidor, chefia) foi liberado
-const isAvaliacaoGroupReleased = computed(() => {
-  return formsForSelectedYear.value
-    .filter(form => ['autoavaliacao', 'servidor', 'chefia'].includes(form.type))
-    .some(form => form.release);
-});
+const isAvaliacaoGroupReleased = computed(() => formsForSelectedYear.value.filter(form => ['autoavaliacao', 'servidor', 'chefia'].includes(form.type)).some(form => form.release));
+const isPdiGroupReleased = computed(() => formsForSelectedYear.value.filter(form => ['pactuacao'].includes(form.type)).some(form => form.release));
 
-// Verifica se o grupo PDI (pactuacao, metas) foi liberado
-const isPdiGroupReleased = computed(() => {
-  return formsForSelectedYear.value
-    .filter(form => ['pactuacao', 'metas'].includes(form.type))
-    .some(form => form.release);
-});
-
-// Pega a data de liberação do grupo AVALIAÇÃO
 const avaliacaoReleaseData = computed(() => {
-  const releasedForm = formsForSelectedYear.value.find(form => ['autoavaliacao', 'servidor', 'chefia'].includes(form.type) && form.release_data);
-  return releasedForm ? new Date(releasedForm.release_data).toLocaleDateString('pt-BR') : 'Data não encontrada';
+  const f = formsForSelectedYear.value.find(form => ['autoavaliacao', 'servidor', 'chefia'].includes(form.type) && form.release_data);
+  return f ? new Date(f.release_data!).toLocaleDateString('pt-BR') : 'Data não encontrada';
 });
 
-// Pega a data de liberação do grupo PDI
 const pdiReleaseData = computed(() => {
-  const releasedForm = formsForSelectedYear.value.find(form => ['pactuacao', 'metas'].includes(form.type) && form.release_data);
-  return releasedForm ? new Date(releasedForm.release_data).toLocaleDateString('pt-BR') : 'Data não encontrada';
+  const f = formsForSelectedYear.value.find(form => ['pactuacao'].includes(form.type) && form.release_data);
+  return f ? new Date(f.release_data!).toLocaleDateString('pt-BR') : 'Data não encontrada';
 });
 
+// MÉTODOS DE AÇÃO
+const getFormForType = (type: string) => props.forms[`${selectedYear.value}_${type}`] || null;
 
-// --- MÉTODOS DE AÇÃO ---
-const getFormForType = (type: string) => {
-  const key = `${selectedYear.value}_${type}`;
-  return props.forms[key] || null;
-};
-
-function handleCreate(type: string) {
-  router.get(route('configs.create', { year: selectedYear.value, type: type }));
-}
-
-function handleEdit(formId: number) {
-  router.get(route('configs.edit', { formulario: formId }));
-}
-
-function handleView(formId: number) {
-  router.get(route('configs.show', { formulario: formId }));
-}
-
-function handleLiberar(group: 'avaliacao' | 'pdi') {
-  if (confirm(`Tem certeza que deseja LIBERAR os formulários de ${group.toUpperCase()} para ${selectedYear.value}? Após liberados, eles não poderão mais ser editados.`)) {
-    router.post(route('configs.liberar.store'), {
-      year: selectedYear.value,
-      group: group
-    }, { preserveScroll: true });
-  }
-}
-
+/**
+ * Esta é a função que carrega os dados no modal.
+ */
 function openPrazoModal(group: 'avaliacao' | 'pdi') {
   prazoGroup.value = group;
-  const formTypes = group === 'avaliacao' ? ['autoavaliacao', 'servidor', 'chefia'] : ['pactuacao', 'metas'];
-  const existingForm = formsForSelectedYear.value.find(f => formTypes.includes(f.type) && f.term);
-  prazoDate.value = existingForm ? existingForm.term.split(' ')[0] : '';
+  const formTypes = group === 'avaliacao' ? ['autoavaliacao', 'servidor', 'chefia'] : ['pactuacao'];
+
+  // 1. Procura, dentro dos formulários do ano selecionado...
+  const existingForm = formsForSelectedYear.value.find(
+    // ...o primeiro formulário que seja do grupo correto E que tenha as datas de prazo preenchidas.
+    f => formTypes.includes(f.type) && f.term_first && f.term_end
+  );
+
+  // 2. Se um formulário com prazo for encontrado...
+  if (existingForm) {
+    // A correção é pegar apenas os 10 primeiros caracteres (AAAA-MM-DD) da string.
+    prazoDateInicio.value = existingForm.term_first?.substring(0, 10) ?? '';
+    prazoDateFim.value = existingForm.term_end?.substring(0, 10) ?? '';
+  } else {
+    // 3. Se nenhum formulário com prazo for encontrado, os campos ficam em branco.
+    prazoDateInicio.value = '';
+    prazoDateFim.value = '';
+  }
   isPrazoModalVisible.value = true;
 }
 
 function handleSetPrazo() {
-  if (!prazoGroup.value || !prazoDate.value) {
-    alert('Por favor, selecione uma data.');
+  if (!prazoGroup.value || !prazoDateInicio.value || !prazoDateFim.value) {
+    alert('Por favor, preencha as datas de início e encerramento.');
     return;
   }
   router.post(route('configs.prazo.store'), {
     year: selectedYear.value,
     group: prazoGroup.value,
-    term: prazoDate.value,
+    term_first: prazoDateInicio.value,
+    term_end: prazoDateFim.value,
   }, {
     onSuccess: () => { isPrazoModalVisible.value = false; },
-    preserveScroll: true
+    preserveScroll: true,
   });
 }
 
-// Lógica da mensagem de notificação genérica
-const isMessageBoxVisible = ref(false);
-const messageBoxTitle = ref('');
-const messageBoxContent = ref('');
-function showMessage(message: string, title: string = "Notificação") {
-  messageBoxTitle.value = title;
-  messageBoxContent.value = message;
-  isMessageBoxVisible.value = true;
+function handleLiberar(group: 'avaliacao' | 'pdi') {
+  if (confirm(`Tem certeza que deseja LIBERAR os formulários de ${group.toUpperCase()} para ${selectedYear.value}?`)) {
+    router.post(route('configs.liberar.store'), { year: selectedYear.value, group: group }, { preserveScroll: true });
+  }
 }
-function hideMessage() { isMessageBoxVisible.value = false; }
+
+function handleCreate(type: string) { router.get(route('configs.create', { year: selectedYear.value, type: type })); }
+function handleEdit(formId: number) { router.get(route('configs.edit', { formulario: formId })); }
+function handleView(formId: number) { router.get(route('configs.show', { formulario: formId })); }
 </script>
+
 
 <template>
 
@@ -141,66 +131,80 @@ function hideMessage() { isMessageBoxVisible.value = false; }
         <h3>Formulários</h3>
         <div class="setting-item">
           <label for="form-year">Ano:</label>
-          <select id="form-year" v-model="selectedYear" class="form-select rounded-md border-gray-300">
-            <option value="2025">2025</option>
-            <option value="2024">2024</option>
-            <option value="2023">2023</option>
+          <select id="form-year" v-model="selectedYear" class="form-select rounded-md border-gray-300 text-black">
+            <option v-for="year in yearOptions" :key="year" :value="year">
+              {{ year }}
+            </option>
           </select>
         </div>
 
         <div class="form-section">
           <h4>AVALIAÇÃO</h4>
 
-          <div class="setting-item">
-            <label>Formulário de Autoavaliação:</label>
-            <div class="button-group">
-              <button v-if="getFormForType('autoavaliacao')" @click="handleView(getFormForType('autoavaliacao').id)"
-                class="btn-blue"><span>Visualizar</span>
-                <component :is="icons.EyeIcon" class="size-5" />
-              </button>
-              <button v-if="getFormForType('autoavaliacao')" @click="handleEdit(getFormForType('autoavaliacao').id)"
-                :class="isAvaliacaoGroupReleased ? 'btn-yellow-disabled' : 'btn-yellow'"
-                :disabled="isAvaliacaoGroupReleased"><span>Editar</span>
-                <component :is="icons.FilePenLineIcon" class="size-5" />
-              </button>
-              <button v-else @click="handleCreate('autoavaliacao')" class="btn-green"><span>Criar</span>
-                <component :is="icons.PlusIcon" class="size-5" />
-              </button>
+          <div class="form-section">
+            <h4>AVALIAÇÃO</h4>
+
+            <div class="setting-item">
+              <label>Formulário de Autoavaliação:</label>
+              <div class="button-group">
+                <button v-if="getFormForType('autoavaliacao')" @click="handleView(getFormForType('autoavaliacao').id)"
+                  class="btn-blue">
+                  <span>Visualizar</span>
+                  <component :is="icons.EyeIcon" class="size-5" />
+                </button>
+                <button v-if="getFormForType('autoavaliacao') && !isAvaliacaoGroupReleased"
+                  @click="handleEdit(getFormForType('autoavaliacao').id)" class="btn-yellow">
+                  <span>Editar</span>
+                  <component :is="icons.FilePenLineIcon" class="size-5" />
+                </button>
+                <button v-else-if="!getFormForType('autoavaliacao')" @click="handleCreate('autoavaliacao')"
+                  class="btn-green">
+                  <span>Criar</span>
+                  <component :is="icons.PlusIcon" class="size-5" />
+                </button>
+              </div>
             </div>
-          </div>
-          <div class="setting-item">
-            <label>Formulário de Avaliação do Servidor:</label>
-            <div class="button-group">
-              <button v-if="getFormForType('servidor')" @click="handleView(getFormForType('servidor').id)"
-                class="btn-blue"><span>Visualizar</span>
-                <component :is="icons.EyeIcon" class="size-5" />
-              </button>
-              <button v-if="getFormForType('servidor')" @click="handleEdit(getFormForType('servidor').id)"
-                :class="isAvaliacaoGroupReleased ? 'btn-yellow-disabled' : 'btn-yellow'"
-                :disabled="isAvaliacaoGroupReleased"><span>Editar</span>
-                <component :is="icons.FilePenLineIcon" class="size-5" />
-              </button>
-              <button v-else @click="handleCreate('servidor')" class="btn-green"><span>Criar</span>
-                <component :is="icons.PlusIcon" class="size-5" />
-              </button>
+
+            <div class="setting-item">
+              <label>Formulário de Avaliação do Servidor:</label>
+              <div class="button-group">
+                <button v-if="getFormForType('servidor')" @click="handleView(getFormForType('servidor').id)"
+                  class="btn-blue">
+                  <span>Visualizar</span>
+                  <component :is="icons.EyeIcon" class="size-5" />
+                </button>
+                <button v-if="getFormForType('servidor') && !isAvaliacaoGroupReleased"
+                  @click="handleEdit(getFormForType('servidor').id)" class="btn-yellow">
+                  <span>Editar</span>
+                  <component :is="icons.FilePenLineIcon" class="size-5" />
+                </button>
+                <button v-else-if="!getFormForType('servidor')" @click="handleCreate('servidor')" class="btn-green">
+                  <span>Criar</span>
+                  <component :is="icons.PlusIcon" class="size-5" />
+                </button>
+              </div>
             </div>
-          </div>
-          <div class="setting-item">
-            <label>Formulário de Avaliação do Superior:</label>
-            <div class="button-group">
-              <button v-if="getFormForType('chefia')" @click="handleView(getFormForType('chefia').id)"
-                class="btn-blue"><span>Visualizar</span>
-                <component :is="icons.EyeIcon" class="size-5" />
-              </button>
-              <button v-if="getFormForType('chefia')" @click="handleEdit(getFormForType('chefia').id)"
-                :class="isAvaliacaoGroupReleased ? 'btn-yellow-disabled' : 'btn-yellow'"
-                :disabled="isAvaliacaoGroupReleased"><span>Editar</span>
-                <component :is="icons.FilePenLineIcon" class="size-5" />
-              </button>
-              <button v-else @click="handleCreate('chefia')" class="btn-green"><span>Criar</span>
-                <component :is="icons.PlusIcon" class="size-5" />
-              </button>
+
+            <div class="setting-item">
+              <label>Formulário de Avaliação do Superior:</label>
+              <div class="button-group">
+                <button v-if="getFormForType('chefia')" @click="handleView(getFormForType('chefia').id)"
+                  class="btn-blue">
+                  <span>Visualizar</span>
+                  <component :is="icons.EyeIcon" class="size-5" />
+                </button>
+                <button v-if="getFormForType('chefia') && !isAvaliacaoGroupReleased"
+                  @click="handleEdit(getFormForType('chefia').id)" class="btn-yellow">
+                  <span>Editar</span>
+                  <component :is="icons.FilePenLineIcon" class="size-5" />
+                </button>
+                <button v-else-if="!getFormForType('chefia')" @click="handleCreate('chefia')" class="btn-green">
+                  <span>Criar</span>
+                  <component :is="icons.PlusIcon" class="size-5" />
+                </button>
+              </div>
             </div>
+
           </div>
           <div class="setting-item border-b pb-4 mb-4">
             <label>Liberar Formulario e Prazo da Avaliação:</label>
@@ -225,39 +229,25 @@ function hideMessage() { isMessageBoxVisible.value = false; }
           <h4>PDI - PLANO DE DESENVOLVIMENTO INDIVIDUAL</h4>
 
           <div class="setting-item">
-            <label>Formulário de Pactuação (PDI):</label>
+            <label>Formulário de Pactuação PDI:</label>
             <div class="button-group">
               <button v-if="getFormForType('pactuacao')" @click="handleView(getFormForType('pactuacao').id)"
-                class="btn-blue"><span>Visualizar</span>
+                class="btn-blue">
+                <span>Visualizar</span>
                 <component :is="icons.EyeIcon" class="size-5" />
               </button>
-              <button v-if="getFormForType('pactuacao')" @click="handleEdit(getFormForType('pactuacao').id)"
-                :class="isPdiGroupReleased ? 'btn-yellow-disabled' : 'btn-yellow'"
-                :disabled="isPdiGroupReleased"><span>Editar</span>
+              <button v-if="getFormForType('pactuacao') && !isAvaliacaoGroupReleased"
+                @click="handleEdit(getFormForType('pactuacao').id)" class="btn-yellow">
+                <span>Editar</span>
                 <component :is="icons.FilePenLineIcon" class="size-5" />
               </button>
-              <button v-else @click="handleCreate('pactuacao')" class="btn-green"><span>Criar</span>
+              <button v-else-if="!getFormForType('pactuacao')" @click="handleCreate('pactuacao')" class="btn-green">
+                <span>Criar</span>
                 <component :is="icons.PlusIcon" class="size-5" />
               </button>
             </div>
           </div>
-          <div class="setting-item">
-            <label>Formulário de Cumprimento de Metas (PDI):</label>
-            <div class="button-group">
-              <button v-if="getFormForType('metas')" @click="handleView(getFormForType('metas').id)"
-                class="btn-blue"><span>Visualizar</span>
-                <component :is="icons.EyeIcon" class="size-5" />
-              </button>
-              <button v-if="getFormForType('metas')" @click="handleEdit(getFormForType('metas').id)"
-                :class="isPdiGroupReleased ? 'btn-yellow-disabled' : 'btn-yellow'"
-                :disabled="isPdiGroupReleased"><span>Editar</span>
-                <component :is="icons.FilePenLineIcon" class="size-5" />
-              </button>
-              <button v-else @click="handleCreate('metas')" class="btn-green"><span>Criar</span>
-                <component :is="icons.PlusIcon" class="size-5" />
-              </button>
-            </div>
-          </div>
+
           <div class="setting-item border-b pb-4 mb-4">
             <label>Liberar Formulario e Prazo de PDI:</label>
             <div v-if="!isPdiGroupReleased" class="button-group">
@@ -271,6 +261,7 @@ function hideMessage() { isMessageBoxVisible.value = false; }
             <div v-else class="text-green-600 font-semibold flex items-center gap-2">
               <component :is="icons.CheckCircle2Icon" class="size-5" />
               Liberado em: {{ pdiReleaseData }}
+              
             </div>
           </div>
         </div>
@@ -296,24 +287,32 @@ function hideMessage() { isMessageBoxVisible.value = false; }
       </div>
     </div>
 
-    <div v-if="isPrazoModalVisible" class="message-box-overlay show">
+    <div v-if="isPrazoModalVisible" class="message-box-overlay show text-indigo-700">
       <div class="message-box">
         <h3>Definir Prazo para {{ prazoGroup?.toUpperCase() }}</h3>
         <p>Selecione a data limite para o preenchimento dos formulários de {{ prazoGroup }} para o ano de {{
           selectedYear }}.</p>
+
         <div class="my-4">
-          <label for="prazo-date" class="block font-medium text-sm text-gray-700 mb-1">Data do Prazo:</label>
-          <input type="date" id="prazo-date" v-model="prazoDate"
+          <label for="prazo-date-inicio" class="block font-medium text-sm text-gray-700 mb-1">Data de início:</label>
+          <input type="date" id="prazo-date-inicio" v-model="prazoDateInicio"
             class="form-input rounded-md w-full border-gray-300 shadow-sm text-black">
         </div>
+
+        <div class="my-4">
+          <label for="prazo-date-fim" class="block font-medium text-sm text-gray-700 mb-1">Data de encerramento:</label>
+          <input type="date" id="prazo-date-fim" v-model="prazoDateFim"
+            class="form-input rounded-md w-full border-gray-300 shadow-sm text-black">
+        </div>
+
         <div class="flex justify-end gap-4 mt-6">
           <button @click="isPrazoModalVisible = false" class="btn-gray">Cancelar</button>
           <button @click="handleSetPrazo" class="btn-blue">Salvar Prazo</button>
         </div>
       </div>
     </div>
-
+    <!--
     <div v-if="isMessageBoxVisible" class="message-box-overlay show">
-    </div>
+    </div> -->
   </DashboardLayout>
 </template>
