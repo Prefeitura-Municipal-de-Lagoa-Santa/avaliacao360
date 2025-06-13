@@ -2,14 +2,12 @@
 
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\FormController;
-use App\Http\Controllers\UserController;
+use App\Http\Controllers\PersonController;
 use App\Http\Middleware\EnsureCpfIsFilled;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
 
-Route::get('/', function () {
-    return Inertia::render('welcome');
-})->name('home');
+    Route::redirect("/","/dashboard");
 
 Route::middleware(['auth', 'verified', EnsureCpfIsFilled::class])->group(function () {
     Route::get('/dashboard', [DashboardController::class, 'index'])->name('dashboard');
@@ -35,20 +33,16 @@ Route::middleware(['auth', 'verified', EnsureCpfIsFilled::class])->group(functio
 
 
 
-    // Rota para enviar o arquivo e obter o preview
-    Route::post('/users/upload/preview', [UserController::class, 'previewUpload'])
-        ->middleware(['auth']) // Garanta que o middleware de autenticação esteja correto
-        ->name('users.upload.preview');
-
-    // Rota para confirmar e aplicar as mudanças do upload
-    Route::post('/users/upload/confirm', [UserController::class, 'confirmUpload'])
-        ->name('users.upload.confirm');
+// Exemplo de como ficariam as rotas
+Route::post('/persons/preview', [PersonController::class, 'previewUpload'])->name('persons.preview');
+Route::post('/persons/confirm', [PersonController::class, 'confirmUpload'])->name('persons.confirm');
+Route::get('/persons', [PersonController::class, 'index'])->name('persons.index'); // Para a página de edição manual
 
     require __DIR__ . '/settings.php';
 
-    Route::get('/profile/cpf', [UserController::class, 'cpf'])->name('profile.cpf');
+    Route::get('/profile/cpf', [PersonController::class, 'cpf'])->name('profile.cpf');
 
 });
-Route::put('/profile/cpf', [UserController::class, 'cpfUpdate'])->name('profile.cpf.update');
+Route::put('/profile/cpf', [PersonController::class, 'cpfUpdate'])->name('profile.cpf.update');
 
 require __DIR__ . '/auth.php';
