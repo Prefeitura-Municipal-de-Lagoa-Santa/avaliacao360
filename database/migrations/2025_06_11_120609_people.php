@@ -10,14 +10,14 @@ return new class extends Migration {
      */
     public function up(): void
     {
-        Schema::create('persons', function (Blueprint $table) {
+        Schema::create('people', function (Blueprint $table) {
             // Colunas Padrão do Laravel
             $table->id();
             $table->string('name');
             $table->string('registration_number')->unique()->nullable(); // MATRICULA
             $table->string('bond_type')->nullable(); // VINCULO
             $table->string('functional_status')->nullable(); // SITUACAO
-            $table->string('cpf', 14)->unique()->nullable(); // CPF (aumentado para aceitar máscara se necessário)
+            $table->string('cpf', 14)->nullable(); // CPF (aumentado para aceitar máscara se necessário)
             $table->string('rg_number')->nullable(); // RG_NUMERO
             $table->date('admission_date')->nullable(); // DATA_ADMISSAO
             $table->date('dismissal_date')->nullable(); // DATA_DEMISSAO
@@ -26,7 +26,7 @@ return new class extends Migration {
             $table->string('allocation_code')->nullable(); // LOTACAO_CODIGO
             $table->string('allocation_name')->nullable(); // LOTACAO_NOME
 
-            $table->unsignedBigInteger('user_id');
+            $table->unsignedBigInteger('user_id')->nullable();
             $table->foreign('user_id')->references('id')->on('users')->onDelete('cascade');
             $table->timestamps();
         });
