@@ -36,7 +36,7 @@ Route::middleware(['auth', 'verified', EnsureCpfIsFilled::class])->group(functio
 // Exemplo de como ficariam as rotas
 Route::post('/persons/preview', [PersonController::class, 'previewUpload'])->name('persons.preview');
 Route::post('/persons/confirm', [PersonController::class, 'confirmUpload'])->name('persons.confirm');
-Route::get('/persons', [PersonController::class, 'index'])->name('persons.index'); // Para a página de edição manual
+Route::resource('persons', PersonController::class)->except(['create', 'store', 'show', 'destroy']);
 
     require __DIR__ . '/settings.php';
 
