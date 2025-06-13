@@ -63,7 +63,7 @@ class DashboardController extends Controller
         ]);
     }
 
-     public function pdi(): Response
+    public function pdi(): Response
     {
         // Busca o prazo apenas para o grupo de PDI
         $prazoPdi = $this->getGroupDeadline('pdi');
@@ -73,19 +73,38 @@ class DashboardController extends Controller
         ]);
     }
 
-     public function calendar(): Response
+    public function calendar(): Response
     {
-        // Você pode passar dados do backend para o frontend aqui
-        $dashboardStats = [
-            'completedAssessments' => 12,
-            'pendingAssessments' => 3,
-            'overallProgress' => '85%',
-            'nextDeadline' => '25/06/2024', // Exemplo de dado
-        ];
+        // Busca todos os formulários que possuem um prazo definido
+        $prazos = Form::whereNotNull('term_first')
+            ->whereNotNull('term_end')
+            ->select('year', 'type', 'term_first', 'term_end')
+            ->get()
+            // Agrupa primeiro por ano, depois por 'avaliacao' ou 'pdi'
+            ->groupBy([
+                'year',
+                function ($item) {
+                    return in_array($item->type, ['autoavaliacao', 'servidor', 'chefia']) ? 'avaliacao' : 'pdi';
+                }
+            ])
+            // Mapeia os grupos para criar um evento simplificado
+            ->map(function ($yearGroup) {
+                return $yearGroup->map(function ($group, $groupName) {
+                    $firstForm = $group->first(); // Pega o primeiro formulário do grupo como representante
+                    return [
+                        'start' => $firstForm->term_first->toDateString(), // Formato AAAA-MM-DD
+                        'end' => $firstForm->term_end->toDateString(),     // Formato AAAA-MM-DD
+                        'title' => 'Prazo ' . ucfirst($groupName) . ' ' . $firstForm->year,
+                        'group' => $groupName, // 'avaliacao' ou 'pdi'
+                    ];
+                });
+            })
+            ->flatten(1) // Transforma a coleção de grupos em uma lista única
+            ->values(); // Garante que seja um array simples
 
+        // Passa a lista de eventos de prazo para o componente Vue
         return Inertia::render('Dashboard/Calendar', [
-            'stats' => $dashboardStats, // Esses dados estarão disponíveis como props no componente Dashboard/Index.vue
-            // Outros dados necessários para a página
+            'deadlineEvents' => $prazos,
         ]);
     }
 
