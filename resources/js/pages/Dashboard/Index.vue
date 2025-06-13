@@ -1,8 +1,26 @@
 <script setup lang="ts">
 import DashboardLayout from '@/layouts/DashboardLayout.vue';
 import DashboardCard from '@/components/DashboardCard.vue';
-import { Head } from '@inertiajs/vue3'; // Para gerenciar o <head> da página
+import { Head } from '@inertiajs/vue3';
 import * as icons from 'lucide-vue-next';
+
+// Recebe as props de prazo do controller. Podem ser nulas.
+const props = defineProps<{
+  prazoAvaliacao: { term_first: string; term_end: string; } | null;
+  prazoPdi: { term_first: string; term_end: string; } | null;
+}>();
+
+// Função para formatar o prazo para exibição
+function formatPrazo(prazo: { term_first: string; term_end: string; } | null): string {
+  if (!prazo) return 'Não definido';
+ 
+  const options: Intl.DateTimeFormatOptions = { day: '2-digit', month: '2-digit' };
+  
+  const inicio = new Date(prazo.term_first).toLocaleDateString('pt-BR', options);
+  const fim = new Date(prazo.term_end).toLocaleDateString('pt-BR', options);
+  
+  return `${inicio} - ${fim}`;
+}
 
 // Importar SVGs como componentes ou usar inline SVG
 // Exemplo de como poderia ser um SVG inline ou importado
@@ -75,15 +93,26 @@ function showDetailsForDeadline() {
       </DashboardCard>
 
       <DashboardCard
-        :value="dashboardData.nextDeadline"
-        label="Prazo"
+        props.prazoAvaliacao
+        label="Data Avaliação"
+        :value="formatPrazo(props.prazoAvaliacao)"
         iconBgColor="#ef4444"
         buttonText="Ver Detalhes"
-        :buttonAction="showDetailsForDeadline"
       >
         <template #icon>
-          <icons.CalendarDays>
-          </icons.CalendarDays>
+          <icons.CalendarDays />
+        </template>
+      </DashboardCard>
+      
+      <DashboardCard
+        props.prazoPdi
+        :value="formatPrazo(props.prazoPdi)"
+        label="Data PDI"
+        iconBgColor="#f97316"
+        buttonText="Ver Detalhes"
+      >
+        <template #icon>
+          <icons.CalendarClock />
         </template>
       </DashboardCard>
     </div>
