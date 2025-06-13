@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, watch } from 'vue'; // Adicionado watch
+import { ref, computed, watch, onMounted } from 'vue'; // Adicionado watch
 // Adicionado 'router' para requisições programáticas com Inertia
 import { Link, usePage, router } from '@inertiajs/vue3';
 import {
@@ -12,6 +12,10 @@ import {
   DialogFooter,
   DialogClose,
 } from '@/components/ui/dialog'; // Seus imports do Dialog
+
+onMounted(() => {
+  document.documentElement.classList.remove('dark');
+});
 
 // Import icons (adjust path if needed)
 import { Menu as MenuIcon, X as XIcon } from 'lucide-vue-next';
