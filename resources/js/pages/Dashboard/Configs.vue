@@ -4,6 +4,7 @@ import { Head, usePage, router } from '@inertiajs/vue3';
 import DashboardLayout from '@/layouts/DashboardLayout.vue';
 import * as icons from 'lucide-vue-next';
 import axios from 'axios';
+import { route } from 'ziggy-js';
 
 // --- DEFINIÇÃO DAS PROPS ---
 const props = defineProps<{
