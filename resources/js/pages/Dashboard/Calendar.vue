@@ -67,7 +67,7 @@ function nextMonth() {
  */
 function getEventsForDay(dayNumber: number, month: number, year: number): Array<DeadlineEvent> {
   const checkDate = new Date(year, month, dayNumber);
-  
+
   return props.deadlineEvents.filter(event => {
     const startDate = new Date(event.start + 'T00:00:00');
     const endDate = new Date(event.end + 'T00:00:00');
@@ -80,6 +80,34 @@ const displayedMonthYear = computed<string>(() => {
   const date = new Date(currentYear.value, currentMonth.value);
   return date.toLocaleString('pt-BR', { month: 'long', year: 'numeric' }).replace(' de ', ' ');
 });
+
+/**
+ * Lida com o clique em um evento e mostra a mensagem APRIMORADA.
+ */
+function handleEventClick(dayNumber: number, month: number, year: number, event: DeadlineEvent) {
+  const clickedDate = new Date(year, month, dayNumber);
+  const startDate = new Date(event.start + 'T00:00:00');
+  const endDate = new Date(event.end + 'T00:00:00');
+
+  // Define um nome mais amigável para o grupo
+  const friendlyGroupName = event.group === 'avaliacao' 
+    ? 'a Avaliação' // Usamos o artigo feminino para concordância
+    : 'o PDI';      // Usamos o artigo masculino para concordância
+
+  let message = event.title; // Mensagem padrão para os dias no meio do período
+  let title = "Período de Preenchimento"; // Título padrão do modal
+
+  // Compara as datas para definir a mensagem e o título do modal
+  if (clickedDate.getTime() === startDate.getTime()) {
+    title = "Início";
+    message = `Início do período para preencher ${friendlyGroupName}.`;
+  } else if (clickedDate.getTime() === endDate.getTime()) {
+    title = "Último dia do prazo";
+    message = `Último dia para preencher ${friendlyGroupName}.`;
+  }
+
+  showCalendarMessage(message, title);
+}
 
 /**
  * Gera a grade de dias para o mês atual.
@@ -110,11 +138,13 @@ const calendarGridDays = computed((): Array<CalendarDay> => {
 </script>
 
 <template>
+
   <Head title="Calendário" />
   <DashboardLayout pageTitle="Calendário de Eventos">
     <div class="calendar-container bg-white p-4 sm:p-6 rounded-lg shadow">
       <div class="calendar-header">
-        <button @click="previousMonth" class="px-3 py-2 sm:px-4 bg-indigo-500 text-white rounded-md hover:bg-indigo-600 transition-colors flex items-center text-sm font-medium">
+        <button @click="previousMonth"
+          class="px-3 py-2 sm:px-4 bg-indigo-500 text-white rounded-md hover:bg-indigo-600 transition-colors flex items-center text-sm font-medium">
           <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path>
           </svg>
@@ -123,7 +153,8 @@ const calendarGridDays = computed((): Array<CalendarDay> => {
         <h2 class="text-base sm:text-xl font-semibold text-gray-800 capitalize text-center">
           {{ displayedMonthYear }}
         </h2>
-        <button @click="nextMonth" class="px-3 py-2 sm:px-4 bg-indigo-500 text-white rounded-md hover:bg-indigo-600 transition-colors flex items-center text-sm font-medium">
+        <button @click="nextMonth"
+          class="px-3 py-2 sm:px-4 bg-indigo-500 text-white rounded-md hover:bg-indigo-600 transition-colors flex items-center text-sm font-medium">
           <span class="hidden sm:inline mr-1"></span>
           <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path>
@@ -132,42 +163,41 @@ const calendarGridDays = computed((): Array<CalendarDay> => {
       </div>
 
       <div class="calendar-grid">
-  <div class="calendar-day-name"><span class="hidden sm:inline">Dom</span><span class="sm:hidden">D</span></div>
-  <div class="calendar-day-name"><span class="hidden sm:inline">Seg</span><span class="sm:hidden">S</span></div>
-  <div class="calendar-day-name"><span class="hidden sm:inline">Ter</span><span class="sm:hidden">T</span></div>
-  <div class="calendar-day-name"><span class="hidden sm:inline">Qua</span><span class="sm:hidden">Q</span></div>
-  <div class="calendar-day-name"><span class="hidden sm:inline">Qui</span><span class="sm:hidden">Q</span></div>
-  <div class="calendar-day-name"><span class="hidden sm:inline">Sex</span><span class="sm:hidden">S</span></div>
-  <div class="calendar-day-name"><span class="hidden sm:inline">Sáb</span><span class="sm:hidden">S</span></div>
+        <div class="calendar-day-name"><span class="hidden sm:inline">Dom</span><span class="sm:hidden">D</span></div>
+        <div class="calendar-day-name"><span class="hidden sm:inline">Seg</span><span class="sm:hidden">S</span></div>
+        <div class="calendar-day-name"><span class="hidden sm:inline">Ter</span><span class="sm:hidden">T</span></div>
+        <div class="calendar-day-name"><span class="hidden sm:inline">Qua</span><span class="sm:hidden">Q</span></div>
+        <div class="calendar-day-name"><span class="hidden sm:inline">Qui</span><span class="sm:hidden">Q</span></div>
+        <div class="calendar-day-name"><span class="hidden sm:inline">Sex</span><span class="sm:hidden">S</span></div>
+        <div class="calendar-day-name"><span class="hidden sm:inline">Sáb</span><span class="sm:hidden">S</span></div>
 
-  <div v-for="(day, index) in calendarGridDays" :key="index"
-       :class="['calendar-day', { 'empty': day.type === 'empty', 'current-day': day.isCurrent }]">
-    
-    <template v-if="day.type === 'day'">
-      {{ day.number }}
+        <div v-for="(day, index) in calendarGridDays" :key="index"
+          :class="['calendar-day', { 'empty': day.type === 'empty', 'current-day': day.isCurrent }]">
 
-      <div class="events-container">
-        <div v-for="event in getEventsForDay(day.number, currentMonth, currentYear)" 
-             :key="event.title" 
-             :class="['event', { 'highlight': event.group === 'avaliacao', 'pdi-event': event.group === 'pdi' }]"
-             @click="showCalendarMessage(event.title, 'Prazo de Entrega')">
-          <span class="hidden sm:inline">{{ event.group === 'avaliacao' ? 'Avaliação' : 'PDI' }}</span>
+          <template v-if="day.type === 'day'">
+            {{ day.number }}
+
+            <div class="events-container">
+              <div v-for="event in getEventsForDay(day.number!, currentMonth, currentYear)" :key="event.title"
+                :class="['event', { 'highlight': event.group === 'avaliacao', 'pdi-event': event.group === 'pdi' }]"
+                @click="handleEventClick(day.number!, currentMonth, currentYear, event)">
+                <span class="hidden sm:inline">{{ event.group === 'avaliacao' ? 'Avaliação' : 'PDI' }}</span>
+              </div>
+            </div>
+          </template>
         </div>
       </div>
-    </template>
-  </div>
-</div>
     </div>
 
     <div v-if="isMessageBoxVisible" class="message-box-overlay show">
-  <div class="message-box">
-    <h3 class="text-lg font-semibold mb-3">{{ messageBoxTitle }}</h3>
-    <p class="text-sm text-gray-700 mb-5">{{ messageBoxContent }}</p>
-    <button @click="hideCalendarMessage"
-      class="px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 text-sm font-medium">
-      Fechar
-    </button>
-  </div>
-</div>
+      <div class="message-box">
+        <h3 class="text-lg font-semibold mb-3">{{ messageBoxTitle }}</h3>
+        <p class="text-sm text-gray-700 mb-5">{{ messageBoxContent }}</p>
+        <button @click="hideCalendarMessage"
+          class="px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 text-sm font-medium">
+          Fechar
+        </button>
+      </div>
+    </div>
   </DashboardLayout>
 </template>

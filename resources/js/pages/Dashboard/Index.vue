@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import DashboardLayout from '@/layouts/DashboardLayout.vue';
 import DashboardCard from '@/components/DashboardCard.vue';
-import { Head } from '@inertiajs/vue3';
+import { Head, router } from '@inertiajs/vue3';
 import * as icons from 'lucide-vue-next';
 
 // Recebe as props de prazo do controller. Podem ser nulas.
@@ -20,6 +20,10 @@ function formatPrazo(prazo: { term_first: string; term_end: string; } | null): s
   const fim = new Date(prazo.term_end).toLocaleDateString('pt-BR', options);
   
   return `${inicio} - ${fim}`;
+}
+
+function goToCalendar() {
+  router.get(route('calendar'));
 }
 
 // Importar SVGs como componentes ou usar inline SVG
@@ -97,7 +101,8 @@ function showDetailsForDeadline() {
         label="Data Avaliação"
         :value="formatPrazo(props.prazoAvaliacao)"
         iconBgColor="#ef4444"
-        buttonText="Ver Detalhes"
+        :buttonAction="goToCalendar"
+        buttonText="Ver Calendário"
       >
         <template #icon>
           <icons.CalendarDays />
@@ -109,7 +114,8 @@ function showDetailsForDeadline() {
         :value="formatPrazo(props.prazoPdi)"
         label="Data PDI"
         iconBgColor="#f97316"
-        buttonText="Ver Detalhes"
+        :buttonAction="goToCalendar"
+        buttonText="Ver Calendário"
       >
         <template #icon>
           <icons.CalendarClock />

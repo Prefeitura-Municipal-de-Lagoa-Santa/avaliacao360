@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import DashboardLayout from '@/layouts/DashboardLayout.vue';
 import DashboardCard from '@/components/DashboardCard.vue';
-import { Head } from '@inertiajs/vue3';
+import { Head, router } from '@inertiajs/vue3';
 import * as icons from 'lucide-vue-next';
 
 // Recebe a prop 'prazoPdi' do controller
@@ -18,6 +18,10 @@ function formatPrazo(prazo: { term_first: string; term_end: string; } | null): s
   const fim = new Date(prazo.term_end).toLocaleDateString('pt-BR', options);
   
   return `${inicio} - ${fim}`;
+}
+
+function goToCalendar() {
+  router.get(route('calendar'));
 }
 
 function showDetailsForDeadline() {
@@ -46,9 +50,9 @@ function showDetailsForDeadline() {
       <DashboardCard
         props.prazoPdi
         :value="formatPrazo(props.prazoPdi)"
-        label="Prazo PDI"
         iconBgColor="#f97316"
-        buttonText="Ver Detalhes"
+        :buttonAction="goToCalendar"
+        buttonText="Ver Calendário"
       >
         <template #icon>
           <icons.CalendarClock />

@@ -94,7 +94,7 @@ class DashboardController extends Controller
                     return [
                         'start' => $firstForm->term_first->toDateString(), // Formato AAAA-MM-DD
                         'end' => $firstForm->term_end->toDateString(),     // Formato AAAA-MM-DD
-                        'title' => 'Prazo ' . ucfirst($groupName) . ' ' . $firstForm->year,
+                        'title' => 'Período ' . ucfirst($groupName) . ' ' . $firstForm->year,
                         'group' => $groupName, // 'avaliacao' ou 'pdi'
                     ];
                 });

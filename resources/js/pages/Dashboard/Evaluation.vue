@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import DashboardLayout from '@/layouts/DashboardLayout.vue';
 import DashboardCard from '@/components/DashboardCard.vue';
-import { Head } from '@inertiajs/vue3';
+import { Head, router} from '@inertiajs/vue3';
 import * as icons from 'lucide-vue-next';
 
 // Recebe a prop 'prazo' do controller
@@ -20,6 +20,9 @@ function formatPrazo(prazo: { term_first: string; term_end: string; } | null): s
   return `${inicio} - ${fim}`;
 }
 
+function goToCalendar() {
+  router.get(route('calendar'));
+}
 // Importar SVGs como componentes ou usar inline SVG
 // Exemplo de como poderia ser um SVG inline ou importado
 const CheckCircleIcon = `<svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>`;
@@ -93,9 +96,9 @@ function showDetailsForDeadline() {
       <DashboardCard
         props.prazo
         :value="formatPrazo(props.prazo)"
-        label="Prazo"
         iconBgColor="#ef4444"
-        buttonText="Ver Detalhes"
+        :buttonAction="goToCalendar"
+        buttonText="Ver Calendário"
       >
         <template #icon>
           <icons.CalendarDays />
