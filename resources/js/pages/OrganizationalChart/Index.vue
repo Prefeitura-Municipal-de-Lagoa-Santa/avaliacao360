@@ -3,6 +3,8 @@ import { ref, onMounted, watch, computed } from 'vue';
 import { Head } from '@inertiajs/vue3';
 import DashboardLayout from '@/layouts/DashboardLayout.vue'; // Confirme o nome do seu layout
 import { OrgChart } from 'd3-org-chart';
+import * as icons from 'lucide-vue-next';
+import { route } from 'ziggy-js';
 
 const props = defineProps({
   charts: Array, // Recebe um array de organogramas do controller
@@ -97,19 +99,25 @@ const getNodeColor = (type) => {
     <div class="p-4 sm:p-6 lg:p-8 bg-gray-100 min-h-screen">
       <div class="max-w-7xl mx-auto mb-6">
         <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between">
-            <div>
-                <h1 class="text-2xl font-bold text-gray-800">Organograma Estrutural</h1>
-                <p class="text-gray-600">Visão hierárquica das unidades organizacionais.</p>
-            </div>
-            <!-- Dropdown para selecionar a Secretaria -->
-            <div v-if="props.charts && props.charts.length > 0" class="mt-4 sm:mt-0">
-                <label for="secretaria-select" class="block text-sm font-medium text-gray-700">Visualizar Secretaria:</label>
-                <select id="secretaria-select" v-model="selectedChartId" class="mt-1 block w-full sm:w-72 pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm rounded-md">
-                    <option v-for="chart in props.charts" :key="chart.id" :value="chart.id">
-                        {{ chart.name }}
-                    </option>
-                </select>
-            </div>
+          <div>
+            <h1 class="text-2xl font-bold text-gray-800">Organograma Estrutural</h1>
+            <p class="text-gray-600">Visão hierárquica das unidades organizacionais.</p>
+          </div>
+          <!-- Dropdown para selecionar a Secretaria -->
+          <div v-if="props.charts && props.charts.length > 0" class="mt-4 sm:mt-0">
+            <label for="secretaria-select" class="block text-sm font-medium text-gray-700">Visualizar Secretaria:</label>
+            <select id="secretaria-select" v-model="selectedChartId" class="mt-1 block w-full sm:w-72 pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm rounded-md">
+              <option v-for="chart in props.charts" :key="chart.id" :value="chart.id">
+                {{ chart.name }}
+              </option>
+            </select>
+          </div>
+          <Link :href="route('configs')">
+            <button class="back-btn">
+              <component :is="icons.ArrowLeftIcon" class="size-4 mr-2" />
+              Voltar
+            </button>
+          </Link>
         </div>
       </div>
 

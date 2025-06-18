@@ -340,6 +340,13 @@ onUnmounted(() => {
             <component :is="icons.UsersIcon" class="size-5" />
           </button>
         </div>
+        <div class="setting-item">
+          <label>Organograma:</label>
+          <button @click="router.get(route('organizational-chart.index'))" class="btn btn-yellow">
+            <span>Ver</span>
+            <component :is="icons.ChartArea" class="size-5" />
+          </button>
+        </div>
       </div>
     </div>
 
