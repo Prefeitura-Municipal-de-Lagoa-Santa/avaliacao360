@@ -26,7 +26,7 @@ const iconWrapperStyle = computed(() => {
     >
       <slot name="icon"></slot>
     </div>
-    <div class="value text-2xl font-bold text-indigo-400 mb-2">{{ props.value }}</div>
+    <div class="value text-xl font-bold text-sky-700 mb-2">{{ props.value }}</div>
     <div class="label text-base text-gray-600 mb-4">{{ props.label }}</div>
     <div
       v-if="props.chartPlaceholderText"

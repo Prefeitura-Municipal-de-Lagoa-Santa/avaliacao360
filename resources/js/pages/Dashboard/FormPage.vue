@@ -1,58 +1,92 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue';
-import { useForm } from '@inertiajs/vue3';
+import { computed } from 'vue';
+import { useForm, Head } from '@inertiajs/vue3';
 import DashboardLayout from '@/layouts/DashboardLayout.vue';
-import FormCreator from '@/pages/Dashboard/Forms.vue'; // O seu componente de formulário
+import FormCreator from '@/pages/Dashboard/Forms.vue';
 
-// 1. Props recebidas do FormController (edit ou create)
+// --- Interfaces para Tipagem ---
+interface QuestionPayload {
+  text: string;
+  weight: number | null;
+}
+interface GroupPayload {
+  name: string;
+  weight: number | null;
+  questions: QuestionPayload[];
+}
+
+// --- Props ---
 const props = defineProps<{
-  formType: 'autoavaliacao' | 'chefia' | 'servidor' | 'pactuacao' | 'metas';
+  formType: 'autoavaliacao' | 'chefia' | 'servidor' | 'pactuacao' ;
   year: string;
-  form?: { // O formulário completo, opcional (apenas para edição)
+  form?: {
     id: number;
     name: string;
     year: string;
     type: string;
-    questions: Array<{ id: number; text_content: string; weight: number }>;
+    group_questions: Array<{
+      id: number;
+      name: string;
+      weight: number; // Peso do grupo
+      questions: Array<{ id: number; text_content: string; weight: number }>;
+    }>;
   };
 }>();
 
 const isEditing = computed(() => !!props.form);
 
-// 2. Títulos dinâmicos
+// Títulos dinâmicos
 const formTitles: Record<string, string> = {
   autoavaliacao: 'Formulário de Autoavaliação',
   chefia: 'Formulário de Avaliação Chefia',
   servidor: 'Formulário de Avaliação do Servidor',
   pactuacao: 'Formulário de Pactuação (PDI)',
-  metas: 'Formulário de Cumprimento de Metas (PDI)',
+
 };
+const pageTitle = computed(() => `${isEditing.value ? 'Editar' : 'Criar'} ${formTitles[props.formType]}`);
 
-const pageTitle = computed(() => {
-    const action = isEditing.value ? 'Editar' : 'Criar';
-    return `${action} ${formTitles[props.formType]}`;
-});
-
-// 3. Lógica do formulário com o useForm do Inertia
+// --- Lógica do Formulário com useForm ---
+// CORRIGIDO: A estrutura do 'useForm' agora corresponde perfeitamente à nova lógica
 const form = useForm({
     title: props.form?.name || formTitles[props.formType],
     year: props.year,
     type: props.formType,
-    questions: props.form?.questions.map(q => ({ text: q.text_content, weight: q.weight })) || [{ text: '', weight: null }],
+    groups: props.form?.group_questions.map(g => {
+        // Calcula o peso relativo das questões dentro do grupo para exibição no formulário
+        const groupTotalAbsoluteWeight = g.questions.reduce((sum, q) => sum + q.weight, 0);
+        return {
+            name: g.name,
+            weight: g.weight,
+            questions: g.questions.map(q => ({
+                text: q.text_content,
+                // Converte o peso final de volta para o peso relativo (0-100) para o componente de edição
+                weight: groupTotalAbsoluteWeight > 0
+                    ? parseFloat(((q.weight / groupTotalAbsoluteWeight) * 100).toFixed(2))
+                    : 0
+            }))
+        }
+    }) || [{ name: '', weight: 100, questions: [{ text: '', weight: 100 }] }],
 });
 
-function handleSave(questionsPayload: Array<{ text: string; weight: number | null }>) {
-  form.questions = questionsPayload;
+
+
+
+function handleSave(groupsPayload: GroupPayload[]) {
+  form.groups = groupsPayload;
 
   if (isEditing.value) {
-    // Rota de UPDATE
+    // Ao editar, usa form.put() que envia uma requisição PUT.
     form.put(route('configs.update', { formulario: props.form!.id }), {
-      onError: (errors) => console.error("Erro ao atualizar:", errors),
+        onError: (errors) => {
+            console.error("Erro ao atualizar:", errors);
+        },
     });
   } else {
-    // Rota de STORE
+    // Ao criar, usa form.post() que envia uma requisição POST.
     form.post(route('configs.store'), {
-      onError: (errors) => console.error("Erro ao criar:", errors),
+        onError: (errors) => {
+            console.error("Erro ao criar:", errors);
+        },
     });
   }
 }
@@ -67,7 +101,7 @@ function handleCancel() {
   <DashboardLayout :pageTitle="pageTitle">
     <FormCreator
       :title="pageTitle"
-      :initial-questions="form.questions"
+      :initial-groups="form.groups"
       :is-saving="form.processing"
       @save="handleSave"
       @cancel="handleCancel"

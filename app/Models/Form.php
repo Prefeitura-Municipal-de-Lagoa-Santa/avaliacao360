@@ -37,10 +37,11 @@ class Form extends Model
      *
      * @return \Illuminate\Database\Eloquent\Relations\HasMany
      */
-    public function questions(): HasMany
+    public function groupQuestions(): HasMany
     {
-        return $this->hasMany(Question::class);
+        return $this->hasMany(GroupQuestion::class);
     }
+
 
     
 }

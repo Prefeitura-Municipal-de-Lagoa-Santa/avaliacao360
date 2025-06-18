@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\Form;
+use App\Models\GroupQuestion;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
@@ -18,7 +19,7 @@ class FormController extends Controller
     public function index()
     {
         // Carrega todos os formulários com suas questões e passa para a view
-        $forms = Form::with('questions')->latest()->get();
+        $forms = Form::with('groupQuestions.questions')->latest()->get();
 
         return Inertia::render('Dashboard/Configs', [
             'forms' => $forms,
@@ -27,7 +28,7 @@ class FormController extends Controller
 
     public function show(Form $formulario)
 {
-    $formulario->load('questions');
+    $formulario->load('groupQuestions.questions');
 
     // Linha correta, sem o prefixo 'pages/'
     return Inertia::render('Dashboard/FormViewPage', [
@@ -39,7 +40,7 @@ class FormController extends Controller
     {
         // Valida se o tipo e ano foram passados na URL
         $validated = $request->validate([
-            'type' => ['required', Rule::in(['autoavaliacao', 'chefia', 'servidor', 'pactuacao', 'metas'])],
+            'type' => ['required', Rule::in(['autoavaliacao', 'chefia', 'servidor', 'pactuacao'])],
             'year' => 'required|digits:4',
         ]);
 
@@ -51,7 +52,7 @@ class FormController extends Controller
 
     public function edit(Form $formulario)
     {
-        $formulario->load('questions');
+        $formulario->load('groupQuestions.questions');
         // Renderiza a MESMA PÁGINA, mas agora passando o formulário
         return Inertia::render('Dashboard/FormPage', [
             'form' => $formulario,
@@ -65,39 +66,52 @@ class FormController extends Controller
      */
     public function update(Request $request, Form $formulario)
     {
-        // A validação é muito parecida com a de 'store'
         $validatedData = $request->validate([
             'title' => 'required|string|max:100',
-            'year' => 'required|digits:4',
-            'questions' => 'required|array|min:1',
-            'questions.*.text' => 'required|string',
-            'questions.*.weight' => 'required|integer|min:0|max:100',
+            'groups' => 'required|array|min:1',
+            'groups.*.name' => 'required|string|max:150',
+            'groups.*.weight' => 'required|numeric|min:0',
+            'groups.*.questions' => 'required|array|min:1',
+            'groups.*.questions.*.text' => 'required|string',
+            'groups.*.questions.*.weight' => 'required|numeric|min:0',
         ]);
 
-        $totalWeight = collect($validatedData['questions'])->sum('weight');
-        if ($totalWeight !== 100) {
-            return back()->withErrors(['questions' => 'A soma dos pesos deve ser exatamente 100.'])->withInput();
+        // CORREÇÃO: Validação 1 - Soma dos pesos dos GRUPOS
+        $totalGroupWeight = collect($validatedData['groups'])->sum('weight');
+        if (abs($totalGroupWeight - 100) > 0.01) {
+            return back()->withErrors(['groups' => 'A soma dos pesos de todos os GRUPOS deve ser exatamente 100%.'])->withInput();
+        }
+        
+        // CORREÇÃO: Validação 2 - Soma dos pesos das QUESTÕES dentro de cada grupo
+        foreach ($validatedData['groups'] as $groupData) {
+            $totalRelativeWeight = collect($groupData['questions'])->sum('weight');
+            if (abs($totalRelativeWeight - 100) > 0.01) {
+                 return back()->withErrors(['groups' => "A soma dos pesos das questões no grupo '{$groupData['name']}' deve ser 100%."])->withInput();
+            }
         }
 
         DB::transaction(function () use ($validatedData, $formulario) {
-            // Atualiza os dados do formulário principal
-            $formulario->update([
-                'name' => $validatedData['title'],
-                'year' => $validatedData['year'],
-            ]);
+            $formulario->update(['name' => $validatedData['title']]);
 
-            // Sincroniza as questões: a forma mais simples é deletar as antigas e criar as novas
-            $formulario->questions()->delete();
+            $formulario->groupQuestions()->delete();
 
-            foreach ($validatedData['questions'] as $questionData) {
-                $formulario->questions()->create([
-                    'text_content' => $questionData['text'],
-                    'weight' => $questionData['weight'],
+            foreach ($validatedData['groups'] as $groupData) {
+                $groupQuestion = $formulario->groupQuestions()->create([
+                    'name' => $groupData['name'],
+                    'weight' => $groupData['weight']
                 ]);
+
+                foreach ($groupData['questions'] as $questionData) {
+                    $finalWeight = ($groupData['weight'] / 100.0) * $questionData['weight'];
+                    $groupQuestion->questions()->create([
+                        'text_content' => $questionData['text'],
+                        'weight' => round($finalWeight, 2),
+                    ]);
+                }
             }
         });
 
-        return redirect()->route('configs')->with('success', 'Ação realizada com sucesso!');
+        return redirect()->route('configs')->with('success', 'Formulário atualizado com sucesso!');
     }
 
  public function setPrazo(Request $request)
@@ -147,48 +161,59 @@ public function setLiberar(Request $request)
     return back()->with('success', 'Formulários liberados com sucesso!');
 }
 
-
-    // O seu método store() continua aqui, sem alterações...
     public function store(Request $request)
-{
-    $validatedData = $request->validate([
-        'title' => 'required|string|max:100',
-        'year' => 'required|digits:4',
-        'type' => ['required', 'string', Rule::in(['autoavaliacao', 'chefia', 'servidor', 'pactuacao'])],
-        'questions' => 'required|array|min:1',
-        'questions.*.text' => 'required|string',
-        'questions.*.weight' => 'required|integer|min:0|max:100',
-    ]);
-
-       
-
-
-    // 2. Validação do peso total
-    $totalWeight = collect($validatedData['questions'])->sum('weight');
-    if ($totalWeight !== 100) {
-        // Retorna para a página anterior com um erro
-        return back()->withErrors(['questions' => 'A soma dos pesos de todas as questões deve ser exatamente 100.'])->withInput();
-    }
-
-    // 3. Lógica de criação no banco de dados
-    DB::transaction(function () use ($validatedData) {
-        // Cria o formulário principal
-        $form = Form::create([
-            'name' => $validatedData['title'],
-            'year' => $validatedData['year'],
-            'type' => $validatedData['type'],
+    {
+        $validatedData = $request->validate([
+            'title' => 'required|string|max:100',
+            'year' => 'required|digits:4',
+            'type' => ['required', 'string', Rule::in(['autoavaliacao', 'chefia', 'servidor', 'pactuacao'])],
+            'groups' => 'required|array|min:1',
+            'groups.*.name' => 'required|string|max:150',
+            'groups.*.weight' => 'required|numeric|min:0', // Peso do grupo
+            'groups.*.questions' => 'required|array|min:1',
+            'groups.*.questions.*.text' => 'required|string',
+            'groups.*.questions.*.weight' => 'required|numeric|min:0', // Peso relativo da questão
         ]);
 
-        // Cria as questões associadas
-        foreach ($validatedData['questions'] as $questionData) {
-            $form->questions()->create([
-                'text_content' => $questionData['text'],
-                'weight' => $questionData['weight'],
-            ]);
+        // Validação 1: Soma dos pesos dos grupos
+        $totalGroupWeight = collect($validatedData['groups'])->sum('weight');
+        if (abs($totalGroupWeight - 100) > 0.01) {
+            return back()->withErrors(['groups' => 'A soma dos pesos de todos os grupos deve ser exatamente 100.'])->withInput();
         }
-    });
+        
+        // Validação 2: Soma dos pesos relativos em cada grupo
+        foreach ($validatedData['groups'] as $groupData) {
+            $totalRelativeWeight = collect($groupData['questions'])->sum('weight');
+            if (abs($totalRelativeWeight - 100) > 0.01) {
+                 return back()->withErrors(['groups' => "A soma dos pesos das questões no grupo '{$groupData['name']}' deve ser 100."])->withInput();
+            }
+        }
 
-    // 4. Redireciona para a página de configurações com mensagem de sucesso
-    return redirect()->route('configs')->with('success', 'Formulário criado com sucesso!');
-}
+        DB::transaction(function () use ($validatedData) {
+            $form = Form::create([
+                'name' => $validatedData['title'],
+                'year' => $validatedData['year'],
+                'type' => $validatedData['type'],
+            ]);
+
+            foreach ($validatedData['groups'] as $groupData) {
+                $groupQuestion = $form->groupQuestions()->create([
+                    'name' => $groupData['name'],
+                    'weight' => $groupData['weight']
+                ]);
+
+                foreach ($groupData['questions'] as $questionData) {
+                    // Calcula o peso final da questão para salvar no banco
+                    $finalWeight = ($groupData['weight'] / 100.0) * ($questionData['weight']);
+                    
+                    $groupQuestion->questions()->create([
+                        'text_content' => $questionData['text'],
+                        'weight' => round($finalWeight), // Salva o peso final calculado
+                    ]);
+                }
+            }
+        });
+
+        return redirect()->route('configs')->with('success', 'Formulário criado com sucesso!');
+    }
 }

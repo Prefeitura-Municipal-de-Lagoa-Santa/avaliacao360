@@ -10,24 +10,17 @@ class Question extends Model
 {
     use HasFactory;
 
-    /**
-     * The attributes that are mass assignable.
-     *
-     * @var array<int, string>
-     */
-    protected $fillable = [
-        'form_id',
+     protected $fillable = [
+        'group_question_id', // Alterado de form_id
         'text_content',
         'weight',
     ];
 
     /**
-     * Get the form that owns the Question.
-     *
-     * @return \Illuminate\Database\Eloquent\Relations\BelongsTo
+     * A questão agora pertence a um GroupQuestion.
      */
-    public function form(): BelongsTo
+    public function groupQuestion(): BelongsTo
     {
-        return $this->belongsTo(Form::class);
+        return $this->belongsTo(GroupQuestion::class);
     }
 }

@@ -1,24 +1,30 @@
 <script setup lang="ts">
 import { Head } from '@inertiajs/vue3';
 import DashboardLayout from '@/layouts/DashboardLayout.vue';
-import * as icons from 'lucide-vue-next';
+// Corrigido: Importa-se o ícone diretamente para melhor performance
+import { ArrowLeftIcon } from 'lucide-vue-next';
 
-// 1. Props recebidas do FormController@show
+// As props recebem os dados do formulário, incluindo os grupos e suas questões.
 const props = defineProps<{
   form: {
     id: number;
     name: string;
     year: string;
     type: string;
-    questions: Array<{
+    group_questions: Array<{
       id: number;
-      text_content: string;
-      weight: number;
+      name: string;
+      weight: number; // O peso do grupo que será exibido
+      questions: Array<{
+        id: number;
+        text_content: string;
+        weight: number; // O peso final da questão
+      }>;
     }>;
   };
 }>();
 
-// 2. Função para voltar para a página anterior
+// Função para navegar para a página anterior.
 function goBack() {
   window.history.back();
 }
@@ -35,31 +41,41 @@ function goBack() {
           <p class="text-sm text-gray-500">Ano de referência: {{ props.form.year }}</p>
         </div>
         <button @click="goBack" class="back-btn">
-          <component :is="icons.ArrowLeftIcon" class="size-4 mr-2" />
+          <ArrowLeftIcon class="size-4 mr-2" />
           Voltar
         </button>
       </div>
 
-      <div class="form-creator-container">
-        <div class="flex items-center pb-2 border-b mb-4">
-            <div class="w-10/12 font-semibold text-gray-600">Questão</div>
-            <div class="w-2/12 font-semibold text-gray-600 text-center">Peso (%)</div>
-        </div>
+      <!-- Container principal que itera sobre os grupos de questões -->
+      <div v-if="props.form.group_questions && props.form.group_questions.length > 0" class="space-y-6 mt-6">
+        <div v-for="group in props.form.group_questions" :key="group.id" class="group-container-view">
 
-        <div v-if="props.form.questions && props.form.questions.length > 0" class="space-y-3">
-          <div v-for="question in props.form.questions" :key="question.id" class="question-view-row">
-              <div class="w-10/12">
-                  <p class="text-gray-800">{{ question.text_content }}</p>
-              </div>
-              <div class="w-2/12 flex justify-center">
-                  <span class="font-medium text-gray-700">{{ question.weight }}%</span>
-              </div>
-          </div>
-        </div>
+            <!-- CORRIGIDO: Header do grupo agora usa flexbox para alinhar o nome e o peso -->
+            <div class="group-header-view">
+                <h3 class="flex-grow font-semibold text-gray-800">{{ group.name }}</h3>
+                <!-- Badge estilizado para exibir o peso do grupo -->
+                <span class="font-bold text-indigo-500 bg-white px-3 py-1 rounded-full text-sm ml-4">
+                    Peso do Grupo: {{ group.weight }}%
+                </span>
+            </div>
 
-        <div v-else class="text-center text-gray-500 py-8">
-            <p>Este formulário ainda não possui questões cadastradas.</p>
+            <!-- Corpo do grupo, com a lista de questões -->
+            <div class="space-y-3 p-4">
+                 <div class="flex items-center pb-2 border-b mb-2 text-sm text-gray-500 font-medium">
+                    <div class="w-10/12">Questão</div>
+                    <div class="w-2/12 text-center">Peso Final</div>
+                </div>
+                <div v-for="question in group.questions" :key="question.id" class="question-view-row">
+                    <div class="w-10/12"><p class="text-gray-800">{{ question.text_content }}</p></div>
+                    <div class="w-2/12 text-center"><span class="font-medium text-gray-700">{{ question.weight }}%</span></div>
+                </div>
+            </div>
         </div>
+      </div>
+
+      <!-- Mensagem exibida se o formulário não tiver grupos -->
+      <div v-else class="text-center text-gray-500 py-8 form-creator-container">
+          <p>Este formulário ainda não possui grupos ou questões cadastradas.</p>
       </div>
     </div>
 
@@ -67,13 +83,5 @@ function goBack() {
 </template>
 
 <style scoped>
-/* Adicione este estilo ao seu custom.css ou aqui mesmo para melhor aparência */
-.question-view-row {
-  display: flex;
-  align-items: center;
-  padding: 12px 8px;
-  background-color: #f9fafb; /* bg-gray-50 */
-  border-radius: 6px;
-  border: 1px solid #e5e7eb; /* border-gray-200 */
-}
+
 </style>

@@ -8,12 +8,14 @@ return new class extends Migration
 {
     public function up(): void
     {
-        Schema::create('questions', function (Blueprint $table) {
+        Schema::create('group_questions', function (Blueprint $table) {
             $table->id();
-            $table->foreignId('group_question_id')
-                  ->constrained('group_questions')
+            $table->foreignId('form_id')
+                  ->constrained('forms')
                   ->onDelete('cascade');
-            $table->text('text_content');
+            $table->string('name', 150);
+            // CORRIGIDO: Alterado para 'decimal' para permitir casas decimais.
+            // Permite valores como 50.00 ou 33.33
             $table->decimal('weight', 5, 2)->default(0);
             $table->timestamps();
         });
@@ -21,6 +23,7 @@ return new class extends Migration
 
     public function down(): void
     {
-        Schema::dropIfExists('questions');
+        Schema::dropIfExists('group_questions');
     }
 };
+
