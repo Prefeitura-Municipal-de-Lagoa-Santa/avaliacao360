@@ -53,16 +53,12 @@ const isActive = (itemRouteName: string, itemHref: string) => {
 const executeLogout = () => {
   router.post(route('logout'), {
     onSuccess: () => {
-      // A página deve recarregar ou redirecionar conforme a resposta do backend,
-      // o que naturalmente fechará o dialog.
-      // console.log('Logout realizado com sucesso!');
       if (isMobileMenuOpen.value) { // Fechar menu mobile se estiver aberto
         closeMobileMenu();
       }
     },
     onError: (errors) => {
       console.error('Erro ao fazer logout:', errors);
-      // Você pode querer tratar erros aqui, talvez exibindo uma notificação.
     },
   });
 };
@@ -112,63 +108,70 @@ watch(isMobileMenuOpen, (isOpen) => {
       <div class="px-6 sm:px-8 py-4 bg-white border-b border-gray-200 flex flex-col sm:flex-row justify-between items-start sm:items-center">
         <h1 class="text-2xl font-bold text-gray-800 mb-2 sm:mb-0">Avaliação de desempenho</h1>
       </div>
-        <nav class="nav-bar bg-gray-50 p-3 sm:p-4 border-b border-gray-200 hidden sm:flex gap-3 sm:gap-4 overflow-x-auto">
-        <template v-for="(item) in navItems" :key="item.routeName">
-          <Link
-            :href="item.href"
-            class="nav-item px-3 py-2 sm:px-4 sm:py-2 rounded-xl font-medium text-sm sm:text-base whitespace-nowrap cursor-pointer transition-all duration-200 ease-in-out"
-            :class="{
-              'bg-indigo-100 text-indigo-700 font-semibold': isActive(item.routeName, item.href),
-              'text-gray-600 hover:bg-gray-200 hover:text-gray-800': !isActive(item.routeName, item.href)
-            }"
-          >
-            {{ item.label }}
-          </Link>
-          
-        </template>
-         <div class="button-logout ml-44"> <Dialog>
-          <DialogTrigger as-child>
-            <button
-              class="px-4 py-2 bg-red-500 text-white rounded-lg font-medium text-sm hover:bg-red-700 transition-colors card-icon-logout flex items-center"
-              title="Sair do sistema"
-            >
-              Sair
-              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-5 h-5 ml-0.5"> 
-                <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0013.5 3h-6a2.25 2.25 0 00-2.25 2.25v13.5A2.25 2.25 0 007.5 21h6a2.25 2.25 0 002.25-2.25V15m3 0l3-3m0 0l-3-3m3 3H9" />
-              </svg>
-            </button>
-          </DialogTrigger>
-          <DialogContent class="sm:max-w-md bg-white">
-            <DialogHeader>
-              <DialogTitle class="text-lg font-semibold text-gray-900">Confirmar</DialogTitle>
-              <DialogDescription class="mt-2 text-sm text-gray-600">
-                Tem certeza que deseja sair do sistema?
-              </DialogDescription>
-            </DialogHeader>
-            <DialogFooter class="mt-6 flex flex-col-reverse sm:flex-row sm:justify-end sm:space-x-2">
-              <DialogClose as-child>
-                <button 
-                  type="button" 
-                  class="w-full sm:w-auto inline-flex justify-center rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 sm:mt-0"
-                >
-                  Cancelar
-                </button>
-              </DialogClose>
-              <button
-                @click="executeLogout"
-                type="button"
-                class="w-full sm:w-auto inline-flex justify-center rounded-md border border-transparent bg-red-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2 mt-3 sm:mt-0"
+      <!-- CORRIGIDO: A barra de navegação agora usa 'justify-center' e tem posição relativa -->
+      <nav class="nav-bar bg-gray-200 p-3 sm:p-2 border-b border-gray-200 hidden sm:flex justify-center items-center gap-2 relative">
+        <!-- Itens de navegação centralizados -->
+        <div class="flex items-center justify-center gap-2 mr-50">
+            <template v-for="(item) in navItems" :key="item.routeName">
+              <Link
+                :href="item.href"
+                class="nav-item px-3 py-2 sm:px-4 sm:py-2 rounded-lg font-bold text-sm sm:text-base whitespace-nowrap cursor-pointer transition-all duration-200 ease-in-out"
+                :class="{
+                  'bg-blue-600 text-white shadow-sm': isActive(item.routeName, item.href),
+                  'text-gray-600 hover:bg-blue-600 hover:text-white': !isActive(item.routeName, item.href)
+                }"
               >
-                Sim, Sair
-              </button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog></div>
+                {{ item.label }}
+              </Link>
+            </template>
+        </div>
+
+        <!-- Botão de logout posicionado de forma absoluta à direita -->
+        <div class="button-logout absolute right-4 top-1/2 -translate-y-1/2 mr-6">
+           <Dialog>
+              <DialogTrigger as-child>
+                <button
+                  class="px-4 py-2 bg-red-500 text-white rounded-lg font-medium text-sm hover:bg-red-700 transition-colors card-icon-logout flex items-center"
+                  title="Sair do sistema"
+                >
+                  Sair
+                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-5 h-5 ml-1">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0013.5 3h-6a2.25 2.25 0 00-2.25 2.25v13.5A2.25 2.25 0 007.5 21h6a2.25 2.25 0 002.25-2.25V15m3 0l3-3m0 0l-3-3m3 3H9" />
+                  </svg>
+                </button>
+              </DialogTrigger>
+              <DialogContent class="sm:max-w-md bg-white">
+                <DialogHeader>
+                  <DialogTitle class="text-lg font-semibold text-gray-900">Confirmar</DialogTitle>
+                  <DialogDescription class="mt-2 text-sm text-gray-600">
+                    Tem certeza que deseja sair do sistema?
+                  </DialogDescription>
+                </DialogHeader>
+                <DialogFooter class="mt-6 flex flex-col-reverse sm:flex-row sm:justify-end sm:space-x-2">
+                  <DialogClose as-child>
+                    <button
+                      type="button"
+                      class="w-full sm:w-auto inline-flex justify-center rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 sm:mt-0"
+                    >
+                      Cancelar
+                    </button>
+                  </DialogClose>
+                  <button
+                    @click="executeLogout"
+                    type="button"
+                    class="w-full sm:w-auto inline-flex justify-center rounded-md border border-transparent bg-red-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2 mt-3 sm:mt-0"
+                  >
+                    Sim, Sair
+                  </button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
+        </div>
       </nav>
-        <main class="content p-6 sm:p-8 flex-grow">
-        <slot /> 
+      <main class="content p-6 sm:p-8 flex-grow bg-gray-50">
+        <slot />
       </main>
-    </div> 
+    </div>
 
     <div v-if="isMobileMenuOpen" class="fixed inset-0 z-40 flex sm:hidden" role="dialog" aria-modal="true">
       <div class="fixed inset-0 bg-black/30 backdrop-blur-sm" @click="closeMobileMenu"></div>
@@ -229,7 +232,7 @@ watch(isMobileMenuOpen, (isOpen) => {
                 </DialogContent>
             </Dialog>
         </div>
-      </div> 
+      </div>
      </div>
   </div>
 </template>

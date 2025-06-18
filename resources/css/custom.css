@@ -474,3 +474,99 @@
   border-radius: 0.375rem;
   cursor: pointer;
 }
+
+/* ======================================== */
+/* ===== Estilos da Caixa de Formulário (Modal) ===== */
+/* ======================================== */
+
+.form-creator-container {
+    background-color: white;
+    padding: 1rem 2rem 2rem 2rem;
+    border-radius: 0.75rem;
+    box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+    margin-top: 1.5rem;
+}
+.group-container {
+  border: 1px solid #e5e7eb;
+  border-radius: 0.75rem;
+  background-color: #ffffff;
+  overflow: hidden;
+}
+.group-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.75rem 1rem;
+  background-color: #e5e5e7;
+  border-bottom: 1px solid #e5e7eb;
+}
+.group-name-input {
+  font-size: 1.125rem;
+  font-weight: 600;
+  color: #1f2937;
+  border: none;
+  background: transparent;
+  flex-grow: 1;
+}
+.group-name-input:focus {
+  outline: none;
+  box-shadow: none;
+}
+.question-row {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.25rem;
+}
+.remove-group-btn, .remove-question-btn {
+  color: #ef4444; padding: 0.5rem; border-radius: 9999px; display: flex;
+}
+.remove-group-btn:hover, .remove-question-btn:hover {
+  background-color: #fce8e8; color: #ef4444;
+}
+.btn-green-outline {
+    display: inline-flex; align-items: center; justify-content: center; padding: 0.5rem 1rem;
+    border: 1px solid #22c55e; color: #16a34a; background-color: white;
+    border-radius: 0.375rem; font-weight: 500; transition: all 0.2s;
+}
+.btn-green-outline:hover { background-color: #f0fdf4; }
+
+.btn-gray, .btn-blue, .btn-green {
+    display: inline-flex; align-items: center; justify-content: center;
+    padding: 0.625rem 1.25rem; border-radius: 0.5rem; font-weight: 600;
+    transition: all 0.2s; border: 1px solid transparent;
+}
+.btn-gray { background-color: #e5e7eb; color: #374151; border-color: #d1d5db; }
+.btn-gray:hover:not(:disabled) { background-color: #d1d5db; }
+.btn-blue { background-color: #3b82f6; color: white; }
+.btn-blue:hover:not(:disabled) { background-color: #2563eb; }
+.btn-green { background-color: #22c55e; color: white; }
+.btn-green:hover:not(:disabled) { background-color: #16a34a; }
+.btn-gray:disabled, .btn-blue:disabled, .btn-green:disabled {
+    opacity: 0.6; cursor: not-allowed;
+}
+
+.group-container-view {
+  border: 1px solid #E5E7EB;
+  border-radius: 0.75rem;
+  background-color: white;
+  overflow: hidden;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+}
+.group-header-view {
+  padding: 0.75rem 1.25rem;
+  background-color: #E5E7EB;
+  border-bottom: 1px solid #e5e7eb;
+  font-size: 1.125rem;
+  display: flex; /* Essencial para alinhar os itens */
+  justify-content: space-between; /* Coloca espaço entre o nome e o peso */
+  align-items: center; /* Alinha verticalmente */
+}
+.question-view-row {
+  display: flex;
+  align-items: center;
+  padding: 12px 8px;
+  background-color: white;
+  border-radius: 6px;
+  border: 1px solid #e5e7eb;
+}
