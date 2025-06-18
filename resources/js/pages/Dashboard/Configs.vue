@@ -335,7 +335,7 @@ onUnmounted(() => {
         </div>
         <div class="setting-item">
           <label>Editar Pessoas:</label>
-          <button @click="router.get(route('persons.index'))" class="btn btn-yellow">
+          <button @click="router.get(route('people.index'))" class="btn btn-yellow">
             <span>Editar</span>
             <component :is="icons.UsersIcon" class="size-5" />
           </button>

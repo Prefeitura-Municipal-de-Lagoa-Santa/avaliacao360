@@ -23,9 +23,11 @@ return new class extends Migration {
             $table->date('dismissal_date')->nullable(); // DATA_DEMISSAO
             $table->string('current_position')->nullable(); // CARGO_ATUAL
             $table->string('current_function')->nullable(); // FUNCAO_ATUAL
-            $table->string('allocation_code')->nullable(); // LOTACAO_CODIGO
-            $table->string('allocation_name')->nullable(); // LOTACAO_NOME
 
+            $table->foreignId('organizational_unit_id')
+                ->nullable() // Permitir que uma pessoa não tenha unidade atribuída inicialmente
+                ->constrained('organizational_units')
+                ->onDelete('set null'); // Se uma unidade for deletada, o campo fica nulo, não a pessoa.
             $table->unsignedBigInteger('user_id')->nullable();
             $table->foreign('user_id')->references('id')->on('users')->onDelete('cascade');
             $table->timestamps();

@@ -2,22 +2,14 @@
 
 namespace App\Models;
 
-// use Illuminate\Contracts\Auth\MustVerifyEmail;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
-use Illuminate\Foundation\Auth\User as Authenticatable;
-use Illuminate\Notifications\Notifiable;
-use LdapRecord\Laravel\Auth\AuthenticatesWithLdap;
-use LdapRecord\Laravel\Auth\LdapAuthenticatable;
 
-class Person extends Authenticatable implements LdapAuthenticatable
+class Person extends Model
 {
-    use HasFactory, Notifiable, AuthenticatesWithLdap;
-    /**
-     * The attributes that are mass assignable.
-     *
-     * @var array<int, string>
-     */
+    use HasFactory;
+
     protected $fillable = [
         'name',
         'registration_number',
@@ -29,26 +21,29 @@ class Person extends Authenticatable implements LdapAuthenticatable
         'dismissal_date',
         'current_position',
         'current_function',
-        'allocation_code',
-        'allocation_name',
+        'organizational_unit_id',
+        'user_id', // Se você estiver atribuindo a usuários
     ];
 
+    protected $casts = [
+        'admission_date' => 'date',
+        'dismissal_date' => 'date',
+    ];
 
     /**
-     * Get the attributes that should be cast.
-     *
-     * @return array<string, string>
+     * Get the organizational unit that owns the Person.
      */
-    protected function casts(): array
+    public function organizationalUnit(): BelongsTo
     {
-        return [
-            'admission_date' => 'date',
-            'dismissal_date' => 'date',
-        ];
+        return $this->belongsTo(OrganizationalUnit::class, 'organizational_unit_id');
     }
 
+    /**
+     * Get the user that owns the Person (if applicable).
+     */
     public function user(): BelongsTo
     {
         return $this->belongsTo(User::class);
     }
 }
+
