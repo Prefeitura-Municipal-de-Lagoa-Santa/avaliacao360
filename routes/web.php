@@ -3,6 +3,7 @@
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\FormController;
 use App\Http\Controllers\PersonController;
+use App\Http\Controllers\EvaluationController;
 use App\Http\Middleware\EnsureCpfIsFilled;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
@@ -30,7 +31,10 @@ Route::middleware(['auth', 'verified', EnsureCpfIsFilled::class])->group(functio
     Route::delete('/configs/form/{formulario}', [FormController::class, 'destroy'])->name('configs.destroy');
     Route::post('/configs/forms/prazo', [FormController::class, 'setPrazo'])->name('configs.prazo.store');
     Route::post('/configs/forms/liberar', [FormController::class, 'setLiberar'])->name('configs.liberar.store');
-
+// ROTAS PARA AVALIAÇÃO DA CHEFIA
+    Route::get('/api/evaluations/chefia/status', [App\Http\Controllers\EvaluationController::class, 'checkChefiaFormStatus'])->name('api.evaluations.chefia.status');
+    Route::get('/evaluations/chefia', [EvaluationController::class, 'showChefiaForm'])->name('evaluations.chefia.show');
+    Route::post('/evaluations/chefia/{form}', [EvaluationController::class, 'storeChefiaEvaluation'])->name('evaluations.chefia.store');
 
 
 // Exemplo de como ficariam as rotas

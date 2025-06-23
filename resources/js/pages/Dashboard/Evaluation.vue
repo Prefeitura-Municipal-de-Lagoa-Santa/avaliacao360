@@ -1,13 +1,28 @@
 <script setup lang="ts">
 import DashboardLayout from '@/layouts/DashboardLayout.vue';
 import DashboardCard from '@/components/DashboardCard.vue';
-import { Head, router} from '@inertiajs/vue3';
+import { Head, router } from '@inertiajs/vue3';
+import { ref } from 'vue';
 import * as icons from 'lucide-vue-next';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogClose,
+} from '@/components/ui/dialog';
 
-// Recebe a prop 'prazo' do controller
+// Recebe as props do controller
 const props = defineProps<{
   prazo: { term_first: string; term_end: string; } | null;
 }>();
+
+// Estado para controlar o diálogo
+const isDialogOpen = ref(false);
+const dialogMessage = ref('');
+
 // Função para formatar o prazo para exibição
 function formatPrazo(prazo: { term_first: string; term_end: string; } | null): string {
   if (!prazo) return 'Não definido';
@@ -23,35 +38,39 @@ function formatPrazo(prazo: { term_first: string; term_end: string; } | null): s
 function goToCalendar() {
   router.get(route('calendar'));
 }
-// Importar SVGs como componentes ou usar inline SVG
-// Exemplo de como poderia ser um SVG inline ou importado
-const CheckCircleIcon = `<svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>`;
-const ClockIcon = `<svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>`;
-const ChartBarIcon = `<svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 12l3-3 3 3 4-4M18 14H6M2 5h20a1 1 0 011 1v12a1 1 0 01-1 1H2a1 1 0 01-1-1V6a1 1 0 011-1z"></path></svg>`; // Ícone de exemplo, pode ser melhorado
-const CalendarIcon = `<svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg>`;
 
+/**
+ * Verifica a disponibilidade do formulário e navega ou abre um diálogo.
+ */
+async function handleChefiaEvaluationClick() {
+  try {
+    const response = await fetch(route('api.evaluations.chefia.status'));
+    const data = await response.json();
 
-// Dados para os cards (poderiam vir do controller Laravel via props)
-const dashboardData = {
-  
-  pendingAssessments: 3,
-  overallProgress: '85%',
-  nextDeadline: '25/06 - 30/06',
-};
+    if (data.available) {
+      router.get(route('evaluations.chefia.show'));
+    } else {
+      dialogMessage.value = data.message;
+      isDialogOpen.value = true;
+    }
+  } catch (error) {
+    console.error('Erro ao verificar status da avaliação:', error);
+    dialogMessage.value = 'O formulário ainda não está liberado para Preechimento.';
+    isDialogOpen.value = true;
+  }
+}
 
 function showDetailsForDeadline() {
   // Lógica para mostrar detalhes, talvez usando um modal.
-  // Substituindo o alert por um console.log ou um componente de modal.
-  console.log('Detalhes do próximo prazo: Autoavaliação de Gestores.');
-  // Em um app real, você usaria um componente de Modal aqui.
-  // Ex: modalStore.openModal({ title: 'Próximo Prazo', content: 'Autoavaliação de Gestores.' });
-  alert('Detalhes do próximo prazo: Autoavaliação de Gestores. (Substitua este alert por um modal)');
+  console.log('Ação de exemplo. Implementar lógica de modal ou navegação.');
+  alert('Ação de exemplo. (Substitua este alert por um modal ou navegação)');
 }
 </script>
 
 <template>
   <Head title="Dashboard" />
   <DashboardLayout pageTitle="Dashboard de Avaliação">
+
     <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
         <DashboardCard
         
@@ -66,12 +85,13 @@ function showDetailsForDeadline() {
           <div ></div>
         </template>
       </DashboardCard>
+      
+      <!-- Card de Avaliação Chefia Atualizado -->
       <DashboardCard
-        
         label="Avaliação Chefia"
         iconBgColor="#ef4444"
         buttonText="Começar agora"
-        :buttonAction="showDetailsForDeadline"
+        :buttonAction="handleChefiaEvaluationClick"
       >
         <template #icon>
           <icons.ListTodo>
@@ -79,8 +99,8 @@ function showDetailsForDeadline() {
           <div ></div>
         </template>
       </DashboardCard>
+      
       <DashboardCard
-        
         label="Minhas Avaliações"
         iconBgColor="#15B2CB"
         buttonText="Ver Resultados"
@@ -105,6 +125,27 @@ function showDetailsForDeadline() {
         </template>
       </DashboardCard>
     </div>
+
+    <!-- Diálogo de aviso -->
+    <Dialog v-model:open="isDialogOpen">
+        <DialogContent class="sm:max-w-md bg-white">
+            <DialogHeader>
+                <DialogTitle class="text-lg font-semibold text-gray-900">Aviso</DialogTitle>
+                <DialogDescription class="mt-2 text-sm text-gray-600">
+                    {{ dialogMessage }}
+                </DialogDescription>
+            </DialogHeader>
+            <DialogFooter class="mt-6">
+                <DialogClose as-child>
+                    <button
+                        type="button"
+                        class="w-full sm:w-auto inline-flex justify-center rounded-md border border-transparent bg-blue-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+                    >
+                        Entendido
+                    </button>
+                </DialogClose>
+            </DialogFooter>
+        </DialogContent>
+    </Dialog>
   </DashboardLayout>
 </template>
-
