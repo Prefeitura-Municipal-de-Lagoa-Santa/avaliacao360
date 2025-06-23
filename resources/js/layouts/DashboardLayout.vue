@@ -1,6 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, watch, onMounted } from 'vue'; // Adicionado watch
-// Adicionado 'router' para requisições programáticas com Inertia
+import { ref, watch, onMounted } from 'vue';
 import { Link, usePage, router } from '@inertiajs/vue3';
 import {
   Dialog,
@@ -11,14 +10,20 @@ import {
   DialogDescription,
   DialogFooter,
   DialogClose,
-} from '@/components/ui/dialog'; // Seus imports do Dialog
+} from '@/components/ui/dialog';
+import { Menu as MenuIcon, X as XIcon } from 'lucide-vue-next';
+
+// 1. Importe o modal e o controlador de estado
+import FlashModal from '@/components/FlashModal.vue';
+import { useFlashModal } from '@/composables/useFlashModal';
+
+// 2. Pegue as variáveis e funções do nosso controlador de estado global
+const { isModalVisible, modalContent, hideFlashModal } = useFlashModal();
+
 
 onMounted(() => {
   document.documentElement.classList.remove('dark');
 });
-
-// Import icons (adjust path if needed)
-import { Menu as MenuIcon, X as XIcon } from 'lucide-vue-next';
 
 interface NavItem {
   label: string;
@@ -49,11 +54,10 @@ const isActive = (itemRouteName: string, itemHref: string) => {
   return page.url.startsWith(itemHref);
 };
 
-// Função para executar o logout após confirmação no Dialog
 const executeLogout = () => {
   router.post(route('logout'), {
     onSuccess: () => {
-      if (isMobileMenuOpen.value) { // Fechar menu mobile se estiver aberto
+      if (isMobileMenuOpen.value) {
         closeMobileMenu();
       }
     },
@@ -63,7 +67,6 @@ const executeLogout = () => {
   });
 };
 
-// Estado para o menu off-canvas
 const isMobileMenuOpen = ref(false);
 
 const toggleMobileMenu = () => {
@@ -74,7 +77,6 @@ const closeMobileMenu = () => {
   isMobileMenuOpen.value = false;
 };
 
-// Impedir scroll do body quando o menu mobile estiver aberto
 watch(isMobileMenuOpen, (isOpen) => {
   if (isOpen) {
     document.body.style.overflow = 'hidden';
@@ -82,8 +84,6 @@ watch(isMobileMenuOpen, (isOpen) => {
     document.body.style.overflow = '';
   }
 });
-
-
 </script>
 
 <template>
@@ -108,9 +108,8 @@ watch(isMobileMenuOpen, (isOpen) => {
       <div class="px-6 sm:px-8 py-4 bg-white border-b border-gray-200 flex flex-col sm:flex-row justify-between items-start sm:items-center">
         <h1 class="text-2xl font-bold text-gray-800 mb-2 sm:mb-0">Avaliação de desempenho</h1>
       </div>
-      <!-- CORRIGIDO: A barra de navegação agora usa 'justify-center' e tem posição relativa -->
+      
       <nav class="nav-bar bg-gray-200 p-3 sm:p-2 border-b border-gray-200 hidden sm:flex justify-center items-center gap-2 relative">
-        <!-- Itens de navegação centralizados -->
         <div class="flex items-center justify-center gap-2 mr-50">
             <template v-for="(item) in navItems" :key="item.routeName">
               <Link
@@ -126,7 +125,6 @@ watch(isMobileMenuOpen, (isOpen) => {
             </template>
         </div>
 
-        <!-- Botão de logout posicionado de forma absoluta à direita -->
         <div class="button-logout absolute right-4 top-1/2 -translate-y-1/2 mr-6">
            <Dialog>
               <DialogTrigger as-child>
@@ -233,6 +231,14 @@ watch(isMobileMenuOpen, (isOpen) => {
             </Dialog>
         </div>
       </div>
-     </div>
+    </div>
+    
+    <FlashModal
+      :show="isModalVisible"
+      :type="modalContent.type"
+      :title="modalContent.title"
+      :message="modalContent.message"
+      @close="hideFlashModal"
+    />
   </div>
 </template>
