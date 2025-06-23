@@ -5,6 +5,8 @@ import DashboardLayout from '@/layouts/DashboardLayout.vue';
 import * as icons from 'lucide-vue-next';
 import axios from 'axios';
 import { route } from 'ziggy-js';
+// 1. Importe o useFlashModal
+import { useFlashModal } from '@/composables/useFlashModal';
 
 // --- DEFINIÇÃO DAS PROPS ---
 const props = defineProps<{
@@ -20,6 +22,9 @@ const props = defineProps<{
   }>;
   existingYears: Array<string | number>;
 }>();
+
+// 2. Inicialize o composable para ter acesso à função que exibe o modal
+const { showFlashModal } = useFlashModal();
 
 // --- ESTADO DA PÁGINA ---
 const page = usePage();
@@ -87,7 +92,8 @@ function openPrazoModal(group: 'avaliacao' | 'pdi') {
 
 function handleSetPrazo() {
   if (!prazoGroup.value || !prazoDateInicio.value || !prazoDateFim.value) {
-    alert('Por favor, preencha as datas de início e encerramento.');
+    // Substituído
+    showFlashModal('error', 'Por favor, preencha as datas de início e encerramento.');
     return;
   }
   router.post(route('configs.prazo.store'), {
@@ -122,7 +128,8 @@ async function handleFileSelect(event: Event) {
   if (!file) return;
 
   if (!file.name.toLowerCase().endsWith('.csv')) {
-    alert('Por favor, selecione um arquivo .csv');
+    // Substituído
+    showFlashModal('error', 'Por favor, selecione um arquivo .csv');
     return;
   }
   
@@ -143,7 +150,8 @@ async function handleFileSelect(event: Event) {
     tempFilePath.value = data.temp_file_path;
 
   } catch (error: any) {
-    alert('Erro ao gerar a pré-visualização: ' + (error.response?.data?.message || error.message));
+    // Substituído
+    showFlashModal('error', 'Erro ao gerar a pré-visualização: ' + (error.response?.data?.message || error.message));
     closePreviewModal();
   } finally {
     isProcessing.value = false;
@@ -155,7 +163,8 @@ async function handleFileSelect(event: Event) {
 
 async function handleConfirmUpload() {
     if (!tempFilePath.value) {
-        alert("Nenhum arquivo temporário encontrado para confirmar.");
+        // Substituído
+        showFlashModal('error', "Nenhum arquivo temporário encontrado para confirmar.");
         return;
     }
     isProcessing.value = true;
@@ -163,11 +172,13 @@ async function handleConfirmUpload() {
         const response = await axios.post(route('persons.confirm'), {
             temp_file_path: tempFilePath.value
         });
-        alert(response.data.message);
+        // Substituído
+        showFlashModal('success', response.data.message);
         closePreviewModal();
         router.reload({ preserveScroll: true });
     } catch (error: any) {
-         alert('Erro ao confirmar o upload: ' + (error.response?.data?.message || error.message));
+        // Substituído
+        showFlashModal('error', 'Erro ao confirmar o upload: ' + (error.response?.data?.message || error.message));
     } finally {
         isProcessing.value = false;
     }
@@ -203,7 +214,6 @@ onUnmounted(() => {
   <Head title="Configurações" />
   <DashboardLayout pageTitle="Configurações">
 
-    <!-- Flash Messages -->
     <div v-if="flash && flash.success" class="mb-4 p-4 bg-green-100 border border-green-400 text-green-700 rounded-lg">
       {{ flash.success }}
     </div>
@@ -213,7 +223,6 @@ onUnmounted(() => {
 
     <div class="space-y-8 max-w-4xl mx-auto">
       
-      <!-- Seção de Formulários -->
       <div class="settings-section">
         <h3>Formulários</h3>
         <div class="setting-item">
@@ -225,7 +234,6 @@ onUnmounted(() => {
           </select>
         </div>
 
-        <!-- Seção Avaliação -->
         <div class="form-section">
           <h4>AVALIAÇÃO</h4>
           <div class="setting-item">
@@ -237,7 +245,7 @@ onUnmounted(() => {
               <button v-if="getFormForType('autoavaliacao') && !isAvaliacaoGroupReleased" @click="handleEdit(getFormForType('autoavaliacao').id)" class="btn btn-yellow">
                 <span>Editar</span> <component :is="icons.FilePenLineIcon" class="size-5" />
               </button>
-              <button v-else-if="!getFormForType('autoavaliacao')" @click="handleCreate('autoavaliacao')" class="btn btn-green">
+              <button v-else-if="!getFormForType('autoavaliacao')" @click="handleCreate('autoavaliacao')" class="btn btn-create">
                 <span>Criar</span> <component :is="icons.PlusIcon" class="size-5" />
               </button>
             </div>
@@ -251,7 +259,7 @@ onUnmounted(() => {
                 <button v-if="getFormForType('servidor') && !isAvaliacaoGroupReleased" @click="handleEdit(getFormForType('servidor').id)" class="btn btn-yellow">
                     <span>Editar</span> <component :is="icons.FilePenLineIcon" class="size-5" />
                 </button>
-                <button v-else-if="!getFormForType('servidor')" @click="handleCreate('servidor')" class="btn btn-green">
+                <button v-else-if="!getFormForType('servidor')" @click="handleCreate('servidor')" class="btn btn-create">
                     <span>Criar</span> <component :is="icons.PlusIcon" class="size-5" />
                 </button>
             </div>
@@ -265,7 +273,7 @@ onUnmounted(() => {
                 <button v-if="getFormForType('chefia') && !isAvaliacaoGroupReleased" @click="handleEdit(getFormForType('chefia').id)" class="btn btn-yellow">
                     <span>Editar</span> <component :is="icons.FilePenLineIcon" class="size-5" />
                 </button>
-                <button v-else-if="!getFormForType('chefia')" @click="handleCreate('chefia')" class="btn btn-green">
+                <button v-else-if="!getFormForType('chefia')" @click="handleCreate('chefia')" class="btn btn-create">
                     <span>Criar</span> <component :is="icons.PlusIcon" class="size-5" />
                 </button>
             </div>
@@ -287,7 +295,6 @@ onUnmounted(() => {
           </div>
         </div>
 
-        <!-- Seção PDI -->
         <div class="form-section">
           <h4>PDI - PLANO DE DESENVOLVIMENTO INDIVIDUAL</h4>
           <div class="setting-item">
@@ -299,7 +306,7 @@ onUnmounted(() => {
                 <button v-if="getFormForType('pactuacao') && !isPdiGroupReleased" @click="handleEdit(getFormForType('pactuacao').id)" class="btn btn-yellow">
                     <span>Editar</span> <component :is="icons.FilePenLineIcon" class="size-5" />
                 </button>
-                <button v-else-if="!getFormForType('pactuacao')" @click="handleCreate('pactuacao')" class="btn btn-green">
+                <button v-else-if="!getFormForType('pactuacao')" @click="handleCreate('pactuacao')" class="btn btn-create">
                     <span>Criar</span> <component :is="icons.PlusIcon" class="size-5" />
                 </button>
             </div>
@@ -322,7 +329,6 @@ onUnmounted(() => {
         </div>
       </div>
 
-      <!-- Seção de Pessoas -->
       <div class="settings-section">
         <h3>Gestão de Pessoas</h3>
         <div class="setting-item">
@@ -350,7 +356,6 @@ onUnmounted(() => {
       </div>
     </div>
 
-    <!-- Modal de Prazo -->
     <div v-if="isPrazoModalVisible" class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
       <div class="bg-white rounded-lg shadow-xl p-6 w-full max-w-md m-4">
         <h3 class="text-lg font-bold text-gray-800">Definir Prazo para {{ prazoGroup?.toUpperCase() }}</h3>
@@ -370,7 +375,6 @@ onUnmounted(() => {
       </div>
     </div>
     
-    <!-- MODAL DE PREVIEW DO UPLOAD -->
     <div v-if="isPreviewModalVisible" class="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-60 backdrop-blur-sm p-4" @click.self="closePreviewModal">
         <div class="bg-white rounded-2xl shadow-2xl w-full max-w-4xl flex flex-col max-h-[90vh]">
             <div class="flex justify-between items-center p-4 border-b">
@@ -389,7 +393,6 @@ onUnmounted(() => {
                 </div>
 
                 <div v-else class="flex flex-col gap-6">
-                    <!-- Resumo -->
                     <div v-if="uploadSummary">
                         <h4 class="font-semibold text-gray-700 mb-2">Resumo da Análise</h4>
                         <div class="grid grid-cols-2 md:grid-cols-4 gap-4 text-center">
@@ -400,7 +403,6 @@ onUnmounted(() => {
                         </div>
                     </div>
 
-                    <!-- Erros -->
                     <div v-if="uploadErrors && uploadErrors.length > 0">
                          <h4 class="font-semibold text-gray-700 mb-2">Erros Encontrados</h4>
                         <div class="max-h-32 overflow-y-auto bg-red-50 border border-red-200 text-red-800 rounded-lg p-3 text-sm space-y-1">
@@ -408,7 +410,6 @@ onUnmounted(() => {
                         </div>
                     </div>
 
-                    <!-- Detalhes dos Dados a serem Importados/Atualizados -->
                     <div v-if="uploadDetails && uploadDetails.length > 0">
                         <h4 class="font-semibold text-gray-700 mb-2">Dados a Serem Importados/Atualizados</h4>
                         <div class="max-h-64 overflow-y-auto space-y-3 p-3 bg-gray-50 rounded-lg border">
@@ -433,10 +434,9 @@ onUnmounted(() => {
                 </div>
             </div>
 
-            <!-- Footer do Modal -->
             <div class="flex justify-end gap-3 p-4 border-t bg-gray-50 rounded-b-2xl">
                 <button @click="closePreviewModal" class="btn btn-gray">Cancelar</button>
-                <button @click="handleConfirmUpload" class="btn btn-green" :disabled="isProcessing || (uploadErrors && uploadErrors.length > 0)">
+                <button @click="handleConfirmUpload" class="btn btn-create" :disabled="isProcessing || (uploadErrors && uploadErrors.length > 0)">
                     <span v-if="!isProcessing">Confirmar Upload</span>
                     <span v-else>
                         <icons.LoaderCircleIcon class="size-5 animate-spin mr-2"/>
