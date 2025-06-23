@@ -5,6 +5,8 @@ import DashboardLayout from '@/layouts/DashboardLayout.vue';
 import * as icons from 'lucide-vue-next';
 import axios from 'axios';
 import { route } from 'ziggy-js';
+// 1. Importe o useFlashModal
+import { useFlashModal } from '@/composables/useFlashModal';
 
 // --- DEFINIÇÃO DAS PROPS ---
 const props = defineProps<{
@@ -20,6 +22,9 @@ const props = defineProps<{
   }>;
   existingYears: Array<string | number>;
 }>();
+
+// 2. Inicialize o composable para ter acesso à função que exibe o modal
+const { showFlashModal } = useFlashModal();
 
 // --- ESTADO DA PÁGINA ---
 const page = usePage();
@@ -105,7 +110,8 @@ function openPrazoModal(group: 'avaliacao' | 'pdi') {
 
 function handleSetPrazo() {
   if (!prazoGroup.value || !prazoDateInicio.value || !prazoDateFim.value) {
-    alert('Por favor, preencha as datas de início e encerramento.');
+    // Substituído
+    showFlashModal('error', 'Por favor, preencha as datas de início e encerramento.');
     return;
   }
   router.post(route('configs.prazo.store'), {
@@ -140,7 +146,8 @@ async function handleFileSelect(event: Event) {
   if (!file) return;
 
   if (!file.name.toLowerCase().endsWith('.csv')) {
-    alert('Por favor, selecione um arquivo .csv');
+    // Substituído
+    showFlashModal('error', 'Por favor, selecione um arquivo .csv');
     return;
   }
 
@@ -161,7 +168,8 @@ async function handleFileSelect(event: Event) {
     tempFilePath.value = data.temp_file_path;
 
   } catch (error: any) {
-    alert('Erro ao gerar a pré-visualização: ' + (error.response?.data?.message || error.message));
+    // Substituído
+    showFlashModal('error', 'Erro ao gerar a pré-visualização: ' + (error.response?.data?.message || error.message));
     closePreviewModal();
   } finally {
     isProcessing.value = false;
@@ -172,23 +180,23 @@ async function handleFileSelect(event: Event) {
 }
 
 async function handleConfirmUpload() {
-  if (!tempFilePath.value) {
-    alert("Nenhum arquivo temporário encontrado para confirmar.");
-    return;
-  }
-  isProcessing.value = true;
-  try {
-    const response = await axios.post(route('persons.confirm'), {
-      temp_file_path: tempFilePath.value
-    });
-    alert(response.data.message);
-    closePreviewModal();
-    router.reload({ preserveScroll: true });
-  } catch (error: any) {
-    alert('Erro ao confirmar o upload: ' + (error.response?.data?.message || error.message));
-  } finally {
-    isProcessing.value = false;
-  }
+    if (!tempFilePath.value) {
+        alert("Nenhum arquivo temporário encontrado para confirmar.");
+        return;
+    }
+    isProcessing.value = true;
+    try {
+        const response = await axios.post(route('persons.confirm'), {
+            temp_file_path: tempFilePath.value
+        });
+        alert(response.data.message);
+        closePreviewModal();
+        router.reload({ preserveScroll: true });
+    } catch (error: any) {
+         alert('Erro ao confirmar o upload: ' + (error.response?.data?.message || error.message));
+    } finally {
+        isProcessing.value = false;
+    }
 }
 
 function closePreviewModal() {
@@ -222,7 +230,6 @@ onUnmounted(() => {
   <Head title="Configurações" />
   <DashboardLayout pageTitle="Configurações">
 
-    <!-- Flash Messages -->
     <div v-if="flash && flash.success" class="mb-4 p-4 bg-green-100 border border-green-400 text-green-700 rounded-lg">
       {{ flash.success }}
     </div>
@@ -231,7 +238,7 @@ onUnmounted(() => {
     </div>
 
     <div class="space-y-8 max-w-4xl mx-auto">
-
+      
       <!-- Seção de Formulários -->
       <div class="settings-section">
         <h3>Formulários</h3>
@@ -244,7 +251,6 @@ onUnmounted(() => {
           </select>
         </div>
 
-        <!-- Seção Avaliação -->
         <div class="form-section">
           <h4>AVALIAÇÃO</h4>
           <div class="setting-item">
@@ -260,49 +266,37 @@ onUnmounted(() => {
                 <span>Editar</span>
                 <component :is="icons.FilePenLineIcon" class="size-5" />
               </button>
-              <button v-else-if="!getFormForType('autoavaliacao')" @click="handleCreate('autoavaliacao')"
-                class="btn btn-create">
-                <span>Criar</span>
-                <component :is="icons.PlusIcon" class="size-5" />
+              <button v-else-if="!getFormForType('autoavaliacao')" @click="handleCreate('autoavaliacao')" class="btn btn-green">
+                <span>Criar</span> <component :is="icons.PlusIcon" class="size-5" />
               </button>
             </div>
           </div>
           <div class="setting-item">
             <label>Formulário de Avaliação do Servidor:</label>
             <div class="button-group">
-              <button v-if="getFormForType('servidor')" @click="handleView(getFormForType('servidor').id)"
-                class="btn btn-blue">
-                <span>Visualizar</span>
-                <component :is="icons.EyeIcon" class="size-5" />
-              </button>
-              <button v-if="getFormForType('servidor') && !isAvaliacaoGroupReleased"
-                @click="handleEdit(getFormForType('servidor').id)" class="btn btn-yellow">
-                <span>Editar</span>
-                <component :is="icons.FilePenLineIcon" class="size-5" />
-              </button>
-              <button v-else-if="!getFormForType('servidor')" @click="handleCreate('servidor')" class="btn btn-create">
-                <span>Criar</span>
-                <component :is="icons.PlusIcon" class="size-5" />
-              </button>
+                <button v-if="getFormForType('servidor')" @click="handleView(getFormForType('servidor').id)" class="btn btn-blue">
+                    <span>Visualizar</span> <component :is="icons.EyeIcon" class="size-5" />
+                </button>
+                <button v-if="getFormForType('servidor') && !isAvaliacaoGroupReleased" @click="handleEdit(getFormForType('servidor').id)" class="btn btn-yellow">
+                    <span>Editar</span> <component :is="icons.FilePenLineIcon" class="size-5" />
+                </button>
+                <button v-else-if="!getFormForType('servidor')" @click="handleCreate('servidor')" class="btn btn-green">
+                    <span>Criar</span> <component :is="icons.PlusIcon" class="size-5" />
+                </button>
             </div>
           </div>
           <div class="setting-item">
             <label>Formulário de Avaliação da Chefia:</label>
             <div class="button-group">
-              <button v-if="getFormForType('chefia')" @click="handleView(getFormForType('chefia').id)"
-                class="btn btn-blue">
-                <span>Visualizar</span>
-                <component :is="icons.EyeIcon" class="size-5" />
-              </button>
-              <button v-if="getFormForType('chefia') && !isAvaliacaoGroupReleased"
-                @click="handleEdit(getFormForType('chefia').id)" class="btn btn-yellow">
-                <span>Editar</span>
-                <component :is="icons.FilePenLineIcon" class="size-5" />
-              </button>
-              <button v-else-if="!getFormForType('chefia')" @click="handleCreate('chefia')" class="btn btn-create">
-                <span>Criar</span>
-                <component :is="icons.PlusIcon" class="size-5" />
-              </button>
+                 <button v-if="getFormForType('chefia')" @click="handleView(getFormForType('chefia').id)" class="btn btn-blue">
+                    <span>Visualizar</span> <component :is="icons.EyeIcon" class="size-5" />
+                </button>
+                <button v-if="getFormForType('chefia') && !isAvaliacaoGroupReleased" @click="handleEdit(getFormForType('chefia').id)" class="btn btn-yellow">
+                    <span>Editar</span> <component :is="icons.FilePenLineIcon" class="size-5" />
+                </button>
+                <button v-else-if="!getFormForType('chefia')" @click="handleCreate('chefia')" class="btn btn-green">
+                    <span>Criar</span> <component :is="icons.PlusIcon" class="size-5" />
+                </button>
             </div>
           </div>
           <div class="setting-item border-t pt-4 mt-4">
@@ -330,27 +324,20 @@ onUnmounted(() => {
           </div>
         </div>
 
-        <!-- Seção PDI -->
         <div class="form-section">
           <h4>PDI - PLANO DE DESENVOLVIMENTO INDIVIDUAL</h4>
           <div class="setting-item">
             <label>Formulário de Pactuação PDI:</label>
             <div class="button-group">
-              <button v-if="getFormForType('pactuacao')" @click="handleView(getFormForType('pactuacao').id)"
-                class="btn btn-blue">
-                <span>Visualizar</span>
-                <component :is="icons.EyeIcon" class="size-5" />
-              </button>
-              <button v-if="getFormForType('pactuacao') && !isPdiGroupReleased"
-                @click="handleEdit(getFormForType('pactuacao').id)" class="btn btn-yellow">
-                <span>Editar</span>
-                <component :is="icons.FilePenLineIcon" class="size-5" />
-              </button>
-              <button v-else-if="!getFormForType('pactuacao')" @click="handleCreate('pactuacao')"
-                class="btn btn-create">
-                <span>Criar</span>
-                <component :is="icons.PlusIcon" class="size-5" />
-              </button>
+                <button v-if="getFormForType('pactuacao')" @click="handleView(getFormForType('pactuacao').id)" class="btn btn-blue">
+                    <span>Visualizar</span> <component :is="icons.EyeIcon" class="size-5" />
+                </button>
+                <button v-if="getFormForType('pactuacao') && !isPdiGroupReleased" @click="handleEdit(getFormForType('pactuacao').id)" class="btn btn-yellow">
+                    <span>Editar</span> <component :is="icons.FilePenLineIcon" class="size-5" />
+                </button>
+                <button v-else-if="!getFormForType('pactuacao')" @click="handleCreate('pactuacao')" class="btn btn-green">
+                    <span>Criar</span> <component :is="icons.PlusIcon" class="size-5" />
+                </button>
             </div>
           </div>
          <div class="setting-item border-t pt-4 mt-4">
@@ -377,7 +364,6 @@ onUnmounted(() => {
         </div>
       </div>
 
-      <!-- Seção de Pessoas -->
       <div class="settings-section">
         <h3>Gestão de Pessoas</h3>
         <div class="setting-item">
@@ -406,8 +392,7 @@ onUnmounted(() => {
     </div>
 
     <!-- Modal de Prazo -->
-    <div v-if="isPrazoModalVisible"
-      class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
+    <div v-if="isPrazoModalVisible" class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
       <div class="bg-white rounded-lg shadow-xl p-6 w-full max-w-md m-4">
         <h3 class="text-lg font-bold text-gray-800">Definir Prazo para {{ prazoGroup?.toUpperCase() }}</h3>
         <p class="text-sm text-gray-600 mt-2">Selecione a data limite para o preenchimento dos formulários de {{
@@ -428,18 +413,16 @@ onUnmounted(() => {
         </div>
       </div>
     </div>
-
+    
     <!-- MODAL DE PREVIEW DO UPLOAD -->
-    <div v-if="isPreviewModalVisible"
-      class="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-60 backdrop-blur-sm p-4"
-      @click.self="closePreviewModal">
-      <div class="bg-white rounded-2xl shadow-2xl w-full max-w-4xl flex flex-col max-h-[90vh]">
-        <div class="flex justify-between items-center p-4 border-b">
-          <h3 class="text-lg font-bold text-gray-800">Pré-visualização do Upload</h3>
-          <button @click="closePreviewModal" class="p-1 rounded-full hover:bg-gray-200">
-            <icons.XIcon class="size-5 text-gray-600" />
-          </button>
-        </div>
+    <div v-if="isPreviewModalVisible" class="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-60 backdrop-blur-sm p-4" @click.self="closePreviewModal">
+        <div class="bg-white rounded-2xl shadow-2xl w-full max-w-4xl flex flex-col max-h-[90vh]">
+            <div class="flex justify-between items-center p-4 border-b">
+                <h3 class="text-lg font-bold text-gray-800">Pré-visualização do Upload</h3>
+                <button @click="closePreviewModal" class="p-1 rounded-full hover:bg-gray-200">
+                    <icons.XIcon class="size-5 text-gray-600"/>
+                </button>
+            </div>
 
         <div class="p-6 overflow-y-auto flex-grow">
           <p class="text-sm text-gray-600 mb-4">Arquivo selecionado: <strong class="font-medium text-gray-900">{{
@@ -450,86 +433,66 @@ onUnmounted(() => {
             <p class="text-gray-600">Processando o arquivo, por favor aguarde...</p>
           </div>
 
-          <div v-else class="flex flex-col gap-6">
-            <!-- Resumo -->
-            <div v-if="uploadSummary">
-              <h4 class="font-semibold text-gray-700 mb-2">Resumo da Análise</h4>
-              <div class="grid grid-cols-2 md:grid-cols-4 gap-4 text-center">
-                <div class="flex flex-col items-center justify-center p-4 bg-blue-50 border border-blue-200 rounded-lg">
-                  <span class="text-2xl font-bold text-blue-600">{{ uploadSummary.new }}</span><span
-                    class="text-xs text-blue-500">Novos</span>
-                </div>
-                <div
-                  class="flex flex-col items-center justify-center p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
-                  <span class="text-2xl font-bold text-yellow-600">{{ uploadSummary.updated }}</span><span
-                    class="text-xs text-yellow-500">Atualizados</span>
-                </div>
-                <div
-                  class="flex flex-col items-center justify-center p-4 bg-gray-100 border border-gray-200 rounded-lg">
-                  <span class="text-2xl font-bold text-gray-600">{{ uploadSummary.unchanged }}</span><span
-                    class="text-xs text-gray-500">Inalterados</span>
-                </div>
-                <div class="flex flex-col items-center justify-center p-4 bg-red-50 border border-red-200 rounded-lg">
-                  <span class="text-2xl font-bold text-red-600">{{ uploadSummary.errors }}</span><span
-                    class="text-xs text-red-500">Com Erros</span>
-                </div>
-              </div>
-            </div>
+                <div v-else class="flex flex-col gap-6">
+                    <!-- Resumo -->
+                    <div v-if="uploadSummary">
+                        <h4 class="font-semibold text-gray-700 mb-2">Resumo da Análise</h4>
+                        <div class="grid grid-cols-2 md:grid-cols-4 gap-4 text-center">
+                            <div class="flex flex-col items-center justify-center p-4 bg-blue-50 border border-blue-200 rounded-lg"><span class="text-2xl font-bold text-blue-600">{{ uploadSummary.new }}</span><span class="text-xs text-blue-500">Novos</span></div>
+                            <div class="flex flex-col items-center justify-center p-4 bg-yellow-50 border border-yellow-200 rounded-lg"><span class="text-2xl font-bold text-yellow-600">{{ uploadSummary.updated }}</span><span class="text-xs text-yellow-500">Atualizados</span></div>
+                            <div class="flex flex-col items-center justify-center p-4 bg-gray-100 border border-gray-200 rounded-lg"><span class="text-2xl font-bold text-gray-600">{{ uploadSummary.unchanged }}</span><span class="text-xs text-gray-500">Inalterados</span></div>
+                            <div class="flex flex-col items-center justify-center p-4 bg-red-50 border border-red-200 rounded-lg"><span class="text-2xl font-bold text-red-600">{{ uploadSummary.errors }}</span><span class="text-xs text-red-500">Com Erros</span></div>
+                        </div>
+                    </div>
 
-            <!-- Erros -->
-            <div v-if="uploadErrors && uploadErrors.length > 0">
-              <h4 class="font-semibold text-gray-700 mb-2">Erros Encontrados</h4>
-              <div
-                class="max-h-32 overflow-y-auto bg-red-50 border border-red-200 text-red-800 rounded-lg p-3 text-sm space-y-1">
-                <p v-for="(error, index) in uploadErrors" :key="index">{{ error }}</p>
-              </div>
-            </div>
+                    <!-- Erros -->
+                    <div v-if="uploadErrors && uploadErrors.length > 0">
+                         <h4 class="font-semibold text-gray-700 mb-2">Erros Encontrados</h4>
+                        <div class="max-h-32 overflow-y-auto bg-red-50 border border-red-200 text-red-800 rounded-lg p-3 text-sm space-y-1">
+                            <p v-for="(error, index) in uploadErrors" :key="index">{{ error }}</p>
+                        </div>
+                    </div>
 
-            <!-- Detalhes dos Dados a serem Importados/Atualizados -->
-            <div v-if="uploadDetails && uploadDetails.length > 0">
-              <h4 class="font-semibold text-gray-700 mb-2">Dados a Serem Importados/Atualizados</h4>
-              <div class="max-h-64 overflow-y-auto space-y-3 p-3 bg-gray-50 rounded-lg border">
-                <div v-for="(detail, index) in uploadDetails" :key="index" class="text-sm">
-                  <p class="font-semibold">
-                    <span v-if="detail.status === 'new'"
-                      class="inline-block align-middle text-xs py-0.5 px-2 rounded-full bg-blue-100 text-blue-700 font-bold">[NOVO]</span>
-                    <span v-if="detail.status === 'updated'"
-                      class="inline-block align-middle text-xs py-0.5 px-2 rounded-full bg-yellow-100 text-yellow-800 font-bold">[ATUALIZADO]</span>
-                    <span class="text-gray-800 ml-2">{{ detail.name }}</span>
-                    <span class="text-gray-500 text-xs ml-1">(Matrícula: {{ detail.registration_number }})</span>
-                  </p>
-                  <ul v-if="detail.status === 'updated' && detail.changes && Object.keys(detail.changes).length > 0"
-                    class="text-xs list-disc pl-8 mt-1.5 text-gray-600 space-y-1">
-                    <li v-for="(change, field) in detail.changes" :key="field">
-                      <strong class="capitalize font-medium">{{ field.replace(/_/g, ' ') }}:</strong>
-                      de <code class="bg-red-100 text-red-800 px-1.5 py-0.5 rounded">'{{ change.from }}'</code>
-                      para <code class="bg-green-100 text-green-800 px-1.5 py-0.5 rounded">'{{ change.to }}'</code>
-                    </li>
-                  </ul>
-                </div>
-              </div>
-            </div>
+                    <!-- Detalhes dos Dados a serem Importados/Atualizados -->
+                    <div v-if="uploadDetails && uploadDetails.length > 0">
+                        <h4 class="font-semibold text-gray-700 mb-2">Dados a Serem Importados/Atualizados</h4>
+                        <div class="max-h-64 overflow-y-auto space-y-3 p-3 bg-gray-50 rounded-lg border">
+                            <div v-for="(detail, index) in uploadDetails" :key="index" class="text-sm">
+                                <p class="font-semibold">
+                                    <span v-if="detail.status === 'new'" class="inline-block align-middle text-xs py-0.5 px-2 rounded-full bg-blue-100 text-blue-700 font-bold">[NOVO]</span>
+                                    <span v-if="detail.status === 'updated'" class="inline-block align-middle text-xs py-0.5 px-2 rounded-full bg-yellow-100 text-yellow-800 font-bold">[ATUALIZADO]</span>
+                                    <span class="text-gray-800 ml-2">{{ detail.name }}</span>
+                                    <span class="text-gray-500 text-xs ml-1">(Matrícula: {{ detail.registration_number }})</span>
+                                </p>
+                                <ul v-if="detail.status === 'updated' && detail.changes && Object.keys(detail.changes).length > 0" class="text-xs list-disc pl-8 mt-1.5 text-gray-600 space-y-1">
+                                    <li v-for="(change, field) in detail.changes" :key="field">
+                                        <strong class="capitalize font-medium">{{ field.replace(/_/g, ' ') }}:</strong> 
+                                        de <code class="bg-red-100 text-red-800 px-1.5 py-0.5 rounded">'{{ change.from }}'</code>
+                                        para <code class="bg-green-100 text-green-800 px-1.5 py-0.5 rounded">'{{ change.to }}'</code>
+                                    </li>
+                                </ul>
+                            </div>
+                        </div>
+                    </div>
 
           </div>
         </div>
 
-        <!-- Footer do Modal -->
-        <div class="flex justify-end gap-3 p-4 border-t bg-gray-50 rounded-b-2xl">
-          <button @click="closePreviewModal" class="btn btn-gray">Cancelar</button>
-          <button @click="handleConfirmUpload" class="btn btn-create"
-            :disabled="isProcessing || (uploadErrors && uploadErrors.length > 0)">
-            <span v-if="!isProcessing">Confirmar Upload</span>
-            <span v-else>
-              <icons.LoaderCircleIcon class="size-5 animate-spin mr-2" />
-              Processando...
-            </span>
-          </button>
+            <!-- Footer do Modal -->
+            <div class="flex justify-end gap-3 p-4 border-t bg-gray-50 rounded-b-2xl">
+                <button @click="closePreviewModal" class="btn btn-gray">Cancelar</button>
+                <button @click="handleConfirmUpload" class="btn btn-green" :disabled="isProcessing || (uploadErrors && uploadErrors.length > 0)">
+                    <span v-if="!isProcessing">Confirmar Upload</span>
+                    <span v-else>
+                        <icons.LoaderCircleIcon class="size-5 animate-spin mr-2"/>
+                        Processando...
+                    </span>
+                </button>
+            </div>
+             <p v-if="uploadErrors && uploadErrors.length > 0 && !isProcessing" class="px-6 pb-2 -mt-2 text-xs text-red-600 text-right">
+                O upload só será liberado após a correção dos erros no arquivo.
+            </p>
         </div>
-        <p v-if="uploadErrors && uploadErrors.length > 0 && !isProcessing"
-          class="px-6 pb-2 -mt-2 text-xs text-red-600 text-right">
-          O upload só será liberado após a correção dos erros no arquivo.
-        </p>
-      </div>
     </div>
 
   </DashboardLayout>

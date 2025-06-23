@@ -155,8 +155,8 @@
 .button-group .btn-yellow { background-color: white; color: #fcb224; }
 .button-group .btn-yellow:hover { background-color: #f0decb; }
 
-.button-group .btn-create { background-color: white; color: #16a34a; }
-.button-group .btn-create:hover { background-color: #b4e2b4; color: #16a34a;}
+.button-group .btn-green { background-color: white; color: #16a34a; }
+.button-group .btn-green:hover { background-color: #9fe0b7; }
 
 .button-group .btn-blue { background-color: white; color: #408ebe; }
 .button-group .btn-blue:hover { background-color: #b0dce9; }
