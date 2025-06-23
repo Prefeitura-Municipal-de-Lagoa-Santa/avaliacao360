@@ -436,7 +436,7 @@ onUnmounted(() => {
 
             <div class="flex justify-end gap-3 p-4 border-t bg-gray-50 rounded-b-2xl">
                 <button @click="closePreviewModal" class="btn btn-gray">Cancelar</button>
-                <button @click="handleConfirmUpload" class="btn btn-create" :disabled="isProcessing || (uploadErrors && uploadErrors.length > 0)">
+                <button @click="handleConfirmUpload" class="btn btn-green" :disabled="isProcessing || (uploadErrors && uploadErrors.length > 0)">
                     <span v-if="!isProcessing">Confirmar Upload</span>
                     <span v-else>
                         <icons.LoaderCircleIcon class="size-5 animate-spin mr-2"/>
