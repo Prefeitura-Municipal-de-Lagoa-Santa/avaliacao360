@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from 'vue';
+import { computed, watch } from 'vue';
 import { Head, useForm, usePage } from '@inertiajs/vue3';
 import DashboardLayout from '@/layouts/DashboardLayout.vue';
 import { Button } from '@/components/ui/button';
@@ -49,12 +49,43 @@ const breadcrumbs: BreadcrumbItem[] = [
 // --- MÉTODOS DE AÇÃO ---
 const submitCpf = () => {
     // Usa uma rota PATCH para atualizar o perfil do usuário logado
-    form.put(route('profile.cpf.update'), {
+    form.transform(data => ({
+        ...data,
+        cpf: data.cpf.replace(/\D/g, ''), // <-- ESTA É A LINHA CHAVE
+    })).put(route('profile.cpf.update'), {
         preserveScroll: true,
-        // O onSuccess pode ser usado para exibir uma notificação, mas o backend já redireciona
     });
 };
 
+
+watch(() => form.cpf, (newValue, oldValue) => {
+    // Aplica a máscara e atualiza o valor no formulário
+    // Isso garante que o usuário veja o CPF formatado enquanto digita
+    form.cpf = applyCpfMask(newValue);
+});
+
+const applyCpfMask = (value: string): string => {
+    if (!value) return '';
+    // Remove todos os caracteres que não são dígitos
+    const digitsOnly = value.replace(/\D/g, '');
+
+    // Limita a 11 dígitos
+    const truncatedValue = digitsOnly.slice(0, 11);
+
+    // Aplica a formatação XXX.XXX.XXX-XX
+    let maskedValue = truncatedValue;
+    if (truncatedValue.length > 3) {
+        maskedValue = `${truncatedValue.slice(0, 3)}.${truncatedValue.slice(3)}`;
+    }
+    if (truncatedValue.length > 6) {
+        maskedValue = `${maskedValue.slice(0, 7)}.${maskedValue.slice(7)}`;
+    }
+    if (truncatedValue.length > 9) {
+        maskedValue = `${maskedValue.slice(0, 11)}-${maskedValue.slice(11)}`;
+    }
+
+    return maskedValue;
+};
 </script>
 
 <template>
@@ -84,6 +115,7 @@ const submitCpf = () => {
                                 id="cpf"
                                 v-model="form.cpf"
                                 placeholder="000.000.000-00"
+                                maxlength="14"
                                 required
                                 autofocus
                                 class="text-base bg-gray-100 border-gray-200 text-gray-900 placeholder:text-gray-500"

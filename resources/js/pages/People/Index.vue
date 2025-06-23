@@ -32,7 +32,7 @@ const search = ref(props.filters.search);
 
 // Função para pesquisar com debounce (espera o utilizador parar de digitar)
 watch(search, debounce((value: string | null) => {
-  router.get(route('persons.index'), { search: value }, {
+  router.get(route('people.index'), { search: value }, {
     preserveState: true,
     replace: true,
   });
@@ -41,25 +41,24 @@ watch(search, debounce((value: string | null) => {
 </script>
 
 <template>
+
   <Head title="Gestão de Pessoas" />
   <DashboardLayout pageTitle="Gestão de Pessoas">
 
     <!-- Cabeçalho e Barra de Pesquisa -->
     <div class="flex flex-col sm:flex-row justify-between items-center mb-6 gap-4">
       <div class="relative w-full sm:w-72">
-        <input 
-          v-model="search"
-          type="text" 
-          placeholder="Pesquisar por nome, matrícula ou CPF..."
-          class="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
-        />
+        <input v-model="search" type="text" placeholder="Pesquisar por nome, matrícula ou CPF..."
+          class="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500" />
         <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
           <icons.SearchIcon class="size-5 text-gray-400" />
         </div>
       </div>
-      <Link :href="route('configs')" class="btn btn-secondary w-full sm:w-auto">
-        <icons.ArrowLeftIcon class="size-5 mr-2" />
-        Voltar para Configurações
+      <Link :href="route('configs')">
+      <button class="back-btn">
+        <component :is="icons.ArrowLeftIcon" class="size-4 mr-2" />
+        Voltar
+      </button>
       </Link>
     </div>
 
@@ -71,8 +70,6 @@ watch(search, debounce((value: string | null) => {
             <tr>
               <th scope="col" class="px-6 py-3">Nome</th>
               <th scope="col" class="px-6 py-3">Matrícula</th>
-              <th scope="col" class="px-6 py-3">CPF</th>
-              <th scope="col" class="px-6 py-3">Vínculo</th>
               <th scope="col" class="px-6 py-3">
                 <span class="sr-only">Ações</span>
               </th>
@@ -98,22 +95,26 @@ watch(search, debounce((value: string | null) => {
                 {{ person.bond_type }}
               </td>
               <td class="px-6 py-4 text-right">
-                <Link :href="route('persons.edit', person.id)" class="font-medium text-indigo-600 hover:underline">Editar</Link>
+                <Link :href="route('people.edit', person.id)" class="font-medium text-indigo-600 hover:underline">Editar
+                </Link>
               </td>
             </tr>
           </tbody>
         </table>
       </div>
     </div>
-    
+
     <!-- Paginação -->
     <div v-if="people.links.length > 3" class="mt-6 flex justify-center">
-        <div class="flex flex-wrap -mb-1">
-            <template v-for="(link, key) in people.links" :key="key">
-                <div v-if="link.url === null" class="mr-1 mb-1 px-4 py-3 text-sm leading-4 text-gray-400 border rounded" v-html="link.label" />
-                <Link v-else class="mr-1 mb-1 px-4 py-3 text-sm leading-4 border rounded hover:bg-white focus:border-indigo-500 focus:text-indigo-500" :class="{ 'bg-indigo-500 text-white': link.active }" :href="link.url" v-html="link.label" />
-            </template>
-        </div>
+      <div class="flex flex-wrap -mb-1">
+        <template v-for="(link, key) in people.links" :key="key">
+          <div v-if="link.url === null" class="mr-1 mb-1 px-4 py-3 text-sm leading-4 text-gray-400 border rounded"
+            v-html="link.label" />
+          <Link v-else
+            class="mr-1 mb-1 px-4 py-3 text-sm leading-4 border rounded hover:bg-white focus:border-indigo-500 focus:text-indigo-500"
+            :class="{ 'bg-indigo-500 text-white': link.active }" :href="link.url" v-html="link.label" />
+        </template>
+      </div>
     </div>
 
   </DashboardLayout>

@@ -2,13 +2,15 @@
 
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\FormController;
+use App\Http\Controllers\OrganizationalChartController;
+use App\Http\Controllers\OrganizationalUnitController;
 use App\Http\Controllers\PersonController;
 use App\Http\Controllers\EvaluationController;
 use App\Http\Middleware\EnsureCpfIsFilled;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
 
-    Route::redirect("/","/dashboard");
+Route::redirect("/", "/dashboard");
 
 Route::middleware(['auth', 'verified', EnsureCpfIsFilled::class])->group(function () {
     Route::get('/dashboard', [DashboardController::class, 'index'])->name('dashboard');
@@ -37,10 +39,10 @@ Route::middleware(['auth', 'verified', EnsureCpfIsFilled::class])->group(functio
     Route::post('/evaluations/chefia/{form}', [EvaluationController::class, 'storeChefiaEvaluation'])->name('evaluations.chefia.store');
 
 
-// Exemplo de como ficariam as rotas
-Route::post('/persons/preview', [PersonController::class, 'previewUpload'])->name('persons.preview');
-Route::post('/persons/confirm', [PersonController::class, 'confirmUpload'])->name('persons.confirm');
-Route::resource('persons', PersonController::class)->except(['create', 'store', 'show', 'destroy']);
+    // Exemplo de como ficariam as rotas
+    Route::post('/persons/preview', [PersonController::class, 'previewUpload'])->name('persons.preview');
+    Route::post('/persons/confirm', [PersonController::class, 'confirmUpload'])->name('persons.confirm');
+    Route::resource('people', PersonController::class)->except(['create', 'store', 'show', 'destroy']);
 
     require __DIR__ . '/settings.php';
 
@@ -48,5 +50,6 @@ Route::resource('persons', PersonController::class)->except(['create', 'store', 
 
 });
 Route::put('/profile/cpf', [PersonController::class, 'cpfUpdate'])->name('profile.cpf.update');
-
+Route::get('/organizational-chart', [OrganizationalChartController::class, 'index'])
+    ->name('organizational-chart.index');
 require __DIR__ . '/auth.php';

@@ -22,6 +22,12 @@ export default defineConfig({
             },
         }),
     ],
+    optimizeDeps: {
+        include: [
+            'd3',
+            'd3-org-chart'
+        ],
+    },
     resolve: {
         alias: {
             '@': path.resolve(__dirname, './resources/js'),

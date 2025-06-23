@@ -335,9 +335,16 @@ onUnmounted(() => {
         </div>
         <div class="setting-item">
           <label>Editar Pessoas:</label>
-          <button @click="router.get(route('persons.index'))" class="btn btn-yellow">
+          <button @click="router.get(route('people.index'))" class="btn btn-yellow">
             <span>Editar</span>
             <component :is="icons.UsersIcon" class="size-5" />
+          </button>
+        </div>
+        <div class="setting-item">
+          <label>Organograma:</label>
+          <button @click="router.get(route('organizational-chart.index'))" class="btn btn-yellow">
+            <span>Ver</span>
+            <component :is="icons.ChartArea" class="size-5" />
           </button>
         </div>
       </div>
