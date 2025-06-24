@@ -8,6 +8,17 @@ import { route } from 'ziggy-js';
 // 1. Importe o useFlashModal
 import { useFlashModal } from '@/composables/useFlashModal';
 
+import {
+  Dialog,
+  DialogTrigger,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+  DialogClose,
+} from '@/components/ui/dialog';
+
 // --- DEFINIÇÃO DAS PROPS ---
 const props = defineProps<{
   forms: Record<string, {
@@ -72,24 +83,6 @@ const pdiReleaseData = computed(() => {
   return f ? new Date(f.release_data!).toLocaleDateString('pt-BR') : 'Data não encontrada';
 });
 
-const avaliacaoPrazoInfo = computed(() => {
-  const f = formsForSelectedYear.value.find(form => ['autoavaliacao', 'servidor', 'chefia'].includes(form.type) && form.term_first && form.term_end);
-  if (!f) return null;
-  return {
-    inicio: new Date(f.term_first!).toLocaleDateString('pt-BR'),
-    fim: new Date(f.term_end!).toLocaleDateString('pt-BR'),
-  };
-});
-
-const pdiPrazoInfo = computed(() => {
-  const f = formsForSelectedYear.value.find(form => ['pactuacao'].includes(form.type) && form.term_first && form.term_end);
-  if (!f) return null;
-  return {
-    inicio: new Date(f.term_first!).toLocaleDateString('pt-BR'),
-    fim: new Date(f.term_end!).toLocaleDateString('pt-BR'),
-  };
-});
-
 // --- MÉTODOS DE AÇÃO - FORMULÁRIOS ---
 const getFormForType = (type: string) => props.forms[`${selectedYear.value}_${type}`] || null;
 
@@ -150,18 +143,18 @@ async function handleFileSelect(event: Event) {
     showFlashModal('error', 'Por favor, selecione um arquivo .csv');
     return;
   }
-
+  
   fileName.value = file.name;
   isProcessing.value = true;
   isPreviewModalVisible.value = true;
-
+  
   const formData = new FormData();
   formData.append('file', file);
 
   try {
     const response = await axios.post(route('persons.preview'), formData);
     const data = response.data;
-
+    
     uploadSummary.value = data.summary;
     uploadErrors.value = data.errors;
     uploadDetails.value = data.detailed_changes;
@@ -174,14 +167,15 @@ async function handleFileSelect(event: Event) {
   } finally {
     isProcessing.value = false;
     if (target) {
-      target.value = '';
+        target.value = '';
     }
   }
 }
 
 async function handleConfirmUpload() {
     if (!tempFilePath.value) {
-        alert("Nenhum arquivo temporário encontrado para confirmar.");
+        // Substituído
+        showFlashModal('error', "Nenhum arquivo temporário encontrado para confirmar.");
         return;
     }
     isProcessing.value = true;
@@ -189,14 +183,33 @@ async function handleConfirmUpload() {
         const response = await axios.post(route('persons.confirm'), {
             temp_file_path: tempFilePath.value
         });
-        alert(response.data.message);
+        // Substituído
+        showFlashModal('success', response.data.message);
         closePreviewModal();
         router.reload({ preserveScroll: true });
     } catch (error: any) {
-         alert('Erro ao confirmar o upload: ' + (error.response?.data?.message || error.message));
+        // Substituído
+        showFlashModal('error', 'Erro ao confirmar o upload: ' + (error.response?.data?.message || error.message));
     } finally {
         isProcessing.value = false;
     }
+}
+
+function generateRelease() {
+  // A chamada abaixo corresponde perfeitamente à sua rota do backend:
+  router.post(route('releases.generate', { year: selectedYear.value }), {
+    preserveScroll: true, // Mantém a posição do scroll da página
+    onSuccess: () => {
+      showFlashModal('success', 'Avaliações geradas com sucesso!');
+      closePreviewModal();
+    },
+    onError: (errors) => {
+      console.error('Erro ao gerar avaliações:', errors);
+      // Aqui você pode usar uma mensagem de erro genérica ou
+      // extrair uma mensagem específica do objeto 'errors', se houver.
+      showFlashModal('error', 'Ocorreu um erro ao gerar as avaliações.');
+    },
+  });
 }
 
 function closePreviewModal() {
@@ -210,23 +223,22 @@ function closePreviewModal() {
 
 // --- CONTROLO DO MODAL ---
 const handleKeydown = (e: KeyboardEvent) => {
-  if (e.key === 'Escape' && isPreviewModalVisible.value) {
-    closePreviewModal();
-  }
+    if (e.key === 'Escape' && isPreviewModalVisible.value) {
+        closePreviewModal();
+    }
 };
 
 onMounted(() => {
-  window.addEventListener('keydown', handleKeydown);
+    window.addEventListener('keydown', handleKeydown);
 });
 
 onUnmounted(() => {
-  window.removeEventListener('keydown', handleKeydown);
+    window.removeEventListener('keydown', handleKeydown);
 });
 
 </script>
 
 <template>
-
   <Head title="Configurações" />
   <DashboardLayout pageTitle="Configurações">
 
@@ -239,7 +251,6 @@ onUnmounted(() => {
 
     <div class="space-y-8 max-w-4xl mx-auto">
       
-      <!-- Seção de Formulários -->
       <div class="settings-section">
         <h3>Formulários</h3>
         <div class="setting-item">
@@ -256,15 +267,11 @@ onUnmounted(() => {
           <div class="setting-item">
             <label>Formulário de Autoavaliação:</label>
             <div class="button-group">
-              <button v-if="getFormForType('autoavaliacao')" @click="handleView(getFormForType('autoavaliacao').id)"
-                class="btn btn-blue">
-                <span>Visualizar</span>
-                <component :is="icons.EyeIcon" class="size-5" />
+              <button v-if="getFormForType('autoavaliacao')" @click="handleView(getFormForType('autoavaliacao').id)" class="btn btn-blue">
+                <span>Visualizar</span> <component :is="icons.EyeIcon" class="size-5" />
               </button>
-              <button v-if="getFormForType('autoavaliacao') && !isAvaliacaoGroupReleased"
-                @click="handleEdit(getFormForType('autoavaliacao').id)" class="btn btn-yellow">
-                <span>Editar</span>
-                <component :is="icons.FilePenLineIcon" class="size-5" />
+              <button v-if="getFormForType('autoavaliacao') && !isAvaliacaoGroupReleased" @click="handleEdit(getFormForType('autoavaliacao').id)" class="btn btn-yellow">
+                <span>Editar</span> <component :is="icons.FilePenLineIcon" class="size-5" />
               </button>
               <button v-else-if="!getFormForType('autoavaliacao')" @click="handleCreate('autoavaliacao')" class="btn btn-create">
                 <span>Criar</span> <component :is="icons.PlusIcon" class="size-5" />
@@ -303,23 +310,40 @@ onUnmounted(() => {
             <label>Ações da Avaliação:</label>
             <div v-if="!isAvaliacaoGroupReleased" class="button-group">
               <button class="btn btn-orange" @click="openPrazoModal('avaliacao')">
-                <span>Prazo</span>
-                <component :is="icons.ClockIcon" class="size-5" />
+                <span>Prazo</span> <component :is="icons.ClockIcon" class="size-5" />
               </button>
               <button class="btn btn-pine" @click="handleLiberar('avaliacao')">
-                <span>Liberar</span>
-                <component :is="icons.SendIcon" class="size-5" />
+                <span>Liberar</span> <component :is="icons.SendIcon" class="size-5" />
               </button>
             </div>
-            <div v-else class="flex flex-wrap items-center gap-x-6 gap-y-2">
-              <div v-if="avaliacaoPrazoInfo" class="text-orange-600 font-semibold flex items-center gap-2">
-                <component :is="icons.ClockIcon" class="size-5" />
-                Período: {{ avaliacaoPrazoInfo.inicio }} a {{ avaliacaoPrazoInfo.fim }}
-              </div>
-              <div class=" flex flex-wrap text-green-600 font-semibold flex items-center gap-2">
-                <component :is="icons.CheckCircle2Icon" class="size-5" />
-                Liberado em: {{ avaliacaoReleaseData }}
-              </div>
+            <div v-else class="text-green-600 font-semibold flex items-center gap-2">
+              <component :is="icons.CheckCircle2Icon" class="size-5" />
+              Liberado em: {{ avaliacaoReleaseData }}
+              <Dialog>
+                <DialogTrigger as-child>
+                    <button class="px-2 py-3 rounded-lg font-medium text-base transition-colors flex items-center justify-center gap-3">
+                        Gerar Avaliações
+                    </button>
+                </DialogTrigger>
+                 <DialogContent class="sm:max-w-md bg-white">
+                    <DialogHeader>
+                        <DialogTitle class="text-lg font-semibold text-gray-900">Gerar avaliações</DialogTitle>
+                        <DialogDescription class="mt-2 text-sm text-gray-600">
+                            Tem certeza que deseja gerar as avaliações para o ano de {{ selectedYear }}? Isso irá criar os formulários de avaliação para todos os servidores.
+                        </DialogDescription>
+                    </DialogHeader>
+                    <DialogFooter class="mt-6 flex flex-col-reverse sm:flex-row sm:justify-end sm:space-x-2">
+                        <DialogClose as-child>
+                            <button type="button" class="w-full sm:w-auto inline-flex justify-center rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50">
+                                Cancelar
+                            </button>
+                        </DialogClose>
+                        <button @click="generateRelease" type="button" class="w-full sm:w-auto inline-flex justify-center rounded-md border border-transparent bg-green-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-green-700">
+                            Sim, Gerar
+                        </button>
+                    </DialogFooter>
+                </DialogContent>
+              </Dialog>
             </div>
           </div>
         </div>
@@ -340,7 +364,7 @@ onUnmounted(() => {
                 </button>
             </div>
           </div>
-         <div class="setting-item border-t pt-4 mt-4">
+          <div class="setting-item border-t pt-4 mt-4">
             <label>Ações do PDI:</label>
             <div v-if="!isPdiGroupReleased" class="button-group">
               <button class="btn btn-orange" @click="openPrazoModal('pdi')">
@@ -350,15 +374,9 @@ onUnmounted(() => {
                 <span>Liberar</span> <component :is="icons.SendIcon" class="size-5" />
               </button>
             </div>
-            <div v-else class="flex flex-wrap items-center gap-x-6 gap-y-2">
-                <div v-if="pdiPrazoInfo" class="text-orange-600 font-semibold flex items-center gap-2">
-                    <component :is="icons.ClockIcon" class="size-5" />
-                    <span>Prazo: {{ pdiPrazoInfo.inicio }} a {{ pdiPrazoInfo.fim }}</span>
-                </div>
-                <div class="text-green-600 font-semibold flex items-center gap-2">
-                    <component :is="icons.CheckCircle2Icon" class="size-5" />
-                    <span>Liberado em: {{ pdiReleaseData }}</span>
-                </div>
+            <div v-else class="text-green-600 font-semibold flex items-center gap-2">
+              <component :is="icons.CheckCircle2Icon" class="size-5" />
+              Liberado em: {{ pdiReleaseData }}
             </div>
           </div>
         </div>
@@ -391,21 +409,17 @@ onUnmounted(() => {
       </div>
     </div>
 
-    <!-- Modal de Prazo -->
     <div v-if="isPrazoModalVisible" class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
       <div class="bg-white rounded-lg shadow-xl p-6 w-full max-w-md m-4">
         <h3 class="text-lg font-bold text-gray-800">Definir Prazo para {{ prazoGroup?.toUpperCase() }}</h3>
-        <p class="text-sm text-gray-600 mt-2">Selecione a data limite para o preenchimento dos formulários de {{
-          prazoGroup }} para o ano de {{ selectedYear }}.</p>
+        <p class="text-sm text-gray-600 mt-2">Selecione a data limite para o preenchimento dos formulários de {{ prazoGroup }} para o ano de {{ selectedYear }}.</p>
         <div class="my-4">
           <label for="prazo-date-inicio" class="block font-medium text-sm text-gray-700 mb-1">Data de início:</label>
-          <input type="date" id="prazo-date-inicio" v-model="prazoDateInicio"
-            class="form-input rounded-md w-full border-gray-300 shadow-sm text-black">
+          <input type="date" id="prazo-date-inicio" v-model="prazoDateInicio" class="form-input rounded-md w-full border-gray-300 shadow-sm text-black">
         </div>
         <div class="my-4">
           <label for="prazo-date-fim" class="block font-medium text-sm text-gray-700 mb-1">Data de encerramento:</label>
-          <input type="date" id="prazo-date-fim" v-model="prazoDateFim"
-            class="form-input rounded-md w-full border-gray-300 shadow-sm text-black">
+          <input type="date" id="prazo-date-fim" v-model="prazoDateFim" class="form-input rounded-md w-full border-gray-300 shadow-sm text-black">
         </div>
         <div class="flex justify-end gap-3 mt-6">
           <button @click="isPrazoModalVisible = false" class="btn btn-gray">Cancelar</button>
@@ -414,7 +428,6 @@ onUnmounted(() => {
       </div>
     </div>
     
-    <!-- MODAL DE PREVIEW DO UPLOAD -->
     <div v-if="isPreviewModalVisible" class="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-60 backdrop-blur-sm p-4" @click.self="closePreviewModal">
         <div class="bg-white rounded-2xl shadow-2xl w-full max-w-4xl flex flex-col max-h-[90vh]">
             <div class="flex justify-between items-center p-4 border-b">
@@ -424,17 +437,15 @@ onUnmounted(() => {
                 </button>
             </div>
 
-        <div class="p-6 overflow-y-auto flex-grow">
-          <p class="text-sm text-gray-600 mb-4">Arquivo selecionado: <strong class="font-medium text-gray-900">{{
-            fileName }}</strong></p>
+            <div class="p-6 overflow-y-auto flex-grow">
+                 <p class="text-sm text-gray-600 mb-4">Arquivo selecionado: <strong class="font-medium text-gray-900">{{ fileName }}</strong></p>
 
-          <div v-if="isProcessing" class="flex flex-col items-center justify-center text-center p-8 gap-4">
-            <icons.LoaderCircleIcon class="size-8 animate-spin text-indigo-600" />
-            <p class="text-gray-600">Processando o arquivo, por favor aguarde...</p>
-          </div>
+                <div v-if="isProcessing" class="flex flex-col items-center justify-center text-center p-8 gap-4">
+                    <icons.LoaderCircleIcon class="size-8 animate-spin text-indigo-600"/>
+                    <p class="text-gray-600">Processando o arquivo, por favor aguarde...</p>
+                </div>
 
                 <div v-else class="flex flex-col gap-6">
-                    <!-- Resumo -->
                     <div v-if="uploadSummary">
                         <h4 class="font-semibold text-gray-700 mb-2">Resumo da Análise</h4>
                         <div class="grid grid-cols-2 md:grid-cols-4 gap-4 text-center">
@@ -445,7 +456,6 @@ onUnmounted(() => {
                         </div>
                     </div>
 
-                    <!-- Erros -->
                     <div v-if="uploadErrors && uploadErrors.length > 0">
                          <h4 class="font-semibold text-gray-700 mb-2">Erros Encontrados</h4>
                         <div class="max-h-32 overflow-y-auto bg-red-50 border border-red-200 text-red-800 rounded-lg p-3 text-sm space-y-1">
@@ -453,7 +463,6 @@ onUnmounted(() => {
                         </div>
                     </div>
 
-                    <!-- Detalhes dos Dados a serem Importados/Atualizados -->
                     <div v-if="uploadDetails && uploadDetails.length > 0">
                         <h4 class="font-semibold text-gray-700 mb-2">Dados a Serem Importados/Atualizados</h4>
                         <div class="max-h-64 overflow-y-auto space-y-3 p-3 bg-gray-50 rounded-lg border">
@@ -475,13 +484,12 @@ onUnmounted(() => {
                         </div>
                     </div>
 
-          </div>
-        </div>
+                </div>
+            </div>
 
-            <!-- Footer do Modal -->
             <div class="flex justify-end gap-3 p-4 border-t bg-gray-50 rounded-b-2xl">
                 <button @click="closePreviewModal" class="btn btn-gray">Cancelar</button>
-                <button @click="handleConfirmUpload" class="btn btn-create" :disabled="isProcessing || (uploadErrors && uploadErrors.length > 0)">
+                <button @click="handleConfirmUpload" class="btn btn-green" :disabled="isProcessing || (uploadErrors && uploadErrors.length > 0)">
                     <span v-if="!isProcessing">Confirmar Upload</span>
                     <span v-else>
                         <icons.LoaderCircleIcon class="size-5 animate-spin mr-2"/>
