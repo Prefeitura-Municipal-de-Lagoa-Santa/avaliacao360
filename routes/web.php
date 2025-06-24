@@ -37,9 +37,11 @@ Route::middleware(['auth', 'verified', EnsureCpfIsFilled::class])->group(functio
     Route::get('/api/evaluations/chefia/status', [App\Http\Controllers\EvaluationController::class, 'checkChefiaFormStatus'])->name('api.evaluations.chefia.status');
     Route::get('/evaluations/chefia', [EvaluationController::class, 'showChefiaForm'])->name('evaluations.chefia.show');
     Route::post('/evaluations/chefia/{form}', [EvaluationController::class, 'storeChefiaEvaluation'])->name('evaluations.chefia.store');
-
-
-    // Exemplo de como ficariam as rotas
+// ROTAS PARA AUTOAVALIAÇÃO
+    Route::get('/evaluations/autoavaliacao/status', [EvaluationController::class, 'checkAutoavaliacaoFormStatus'])->name('api.evaluations.autoavaliacao.status');
+    Route::get('/evaluations/autoavaliacao', [EvaluationController::class, 'showAutoavaliacaoForm'])->name('evaluations.autoavaliacao.show');
+    Route::post('/evaluations/autoavaliacao/{form}', [EvaluationController::class, 'storeAutoavaliacao'])->name('evaluations.autoavaliacao.store');
+// Exemplo de como ficariam as rotas
     Route::post('/persons/preview', [PersonController::class, 'previewUpload'])->name('persons.preview');
     Route::post('/persons/confirm', [PersonController::class, 'confirmUpload'])->name('persons.confirm');
     Route::resource('people', PersonController::class)->except(['create', 'store', 'show', 'destroy']);
