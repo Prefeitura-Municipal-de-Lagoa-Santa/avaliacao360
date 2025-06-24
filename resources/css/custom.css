@@ -585,6 +585,7 @@
 
 .form-grid {
     @apply grid grid-cols-1 gap-6;
+    grid-template-columns: repeat(1, minmax(0, 0.1fr));
 }
 
 .form-field {
