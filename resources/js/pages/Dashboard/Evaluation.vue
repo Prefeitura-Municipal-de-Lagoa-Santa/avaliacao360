@@ -46,6 +46,7 @@ async function handleChefiaEvaluationClick() {
   try {
     const response = await fetch(route('api.evaluations.chefia.status'));
     const data = await response.json();
+   
 
     if (data.available) {
       router.get(route('evaluations.chefia.show'));
@@ -55,7 +56,28 @@ async function handleChefiaEvaluationClick() {
     }
   } catch (error) {
     console.error('Erro ao verificar status da avaliação:', error);
-    dialogMessage.value = 'O formulário ainda não está liberado para Preechimento.';
+    dialogMessage.value = data.message;
+    isDialogOpen.value = true;
+  }
+}
+
+// ... props, isDialogOpen, etc.
+
+// Adicione esta nova função para lidar com o clique na autoavaliação
+async function handleAutoavaliacaoClick() {
+  try {
+    const response = await fetch(route('api.evaluations.autoavaliacao.status')); // ROTA ALTERADA
+    const data = await response.json();
+   
+    if (data.available) {
+      router.get(route('evaluations.autoavaliacao.show')); // ROTA ALTERADA
+    } else {
+      dialogMessage.value = data.message;
+      isDialogOpen.value = true;
+    }
+  } catch (error) {
+    console.error('Erro ao verificar status da autoavaliação:', error);
+    dialogMessage.value = 'Ocorreu um erro ao verificar a disponibilidade da avaliação. Tente novamente.'; // Mensagem genérica
     isDialogOpen.value = true;
   }
 }
@@ -72,20 +94,17 @@ function showDetailsForDeadline() {
   <DashboardLayout pageTitle="Dashboard de Avaliação">
 
     <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-        <DashboardCard
-        
+         <DashboardCard
         label="Autoavaliação"
         iconBgColor="#1d82c4"
-        :buttonAction="showDetailsForDeadline"
-        buttonText="Começar agora"
+        :buttonAction="handleAutoavaliacaoClick" buttonText="Começar agora"
       >
         <template #icon>
-          <icons.ListTodo>
-          </icons.ListTodo>
-          <div ></div>
+          <icons.ListTodo />
         </template>
       </DashboardCard>
-      
+    
+     
       <!-- Card de Avaliação Chefia Atualizado -->
       <DashboardCard
         label="Avaliação Chefia"
@@ -124,7 +143,7 @@ function showDetailsForDeadline() {
           <icons.CalendarDays />
         </template>
       </DashboardCard>
-    </div>
+    
 
     <!-- Diálogo de aviso -->
     <Dialog v-model:open="isDialogOpen">
@@ -147,5 +166,6 @@ function showDetailsForDeadline() {
             </DialogFooter>
         </DialogContent>
     </Dialog>
+    </div>
   </DashboardLayout>
 </template>

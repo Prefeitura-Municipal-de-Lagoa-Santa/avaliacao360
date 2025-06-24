@@ -28,6 +28,35 @@ class OrganizationalUnit extends Model
     }
 
     /**
+     * Define um relacionamento recursivo para carregar todos os pais.
+     */
+    public function allParents(): BelongsTo
+    {
+        return $this->parent()->with('allParents');
+    }
+
+    /**
+     * Este método implementa a sua lógica de "subir" na hierarquia.
+     */
+    public function getSecretariaAttribute(): ?OrganizationalUnit
+    {
+        $current = $this;
+
+        // Loop para "subir" na árvore de unidades organizacionais
+        while ($current) {
+            
+            if ($current->type === 'Secretaria') {
+                return $current;
+            }
+
+            // Se não, vá para o pai e continue o loop
+            $current = $current->parent;
+        }
+
+        // Retorna null se nenhuma secretaria for encontrada na hierarquia
+        return null;
+    }
+    /**
      * Get the child units of this organizational unit.
      */
     public function children(): HasMany

@@ -2,6 +2,8 @@
 import { ref, computed, onMounted } from 'vue';
 import { useForm } from '@inertiajs/vue3';
 import { Head } from '@inertiajs/vue3';
+import { ArrowLeftIcon } from 'lucide-vue-next';
+
 
 // As propriedades (props) que o componente recebe do controller do Laravel.
 const props = defineProps({
@@ -15,6 +17,8 @@ const props = defineProps({
         required: true
     }
 });
+
+console.log(props);
 
 // Utilizando o helper 'useForm' do Inertia para gerenciar os dados do formulário.
 const evaluationForm = useForm({
@@ -94,6 +98,11 @@ const formattedDate = computed(() => {
     });
 });
 
+// Função para navegar para a página anterior.
+function goBack() {
+  window.history.back();
+}
+
 </script>
 
 <template>
@@ -105,9 +114,10 @@ const formattedDate = computed(() => {
         <!-- Cabeçalho da Página -->
         <div class="flex justify-between items-center border-b pb-4 mb-6">
             <h1 class="text-2xl sm:text-3xl font-bold text-gray-800">Termo de Avaliação de Desempenho</h1>
-            <button @click="() => window.history.back()" class="flex items-center px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition duration-200">
-                <i class="fas fa-arrow-left mr-2"></i>Voltar
-            </button>
+            <button @click="goBack" class="back-btn">
+          <ArrowLeftIcon class="size-4 mr-2" />
+          Voltar
+        </button>
         </div>
 
         <!-- Formulário -->
@@ -235,42 +245,3 @@ const formattedDate = computed(() => {
     </div>
 </template>
 
-<style>
-/* Estilos gerais para os elementos do formulário para manter o código do template limpo */
-
-.form-section {
-    @apply bg-white p-6 rounded-lg shadow-md;
-}
-
-.section-title {
-    @apply bg-gray-100 px-6 py-4 -mx-6 -mt-6 rounded-t-lg mb-6 font-bold text-lg text-gray-700 border-b;
-}
-
-.form-grid {
-    @apply grid grid-cols-1 gap-6;
-}
-
-.form-field {
-    @apply flex flex-col;
-}
-
-.form-field label {
-    @apply mb-1 font-semibold text-gray-600 text-sm;
-}
-
-.form-input {
-    @apply p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition duration-200;
-}
-
-.table-header {
-    @apply px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider;
-}
-
-.table-cell {
-    @apply px-4 py-4 whitespace-normal text-sm text-gray-800;
-}
-
-.signature-line {
-    @apply border-b-2 border-gray-400 mb-2;
-}
-</style>
