@@ -6,6 +6,7 @@ use App\Http\Controllers\OrganizationalChartController;
 use App\Http\Controllers\OrganizationalUnitController;
 use App\Http\Controllers\PersonController;
 use App\Http\Controllers\EvaluationController;
+use App\Http\Controllers\ReleaseController;
 use App\Http\Middleware\EnsureCpfIsFilled;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
@@ -54,4 +55,7 @@ Route::middleware(['auth', 'verified', EnsureCpfIsFilled::class])->group(functio
 Route::put('/profile/cpf', [PersonController::class, 'cpfUpdate'])->name('profile.cpf.update');
 Route::get('/organizational-chart', [OrganizationalChartController::class, 'index'])
     ->name('organizational-chart.index');
+
+Route::post('/releases-generate/{year}', [ReleaseController::class, 'generateRelease'])
+    ->name('releases.generate');
 require __DIR__ . '/auth.php';
