@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, reactive} from 'vue';
+import { ref, computed, onMounted, reactive } from 'vue';
 import DashboardLayout from '@/layouts/DashboardLayout.vue';
 import { Head, useForm } from '@inertiajs/vue3';
 import { ArrowLeftIcon } from 'lucide-vue-next';
@@ -15,7 +15,6 @@ const props = defineProps({
     }
 });
 
-console.log(props);
 
 const evaluationForm = useForm({
     // O ID do usuário avaliado agora é preenchido automaticamente!
@@ -26,12 +25,12 @@ const evaluationForm = useForm({
     cargo: props.person.current_position || '',
     secretaria: props.person.organizational_unit?.all_parents?.all_parents.name || '',
     lotacao: props.person.organizational_unit?.name || '',
-    evaluated_user_id: props.person.user_id, 
+    evaluated_user_id: props.person.user_id,
     evidencias: '',
     answers: {},
     evidencias: '',
 
-    
+
 });
 
 // Inicializa o objeto 'answers' com todas as perguntas do formulário.
@@ -100,11 +99,11 @@ const formattedDate = computed(() => {
 
 // Função para navegar para a página anterior.
 function goBack() {
-  window.history.back();
+    window.history.back();
 }
 
 const evaluationRubric = [
-     {
+    {
         title: 'Aprimoramento Significativo',
         text: 'Demonstra comportamento indicando a necessidade de aprimoramento significativo no desenvolvimento da competência.',
         scores: [0, 10, 20, 30, 40],
@@ -141,14 +140,15 @@ const scoreOptions = [0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100];
 </script>
 
 <template>
-    <Head title="Autoavaliação de Desempenho" /> 
-  <DashboardLayout pageTitle="Autoavaliação">
-        
+
+    <Head title="Autoavaliação de Desempenho" />
+    <DashboardLayout pageTitle="Autoavaliação">
+
         <div class="flex justify-between items-center border-b pb-4 mb-6">
-            <h1 class="text-2xl sm:text-3xl font-bold text-gray-800">Termo de Autoavaliação de Desempenho</h1> 
+            <h1 class="text-2xl sm:text-3xl font-bold text-gray-800">Termo de Autoavaliação de Desempenho</h1>
             <button @click="goBack" class="back-btn">
-              <ArrowLeftIcon class="size-4 mr-2" />
-              Voltar
+                <ArrowLeftIcon class="size-4 mr-2" />
+                Voltar
             </button>
         </div>
 
@@ -197,13 +197,16 @@ const scoreOptions = [0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100];
                 <!-- Seção 3: Comportamentos Avaliados -->
                 <div class="form-section">
                     <h3 class="section-title">3 - COMPORTAMENTOS AVALIADOS</h3>
-                     <div id="evaluation-tables-container" class="space-y-8">
+                    <div id="evaluation-tables-container" class="space-y-8">
                         <div v-for="group in form.group_questions" :key="group.id" class="overflow-x-auto">
-                            <h4 class="text-lg font-semibold text-gray-700 mb-3">{{ group.name }} (Peso: {{ group.weight }}%)</h4>
+                            <h4 class="text-lg font-semibold text-gray-700 mb-3">{{ group.name }} (Peso: {{ group.weight
+                                }}%)</h4>
 
-                            <div class="flex flex-col sm:flex-row border border-gray-300 rounded-lg overflow-hidden mb-4">
-                                <div v-for="(item, index) in evaluationRubric" :key="index" class="flex flex-col flex-1 text-center border-b sm:border-b-0 sm:border-r border-gray-200 last:border-r-0">
-                                   
+                            <div
+                                class="flex flex-col sm:flex-row border border-gray-300 rounded-lg overflow-hidden mb-4">
+                                <div v-for="(item, index) in evaluationRubric" :key="index"
+                                    class="flex flex-col flex-1 text-center border-b sm:border-b-0 sm:border-r border-gray-200 last:border-r-0">
+
                                     <div class="p-3 text-xs text-gray-700 flex-grow" :class="item.colorClass">
                                         {{ item.text }}
                                     </div>
@@ -221,34 +224,27 @@ const scoreOptions = [0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100];
                             <table class="min-w-full bg-white border border-gray-200 rounded-lg">
                                 <thead class="bg-gray-50">
                                     <tr>
-                                        <th class="table-header w-2/3">Fator de Competência</th>
-                                        <th class="table-header w-1/3">Pontuação (0 a 100)</th>
+                                        <th class="table-header">Fator de Competência</th>
                                     </tr>
                                 </thead>
                                 <tbody>
                                     <tr v-for="question in group.questions" :key="question.id" class="border-t">
-                                        
+
                                         <td class="table-cell px-4 py-3">
-                                            
+
                                             <div class="mb-4 text-gray-800 font-medium">
                                                 {{ question.text_content }}
                                             </div>
 
-                                            <div class="flex flex-wrap justify-around items-center gap-2 p-2 rounded-md bg-gray-50 border">
-                                                
+                                            <div class="flex flex-wrap justify-between items-center gap-2">
+
                                                 <div v-for="score in scoreOptions" :key="score">
-                                                    <input 
-                                                        type="radio"
-                                                        :name="'question-' + question.id"
-                                                        :id="'q' + question.id + 's' + score"
-                                                        :value="score"
+                                                    <input type="radio" :name="'question-' + question.id"
+                                                        :id="'q' + question.id + 's' + score" :value="score"
                                                         v-model="evaluationForm.answers[question.id]"
-                                                        class="sr-only peer"
-                                                    />
-                                                    <label 
-                                                        :for="'q' + question.id + 's' + score"
-                                                        class="flex items-center justify-center w-9 h-9 rounded-full border border-gray-300 bg-white text-sm font-medium text-gray-700 cursor-pointer transition-colors duration-200 ease-in-out hover:bg-gray-100 peer-checked:bg-blue-600 peer-checked:text-white peer-checked:border-blue-700"
-                                                    >
+                                                        class="sr-only peer" />
+                                                    <label :for="'q' + question.id + 's' + score"
+                                                        class="flex items-center justify-center w-9 h-9 rounded-full border border-gray-300 bg-white text-sm font-medium text-gray-700 cursor-pointer transition-colors duration-200 ease-in-out hover:bg-gray-100 peer-checked:bg-blue-600 peer-checked:text-white peer-checked:border-blue-700">
                                                         {{ score }}
                                                     </label>
                                                 </div>
@@ -263,13 +259,15 @@ const scoreOptions = [0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100];
 
                 <!-- Seção de Pontuação Total -->
                 <div class="form-section bg-blue-50 p-6 rounded-lg text-right">
-                     <div class="font-bold text-2xl text-gray-800">Pontuação Total: <span id="grand-total" class="text-blue-600">{{ grandTotal }}</span></div>
+                    <div class="font-bold text-2xl text-gray-800">Pontuação Total: <span id="grand-total"
+                            class="text-blue-600">{{ grandTotal }}</span></div>
                 </div>
 
                 <!-- Seção 4: Evidências -->
                 <div class="form-section">
                     <h3 class="section-title">5 - EVIDÊNCIAS</h3>
-                    <textarea v-model="evaluationForm.evidencias" class="form-input w-full" rows="5" placeholder="Descreva aqui as evidências observadas durante o período de avaliação..."></textarea>
+                    <textarea v-model="evaluationForm.evidencias" class="form-input w-full" rows="5"
+                        placeholder="Descreva aqui as evidências observadas durante o período de avaliação..."></textarea>
                 </div>
 
                 <!-- Seção 5: Assinaturas -->
@@ -290,7 +288,8 @@ const scoreOptions = [0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100];
 
                 <!-- Botão de Salvar -->
                 <div class="mt-12 text-center">
-                    <button type="submit" :disabled="evaluationForm.processing || !evaluationForm.evaluated_user_id" class="px-8 py-3 bg-green-600 text-white font-bold rounded-lg hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 disabled:bg-gray-400 transition-colors duration-300">
+                    <button type="submit" :disabled="evaluationForm.processing || !evaluationForm.evaluated_user_id"
+                        class="px-8 py-3 bg-green-600 text-white font-bold rounded-lg hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 disabled:bg-gray-400 transition-colors duration-300">
                         Salvar Avaliação
                     </button>
                 </div>
