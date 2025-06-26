@@ -15,6 +15,8 @@ const props = defineProps({
     }
 });
 
+console.log(props);
+
 const evaluationForm = useForm({
     // O ID do usuário avaliado agora é preenchido automaticamente!
     //evaluated_user_id: props.users.length > 0 ? props.users[0].id : null, 

@@ -217,7 +217,10 @@ public function showAutoavaliacaoForm()
     $person = Person::with('organizationalUnit.allParents')
                   ->where('cpf', $user->cpf)
                   ->first();
-    
+    if(!$person){
+        return redirect()->route('evaluations')
+                         ->with('error', 'A autoavaliação para este período ainda não foi liberada.');
+    }
     // Vamos renderizar uma nova página Vue para a autoavaliação.
     return Inertia::render('Evaluation/AutoavaliacaoPage', [ // ALTERADO
         'form' => $autoavaliacaoForm,
