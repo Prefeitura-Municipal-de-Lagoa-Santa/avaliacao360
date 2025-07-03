@@ -9,6 +9,7 @@ use Inertia\Inertia;
 use Inertia\Response;
 use Illuminate\Support\Facades\DB;
 use App\Models\Evaluation;
+use App\Models\EvaluationRequest;
 use App\Models\Answer;
 use App\Models\User;
 use App\Models\OrganizationalUnit;
@@ -89,15 +90,47 @@ class EvaluationController extends Controller
         }
       
         // Se o formulário existir, continua normalmente
-        $users = User::where('id', '=', auth()->id())->get(['id', 'name', 'cpf']);
-        //$person = Person::where('cpf', $users['cpf']);
-        //dd($users);
-        return Inertia::render('Evaluation/ChefiaEvaluationPage', [
-            'form' => $chefiaForm,
-            'users' => $users,
-            
-            
-        ]);
+        $users = User::where('id', '=', auth()->id())->first(['id', 'name', 'cpf']);
+        $cpf = '10798101610';
+
+        $Person = Person::with('organizationalUnit.allParents')
+                  ->where('cpf', $cpf)
+                  ->first();
+        
+       
+        
+       if (!$Person) {
+        // Retorna um erro se o usuário não tiver um registro 'Person' associado
+        return redirect()->route('dashboard') // ou outra rota apropriada
+                         ->with('error', 'Dados de servidor não encontrados para o seu usuário.');
+    }
+    
+    // 2. Busca as solicitações de avaliação de chefia pendentes para este gestor
+    $pendingEvaluations = EvaluationRequest::where('requester_person_id', $Person->id) // O gestor é o solicitante
+        //->where('status', 'pending') // Filtra apenas pelas pendentes
+        ->whereHas('evaluation', function ($query) {
+            $query->where('type', 'chefia'); // Garante que a avaliação é do tipo 'chefia'
+        })
+        ->with([
+            // Carrega os dados da pessoa a ser avaliada (o subordinado)
+           'requested.organizationalUnit.allParents', 
+            // Carrega o formulário completo associado a esta avaliação
+           'evaluation.form.groupQuestions.questions'
+        ])
+        ->get();
+
+        $firstRequest = $pendingEvaluations->first();
+
+        $personManager = $firstRequest ? $firstRequest->requested : null;
+
+        
+
+    // 3. Renderiza a página, passando a lista de avaliações pendentes
+    // A página Vue poderá então exibir uma lista como: "Avaliar 'Fulano'", "Avaliar 'Ciclano'"
+    return Inertia::render('Evaluation/AvaliacaoPage', [ // Pode ser uma nova página ou a sua página de avaliação
+        'form' =>$chefiaForm,
+        'person' => $personManager,
+    ]);
 
     }
 
@@ -221,8 +254,10 @@ public function showAutoavaliacaoForm()
         return redirect()->route('evaluations')
                          ->with('error', 'A autoavaliação para este período ainda não foi liberada.');
     }
-    // Vamos renderizar uma nova página Vue para a autoavaliação.
-    return Inertia::render('Evaluation/AutoavaliacaoPage', [ // ALTERADO
+
+    // ALTERAÇÃO PRINCIPAL: Renderiza o componente genérico 'AvaliacaoPage'
+    // em vez de 'AutoavaliacaoPage'. O objeto $autoavaliacaoForm já contém o tipo.
+    return Inertia::render('Evaluation/AvaliacaoPage', [ // ALTERADO
         'form' => $autoavaliacaoForm,
         'person' => $person,
     ]);

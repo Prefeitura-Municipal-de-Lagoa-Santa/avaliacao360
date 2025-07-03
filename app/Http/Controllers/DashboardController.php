@@ -22,7 +22,7 @@ class DashboardController extends Controller
         $formTypes = [];
 
         if ($groupName === 'avaliacao') {
-            $formTypes = ['autoavaliacao', 'servidor', 'chefia'];
+            $formTypes = ['servidor', 'gestor' ,'chefia'];
         } elseif ($groupName === 'pdi') {
             $formTypes = ['pactuacao'];
         }
@@ -84,7 +84,7 @@ class DashboardController extends Controller
             ->groupBy([
                 'year',
                 function ($item) {
-                    return in_array($item->type, ['autoavaliacao', 'servidor', 'chefia']) ? 'avaliacao' : 'pdi';
+                    return in_array($item->type, ['servidor', 'gestor', 'chefia']) ? 'avaliacao' : 'pdi';
                 }
             ])
             // Mapeia os grupos para criar um evento simplificado

@@ -42,19 +42,19 @@ class GenerateEvaluationsJob implements ShouldQueue
             $this->generateSelfEvaluations($this->year);
 
             $this->chefiaForm = Form::where('type', 'chefia')->where('year', '>=', $this->year)->firstOrFail();
-            $this->servidorForm = Form::where('type', 'servidor')->where('year', '>=', $this->year)->firstOrFail();
+            $this->servidorForm = Form::where('type', 'gestor')->where('year', '>=', $this->year)->firstOrFail();
             $topLevelUnits = OrganizationalUnit::whereNull('parent_id')->get();
 
             Log::info("--- Etapa de Avaliações de Chefia e Servidores (Hierárquica) ---");
             Log::info("[Chefia] Formulário encontrado: ID {$this->chefiaForm->id}");
-            Log::info("[Servidor] Formulário encontrado: ID {$this->servidorForm->id}");
+            Log::info("[Gestor] Formulário encontrado: ID {$this->servidorForm->id}");
             Log::info("Unidades de topo encontradas: {$topLevelUnits->count()}");
 
             foreach ($topLevelUnits as $unit) {
                 $this->processOrganizationalUnit($unit, null);
             }
             Log::info("[Chefia] Novas avaliações de chefia criadas: {$this->chefiaCreatedCount}");
-            Log::info("[Servidor] Novas avaliações de servidores criadas: {$this->servidorCreatedCount}");
+            Log::info("[Gestor] Novas avaliações de servidores criadas: {$this->servidorCreatedCount}");
 
 
             DB::commit();
@@ -70,7 +70,7 @@ class GenerateEvaluationsJob implements ShouldQueue
     private function generateSelfEvaluations(string $year): void
     {
         Log::info("--- Etapa de Autoavaliações ---");
-        $form = Form::where('type', 'autoavaliacao')->where('year', '>=', $year)->firstOrFail();
+        $form = Form::where('type', 'servidor')->where('year', '>=', $year)->firstOrFail();
         Log::info("[Autoavaliação] Formulário encontrado: ID {$form->id}");
 
         $people = Person::eligibleForEvaluation()->get();
@@ -79,11 +79,11 @@ class GenerateEvaluationsJob implements ShouldQueue
         $createdCount = 0;
         foreach ($people as $person) {
             $evaluation = Evaluation::firstOrCreate(
-                ['form_id' => $form->id, 'evaluated_person_id' => $person->id, 'type' => 'autoavaliacao']
+                ['form_id' => $form->id, 'evaluated_person_id' => $person->id, 'type' => 'servidor']
             );
             $request = EvaluationRequest::firstOrCreate(
                 ['evaluation_id' => $evaluation->id, 'requested_person_id' => $person->id],
-                ['requester_person_id' => $person->id, 'status' => 'approved']
+                ['requester_person_id' => $person->id, 'status' => 'pending']
             );
             if ($request->wasRecentlyCreated) $createdCount++;
         }
@@ -174,7 +174,7 @@ class GenerateEvaluationsJob implements ShouldQueue
             );
             $request = EvaluationRequest::firstOrCreate(
                 ['evaluation_id' => $evaluation->id, 'requested_person_id' => $evaluator->id],
-                ['requester_person_id' => $evaluated->id, 'status' => 'approved']
+                ['requester_person_id' => $evaluated->id, 'status' => 'pending']
             );
             if ($request->wasRecentlyCreated) {
                 $this->chefiaCreatedCount++;
@@ -188,7 +188,7 @@ class GenerateEvaluationsJob implements ShouldQueue
             [
                 'form_id' => $this->servidorForm->id,
                 'evaluated_person_id' => $bossToEvaluate->id,
-                'type' => 'servidor'
+                'type' => 'gestor'
             ]
         );
 
@@ -200,7 +200,7 @@ class GenerateEvaluationsJob implements ShouldQueue
                 ],
                 [
                     'requester_person_id' => $bossToEvaluate->id,
-                    'status' => 'approved'
+                    'status' => 'pending'
                 ]
             );
             if ($request->wasRecentlyCreated) {

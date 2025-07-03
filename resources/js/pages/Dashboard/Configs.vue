@@ -70,11 +70,11 @@ const formsForSelectedYear = computed(() => {
   return Object.values(props.forms).filter(form => String(form.year) === selectedYear.value);
 });
 
-const isAvaliacaoGroupReleased = computed(() => formsForSelectedYear.value.filter(form => ['autoavaliacao', 'servidor', 'chefia'].includes(form.type)).some(form => form.release));
+const isAvaliacaoGroupReleased = computed(() => formsForSelectedYear.value.filter(form => ['servidor', 'gestor', 'chefia'].includes(form.type)).some(form => form.release));
 const isPdiGroupReleased = computed(() => formsForSelectedYear.value.filter(form => ['pactuacao'].includes(form.type)).some(form => form.release));
 
 const avaliacaoReleaseData = computed(() => {
-  const f = formsForSelectedYear.value.find(form => ['autoavaliacao', 'servidor', 'chefia'].includes(form.type) && form.release_data);
+  const f = formsForSelectedYear.value.find(form => ['servidor', 'gestor', 'chefia'].includes(form.type) && form.release_data);
   return f ? new Date(f.release_data!).toLocaleDateString('pt-BR') : 'Data não encontrada';
 });
 
@@ -88,7 +88,7 @@ const getFormForType = (type: string) => props.forms[`${selectedYear.value}_${ty
 
 function openPrazoModal(group: 'avaliacao' | 'pdi') {
   prazoGroup.value = group;
-  const formTypes = group === 'avaliacao' ? ['autoavaliacao', 'servidor', 'chefia'] : ['pactuacao'];
+  const formTypes = group === 'avaliacao' ? ['servidor', 'gestor', 'chefia'] : ['pactuacao'];
   const existingForm = formsForSelectedYear.value.find(f => formTypes.includes(f.type) && f.term_first && f.term_end);
 
   if (existingForm) {
@@ -265,35 +265,35 @@ onUnmounted(() => {
         <div class="form-section">
           <h4>AVALIAÇÃO</h4>
           <div class="setting-item">
-            <label>Formulário de Autoavaliação:</label>
+            <label>Formulário I - Servidor:</label>
             <div class="button-group">
-              <button v-if="getFormForType('autoavaliacao')" @click="handleView(getFormForType('autoavaliacao').id)" class="btn btn-blue">
+              <button v-if="getFormForType('servidor')" @click="handleView(getFormForType('servidor').id)" class="btn btn-blue">
                 <span>Visualizar</span> <component :is="icons.EyeIcon" class="size-5" />
               </button>
-              <button v-if="getFormForType('autoavaliacao') && !isAvaliacaoGroupReleased" @click="handleEdit(getFormForType('autoavaliacao').id)" class="btn btn-yellow">
+              <button v-if="getFormForType('servidor') && !isAvaliacaoGroupReleased" @click="handleEdit(getFormForType('servidor').id)" class="btn btn-yellow">
                 <span>Editar</span> <component :is="icons.FilePenLineIcon" class="size-5" />
               </button>
-              <button v-else-if="!getFormForType('autoavaliacao')" @click="handleCreate('autoavaliacao')" class="btn btn-create">
+              <button v-else-if="!getFormForType('servidor')" @click="handleCreate('servidor')" class="btn btn-create">
                 <span>Criar</span> <component :is="icons.PlusIcon" class="size-5" />
               </button>
             </div>
           </div>
           <div class="setting-item">
-            <label>Formulário de Avaliação do Servidor:</label>
+            <label>Formulário II - Gestor:</label>
             <div class="button-group">
-                <button v-if="getFormForType('servidor')" @click="handleView(getFormForType('servidor').id)" class="btn btn-blue">
+                <button v-if="getFormForType('gestor')" @click="handleView(getFormForType('gestor').id)" class="btn btn-blue">
                     <span>Visualizar</span> <component :is="icons.EyeIcon" class="size-5" />
                 </button>
-                <button v-if="getFormForType('servidor') && !isAvaliacaoGroupReleased" @click="handleEdit(getFormForType('servidor').id)" class="btn btn-yellow">
+                <button v-if="getFormForType('gestor') && !isAvaliacaoGroupReleased" @click="handleEdit(getFormForType('gestor').id)" class="btn btn-yellow">
                     <span>Editar</span> <component :is="icons.FilePenLineIcon" class="size-5" />
                 </button>
-                <button v-else-if="!getFormForType('servidor')" @click="handleCreate('servidor')" class="btn btn-create">
+                <button v-else-if="!getFormForType('gestor')" @click="handleCreate('gestor')" class="btn btn-create">
                     <span>Criar</span> <component :is="icons.PlusIcon" class="size-5" />
                 </button>
             </div>
           </div>
           <div class="setting-item">
-            <label>Formulário de Avaliação da Chefia:</label>
+            <label>Formulário III - Equipe do Gestor:</label>
             <div class="button-group">
                  <button v-if="getFormForType('chefia')" @click="handleView(getFormForType('chefia').id)" class="btn btn-blue">
                     <span>Visualizar</span> <component :is="icons.EyeIcon" class="size-5" />
@@ -329,7 +329,7 @@ onUnmounted(() => {
                     <DialogHeader>
                         <DialogTitle class="text-lg font-semibold text-gray-900">Gerar avaliações</DialogTitle>
                         <DialogDescription class="mt-2 text-sm text-gray-600">
-                            Tem certeza que deseja gerar as avaliações para o ano de {{ selectedYear }}? Isso irá criar os formulários de avaliação para todos os servidores.
+                            Tem certeza que deseja gerar as avaliações para o ano de {{ selectedYear }}? Isso irá criar os formulários de avaliação para todos os gestores.
                         </DialogDescription>
                     </DialogHeader>
                     <DialogFooter class="mt-6 flex flex-col-reverse sm:flex-row sm:justify-end sm:space-x-2">

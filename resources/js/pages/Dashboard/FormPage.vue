@@ -17,7 +17,7 @@ interface GroupPayload {
 
 // --- Props ---
 const props = defineProps<{
-  formType: 'autoavaliacao' | 'chefia' | 'servidor' | 'pactuacao' ;
+  formType: 'gestor' | 'chefia' | 'servidor' | 'pactuacao' ;
   year: string;
   form?: {
     id: number;
@@ -37,7 +37,7 @@ const isEditing = computed(() => !!props.form);
 
 // Títulos dinâmicos
 const formTitles: Record<string, string> = {
-  autoavaliacao: 'Formulário de Autoavaliação',
+  gestor: 'Formulário do Gestor',
   chefia: 'Formulário de Avaliação Chefia',
   servidor: 'Formulário de Avaliação do Servidor',
   pactuacao: 'Formulário de Pactuação (PDI)',

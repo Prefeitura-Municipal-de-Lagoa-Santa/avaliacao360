@@ -238,6 +238,29 @@
     cursor: not-allowed;
 }
 
+.btn-remove {
+    display: flex;
+    align-items: center;
+    padding: 0.5rem 1rem;
+    background-color: #e77c7c;
+    color: white;
+    border-radius: 0.5rem;
+    font-weight: 500;
+    font-size: 0.875rem;
+    transition: background-color 0.2s;
+    border: none;
+    cursor: pointer;
+}
+
+.btn-remove:hover {
+    background-color: #e54646;
+}
+
+.btn-remove:disabled {
+    background-color: #9ca3af;
+    cursor: not-allowed;
+}
+
 .form-creator-container {
     background-color: #f9fafb;
     padding: 1.5rem;
@@ -588,6 +611,12 @@
     grid-template-columns: repeat(1, minmax(0, 0.1fr));
 }
 
+@media (max-width: 640px){
+  .form-grid {
+    @apply grid grid-cols-1 gap-6;
+    grid-template-columns: repeat(1, minmax(0, 2fr));
+}
+}
 .form-field {
     @apply flex flex-col;
 }
