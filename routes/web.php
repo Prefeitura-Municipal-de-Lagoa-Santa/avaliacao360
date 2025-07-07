@@ -58,6 +58,9 @@ Route::get('/evaluations/subordinates/evaluation/{evaluationRequest}', [Evaluati
 
     Route::get('/profile/cpf', [PersonController::class, 'cpf'])->name('profile.cpf');
 
+    Route::put('/admin/roles/{role}/permissions', [AdminController::class, 'updatePermissions'])
+    ->name('admin.roles.permissions.update');
+
 });
 Route::put('/profile/cpf', [PersonController::class, 'cpfUpdate'])->name('profile.cpf.update');
 Route::get('/organizational-chart', [OrganizationalChartController::class, 'index'])
