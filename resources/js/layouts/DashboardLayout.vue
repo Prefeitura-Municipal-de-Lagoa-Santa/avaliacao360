@@ -39,6 +39,7 @@ const navItems = ref<NavItem[]>([
   { label: 'Relatórios', href: '/reports', routeName: 'reports' },
   { label: 'Calendário', href: '/calendar', routeName: 'calendar' },
   { label: 'Configurações', href: '/configs', routeName: 'configs' },
+  { label: 'Admin', href: '/admin', routeName: 'admin' },
 ]);
 
 declare function route(name?: string, params?: any, absolute?: boolean, ziggy?: any): any;
