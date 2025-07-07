@@ -35,14 +35,18 @@ Route::middleware(['auth', 'verified', EnsureCpfIsFilled::class])->group(functio
     Route::post('/configs/forms/prazo', [FormController::class, 'setPrazo'])->name('configs.prazo.store');
     Route::post('/configs/forms/liberar', [FormController::class, 'setLiberar'])->name('configs.liberar.store');
 // ROTAS PARA AVALIAÇÃO DA CHEFIA
-    Route::get('/api/evaluations/chefia/status', [App\Http\Controllers\EvaluationController::class, 'checkChefiaFormStatus'])->name('api.evaluations.chefia.status');
+    Route::get('/evaluations/chefia/status', [EvaluationController::class, 'checkChefiaFormStatus'])->name('evaluations.chefia.status');
     Route::get('/evaluations/chefia', [EvaluationController::class, 'showChefiaForm'])->name('evaluations.chefia.show');
     Route::post('/evaluations/chefia/{form}', [EvaluationController::class, 'storeChefiaEvaluation'])->name('evaluations.chefia.store');
 // ROTAS PARA AUTOAVALIAÇÃO
-    Route::get('/evaluations/autoavaliacao/status', [EvaluationController::class, 'checkAutoavaliacaoFormStatus'])->name('api.evaluations.autoavaliacao.status');
+    Route::get('/evaluations/autoavaliacao/status', [EvaluationController::class, 'checkAutoavaliacaoFormStatus'])->name('evaluations.autoavaliacao.status');
     Route::get('/evaluations/autoavaliacao', [EvaluationController::class, 'showAutoavaliacaoForm'])->name('evaluations.autoavaliacao.show');
     Route::post('/evaluations/autoavaliacao/{form}', [EvaluationController::class, 'storeAutoavaliacao'])->name('evaluations.autoavaliacao.store');
-// Exemplo de como ficariam as rotas
+// Rotas para o gestor visualizar a lista de seus subordinados para avaliação
+// Em routes.php
+Route::get('/evaluations/status', [EvaluationController::class, 'checkManagerEvaluationStatus'])->name('evaluations.status');    
+Route::get('/evaluations/subordinates', [EvaluationController::class, 'showSubordinatesList'])->name('evaluations.subordinates.list');
+Route::get('/evaluations/subordinates/evaluation/{evaluationRequest}', [EvaluationController::class, 'showSubordinateEvaluationForm'])->name('evaluations.subordinate.show');
     Route::post('/persons/preview', [PersonController::class, 'previewUpload'])->name('persons.preview');
     Route::post('/persons/confirm', [PersonController::class, 'confirmUpload'])->name('persons.confirm');
     Route::resource('people', PersonController::class)->except(['create', 'store', 'show', 'destroy']);

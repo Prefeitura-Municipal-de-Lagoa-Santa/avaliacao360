@@ -2,7 +2,7 @@
 import DashboardLayout from '@/layouts/DashboardLayout.vue';
 import DashboardCard from '@/components/DashboardCard.vue';
 import { Head, router } from '@inertiajs/vue3';
-import { ref } from 'vue';
+import { ref, onMounted  } from 'vue';
 import * as icons from 'lucide-vue-next';
 import {
   Dialog,
@@ -22,6 +22,17 @@ const props = defineProps<{
 // Estado para controlar o diálogo
 const isDialogOpen = ref(false);
 const dialogMessage = ref('');
+const isManagerCardVisible = ref(false);
+
+onMounted(async () => {
+  try {
+    const response = await fetch(route('evaluations.status')); // Rota para checkManagerEvaluationStatus()
+    const data = await response.json();
+    isManagerCardVisible.value = data.available;
+  } catch (error) {
+    console.error("Erro ao verificar status de gestor:", error);
+  }
+});
 
 // Função para formatar o prazo para exibição
 function formatPrazo(prazo: { term_first: string; term_end: string; } | null): string {
@@ -44,7 +55,7 @@ function goToCalendar() {
  */
 async function handleChefiaEvaluationClick() {
   try {
-    const response = await fetch(route('api.evaluations.chefia.status'));
+    const response = await fetch(route('evaluations.chefia.status'));
     const data = await response.json();
    
 
@@ -66,7 +77,7 @@ async function handleChefiaEvaluationClick() {
 // Adicione esta nova função para lidar com o clique na autoavaliação
 async function handleAutoavaliacaoClick() {
   try {
-    const response = await fetch(route('api.evaluations.autoavaliacao.status')); // ROTA ALTERADA
+    const response = await fetch(route('evaluations.autoavaliacao.status')); // ROTA ALTERADA
     const data = await response.json();
    
     if (data.available) {
@@ -86,6 +97,10 @@ function showDetailsForDeadline() {
   // Lógica para mostrar detalhes, talvez usando um modal.
   console.log('Ação de exemplo. Implementar lógica de modal ou navegação.');
   alert('Ação de exemplo. (Substitua este alert por um modal ou navegação)');
+}
+
+function handleManagerEvaluationClick() {
+  router.get(route('evaluations.subordinates.list'));
 }
 </script>
 
@@ -118,6 +133,17 @@ function showDetailsForDeadline() {
           <div ></div>
         </template>
       </DashboardCard>
+
+       <DashboardCard
+      
+      iconBgColor="#8b5cf6"
+      buttonText="Começar agora"
+      :buttonAction="handleManagerEvaluationClick"
+    >
+      <template #icon>
+        <icons.Users />
+      </template>
+    </DashboardCard>
       
       <DashboardCard
         label="Minhas Avaliações"

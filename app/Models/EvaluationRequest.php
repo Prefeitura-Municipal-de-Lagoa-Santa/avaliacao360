@@ -12,8 +12,8 @@ class EvaluationRequest extends Model
 
     protected $fillable = [
         'evaluation_id',
-        'requester_person_id', // ALTERADO
-        'requested_person_id', // ALTERADO
+        'requester_person_id', 
+        'requested_person_id', 
         'status',
     ];
 

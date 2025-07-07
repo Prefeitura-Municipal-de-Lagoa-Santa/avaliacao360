@@ -23,15 +23,18 @@ class GenerateEvaluationsJob implements ShouldQueue
     protected string $year;
     protected Form $chefiaForm;
     protected Form $servidorForm;
+    protected Form $gestorForm; 
     protected int $chefiaCreatedCount = 0;
     protected int $servidorCreatedCount = 0;
+    protected int $autoCreatedCount = 0; 
+
 
     public function __construct(string $year)
     {
         $this->year = $year;
     }
 
-    public function handle(): void
+     public function handle(): void
     {
         Log::info("======================================================================");
         Log::info("INICIANDO JOB: Geração de avaliações para o ano: {$this->year}");
@@ -39,23 +42,31 @@ class GenerateEvaluationsJob implements ShouldQueue
 
         DB::beginTransaction();
         try {
-            $this->generateSelfEvaluations($this->year);
-
+            // ALTERADO: Carregando todos os formulários necessários
+            $this->servidorForm = Form::where('type', 'servidor')->where('year', '>=', $this->year)->firstOrFail();
+            $this->gestorForm = Form::where('type', 'gestor')->where('year', '>=', $this->year)->firstOrFail();
+            // O formulário de chefia pode ser opcional dependendo da lógica
             $this->chefiaForm = Form::where('type', 'chefia')->where('year', '>=', $this->year)->firstOrFail();
-            $this->servidorForm = Form::where('type', 'gestor')->where('year', '>=', $this->year)->firstOrFail();
+
+            Log::info("[Formulário Servidor] Encontrado: ID {$this->servidorForm->id}");
+            Log::info("[Formulário Gestor] Encontrado: ID {$this->gestorForm->id}");
+            Log::info("[Formulário Chefia] Encontrado: ID {$this->chefiaForm->id}");
+            
+            // Etapa 1: Gerar todas as autoavaliações
+            $this->generateSelfEvaluations();
+
+            // Etapa 2: Gerar avaliações hierárquicas
+            Log::info("--- Etapa de Avaliações Hierárquicas (Chefia e Gestor) ---");
             $topLevelUnits = OrganizationalUnit::whereNull('parent_id')->get();
-
-            Log::info("--- Etapa de Avaliações de Chefia e Servidores (Hierárquica) ---");
-            Log::info("[Chefia] Formulário encontrado: ID {$this->chefiaForm->id}");
-            Log::info("[Gestor] Formulário encontrado: ID {$this->servidorForm->id}");
             Log::info("Unidades de topo encontradas: {$topLevelUnits->count()}");
-
+            
             foreach ($topLevelUnits as $unit) {
                 $this->processOrganizationalUnit($unit, null);
             }
-            Log::info("[Chefia] Novas avaliações de chefia criadas: {$this->chefiaCreatedCount}");
-            Log::info("[Gestor] Novas avaliações de servidores criadas: {$this->servidorCreatedCount}");
-
+            
+            Log::info("[Autoavaliação] Novas autoavaliações criadas: {$this->autoCreatedCount}");
+            Log::info("[Chefia] Novas avaliações de chefia (de cima para baixo) criadas: {$this->chefiaCreatedCount}");
+            Log::info("[Gestor] Novas avaliações de gestor (de baixo para cima) criadas: {$this->servidorCreatedCount}");
 
             DB::commit();
             Log::info("SUCESSO: Geração de avaliações para o ano {$this->year} concluída.");
@@ -66,29 +77,42 @@ class GenerateEvaluationsJob implements ShouldQueue
         }
         Log::info("======================================================================");
     }
+    // app/Jobs/GenerateEvaluationsJob.php
 
-    private function generateSelfEvaluations(string $year): void
-    {
-        Log::info("--- Etapa de Autoavaliações ---");
-        $form = Form::where('type', 'servidor')->where('year', '>=', $year)->firstOrFail();
-        Log::info("[Autoavaliação] Formulário encontrado: ID {$form->id}");
+private function generateSelfEvaluations(): void
+{
+    Log::info("--- Etapa de Autoavaliações ---");
+    
+    $people = Person::eligibleForEvaluation()->get();
+    Log::info("Pessoas elegíveis para autoavaliação encontradas: {$people->count()}");
 
-        $people = Person::eligibleForEvaluation()->get();
-        Log::info("[Autoavaliação] Pessoas elegíveis encontradas: {$people->count()}");
+    foreach ($people as $person) {
+        // Verifica se a pessoa é um gestor
+        $isManager = !is_null($person->current_function);
 
-        $createdCount = 0;
-        foreach ($people as $person) {
+        if ($isManager) {
+            // Lógica para GESTOR: autoavaliação do tipo 'autoavaliaçãoGestor' com form 'gestor'
             $evaluation = Evaluation::firstOrCreate(
-                ['form_id' => $form->id, 'evaluated_person_id' => $person->id, 'type' => 'servidor']
+                ['form_id' => $this->gestorForm->id, 'evaluated_person_id' => $person->id, 'type' => 'autoavaliaçãoGestor']
             );
-            $request = EvaluationRequest::firstOrCreate(
-                ['evaluation_id' => $evaluation->id, 'requested_person_id' => $person->id],
-                ['requester_person_id' => $person->id, 'status' => 'pending']
+        } else {
+            // Lógica para SERVIDOR: autoavaliação do tipo 'autoavaliação' com form 'servidor'
+            $evaluation = Evaluation::firstOrCreate(
+                ['form_id' => $this->servidorForm->id, 'evaluated_person_id' => $person->id, 'type' => 'autoavaliação']
             );
-            if ($request->wasRecentlyCreated) $createdCount++;
         }
-        Log::info("[Autoavaliação] Novas autoavaliações criadas: {$createdCount}");
+
+        // Cria a solicitação para a pessoa responder sua própria avaliação
+        $request = EvaluationRequest::firstOrCreate(
+            ['evaluation_id' => $evaluation->id, 'requested_person_id' => $person->id],
+            ['requester_person_id' => $person->id, 'status' => 'pending']
+        );
+        
+        if ($request->wasRecentlyCreated) {
+            $this->autoCreatedCount++;
+        }
     }
+}
 
     private function processOrganizationalUnit(OrganizationalUnit $unit, ?Person $parentBoss): void
     {
@@ -142,11 +166,10 @@ class GenerateEvaluationsJob implements ShouldQueue
         } else {
             Log::info("[Hierarquia]   -> Nenhum chefe encontrado nesta unidade.");
             if ($parentBoss) {
-                // De cima para baixo: Chefe superior avalia os membros. (Lógica existente - CORRETA)
+                // De cima para baixo: Chefe superior avalia os membros.
                 Log::info("[Hierarquia]     -> Chefe superior ({$parentBoss->name}) irá avaliar os {$members->count()} membros desta unidade.");
                 $this->createDownwardEvaluationRequests($members, $parentBoss);
 
-                // ===== INÍCIO DA NOVA LÓGICA =====
                 // De baixo para cima: Membros da unidade sem chefe avaliam o chefe superior.
                 Log::info("[Hierarquia]     -> Membros desta unidade irão avaliar seu chefe superior ({$parentBoss->name}).");
                 if($parentBoss->isEligibleForEvaluation()) {
@@ -154,7 +177,6 @@ class GenerateEvaluationsJob implements ShouldQueue
                 } else {
                     Log::info("[Hierarquia]     -> Chefe superior ({$parentBoss->name}) não é elegível para ser avaliado, pulando.");
                 }
-                // ===== FIM DA NOVA LÓGICA =====
 
             } else {
                 Log::info("[Hierarquia]     -> Unidade sem chefe e sem hierarquia superior. Ninguém para avaliar os membros.");
@@ -166,46 +188,66 @@ class GenerateEvaluationsJob implements ShouldQueue
         }
     }
 
-    private function createDownwardEvaluationRequests(Collection $evaluatedPeople, Person $evaluator): void
-    {
-        foreach ($evaluatedPeople as $evaluated) {
-            $evaluation = Evaluation::firstOrCreate(
-                ['form_id' => $this->chefiaForm->id, 'evaluated_person_id' => $evaluated->id, 'type' => 'chefia']
-            );
-            $request = EvaluationRequest::firstOrCreate(
-                ['evaluation_id' => $evaluation->id, 'requested_person_id' => $evaluator->id],
-                ['requester_person_id' => $evaluated->id, 'status' => 'pending']
-            );
-            if ($request->wasRecentlyCreated) {
-                $this->chefiaCreatedCount++;
-            }
+    // app/Jobs/GenerateEvaluationsJob.php
+
+private function createDownwardEvaluationRequests(Collection $evaluatedPeople, Person $evaluator): void
+{
+    foreach ($evaluatedPeople as $evaluated) {
+        // Verifica se o AVALIADO é um gestor
+        $isEvaluatedAManager = !is_null($evaluated->current_function);
+        
+        // CORREÇÃO: O tipo e o formulário da avaliação dependem da função do AVALIADO
+        if ($isEvaluatedAManager) {
+            // Se o avaliado é um gestor, a avaliação é do tipo 'gestor' com formulário 'gestor'
+            $formToUse = $this->gestorForm;
+            $evaluationType = 'gestor';
+        } else {
+            // Se o avaliado é um servidor, a avaliação é do tipo 'servidor' com formulário 'servidor'
+            $formToUse = $this->servidorForm;
+            $evaluationType = 'servidor';
+        }
+        
+        $evaluation = Evaluation::firstOrCreate(
+            ['form_id' => $formToUse->id, 'evaluated_person_id' => $evaluated->id, 'type' => $evaluationType]
+        );
+        
+        $request = EvaluationRequest::firstOrCreate(
+            ['evaluation_id' => $evaluation->id, 'requested_person_id' => $evaluator->id],
+            ['requester_person_id' => $evaluated->id, 'status' => 'pending']
+        );
+        
+        if ($request->wasRecentlyCreated) {
+            $this->chefiaCreatedCount++;
         }
     }
-    
-    private function createServerToBossEvaluationRequests(Person $bossToEvaluate, Collection $evaluatingMembers): void
-    {
-        $evaluation = Evaluation::firstOrCreate(
+}
+    // app/Jobs/GenerateEvaluationsJob.php
+
+private function createServerToBossEvaluationRequests(Person $bossToEvaluate, Collection $evaluatingMembers): void
+{
+    // CORREÇÃO: Todos os membros da equipe (servidores e gestores) avaliam o chefe
+    // usando o formulário e o tipo 'chefia'.
+    $evaluation = Evaluation::firstOrCreate([
+        'form_id' => $this->chefiaForm->id, // Formulário de chefia
+        'evaluated_person_id' => $bossToEvaluate->id,
+        'type' => 'chefia' // Tipo de avaliação é chefia
+    ]);
+
+    // Cria uma solicitação para cada membro da equipe
+    foreach ($evaluatingMembers as $member) {
+        $request = EvaluationRequest::firstOrCreate(
             [
-                'form_id' => $this->servidorForm->id,
-                'evaluated_person_id' => $bossToEvaluate->id,
-                'type' => 'gestor'
+                'evaluation_id' => $evaluation->id,
+                'requested_person_id' => $member->id,
+            ],
+            [
+                'requester_person_id' => $bossToEvaluate->id,
+                'status' => 'pending'
             ]
         );
-
-        foreach ($evaluatingMembers as $member) {
-            $request = EvaluationRequest::firstOrCreate(
-                [
-                    'evaluation_id' => $evaluation->id,
-                    'requested_person_id' => $member->id,
-                ],
-                [
-                    'requester_person_id' => $bossToEvaluate->id,
-                    'status' => 'pending'
-                ]
-            );
-            if ($request->wasRecentlyCreated) {
-                $this->servidorCreatedCount++;
-            }
+        if ($request->wasRecentlyCreated) {
+            $this->servidorCreatedCount++;
         }
     }
+}
 }

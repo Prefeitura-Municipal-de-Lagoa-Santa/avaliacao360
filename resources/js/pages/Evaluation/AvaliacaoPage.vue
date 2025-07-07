@@ -14,20 +14,24 @@ const props = defineProps({
     person: { // O usuário autenticado virá aqui
         type: Object, // Alterado para Object, pois se espera um único servidor
         required: true,
+    },
+    type:{
+        type: Object,
+        required: true,
     }
 });
-    console.log(props);
+    
 
 // NOVA PROPRIEDADE COMPUTADA PARA GERAR TÍTULOS DINÂMICOS
 const dynamicTitle = computed(() => {
-    const type = props.form.type; // Ex: 'autoavaliacao', 'chefia'
+    const type = props.type; // Ex: 'autoavaliacao', 'chefia'
     
     // Mapeia os tipos para os títulos desejados
     const titleMap = {
-        autoavaliacao: 'Termo de Autoavaliação',
+        autoavaliação: 'Termo de Autoavaliação do Servidor',
         autoavaliacaoGestor: 'Termo de Autoavaliação do Gestor',
         servidor: 'Termo de Avaliação do Servidor',
-        servidorGestor: 'Termo de Avaliação do Servidor em cargo de Gestor',
+        gestor: 'Termo de Avaliação do Servidor em cargo de Gestor',
         chefia: 'Termo de Avaliação do Gestor',
         // Adicione outros tipos de avaliação aqui conforme necessário
     };
