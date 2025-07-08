@@ -51,7 +51,7 @@ const submitCpf = () => {
     // Usa uma rota PATCH para atualizar o perfil do usuário logado
     form.transform(data => ({
         ...data,
-        cpf: data.cpf.replace(/\D/g, ''), // <-- ESTA É A LINHA CHAVE
+        cpf: data.cpf.replace(/\D/g, ''),
     })).put(route('profile.cpf.update'), {
         preserveScroll: true,
     });

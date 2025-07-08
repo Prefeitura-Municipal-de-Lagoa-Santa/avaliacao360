@@ -2,8 +2,6 @@
 
 namespace Database\Seeders;
 
-use App\Models\User;
-// use Illuminate\Database\Console\Seeds\WithoutModelEvents;
 use Illuminate\Database\Seeder;
 
 class DatabaseSeeder extends Seeder
@@ -13,6 +11,12 @@ class DatabaseSeeder extends Seeder
      */
     public function run(): void
     {
+        // Outras seeds se quiser...
+        $this->call([
+            \Database\Seeders\CreatePermissionsFromRoutesSeeder::class,
+            \Database\Seeders\CreateRolesSeeder::class,
+            \Database\Seeders\CreateAdminUserSeeder::class,
+        ]);
 
     }
 }

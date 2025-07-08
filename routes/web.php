@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\AdminController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\FormController;
 use App\Http\Controllers\OrganizationalChartController;
@@ -15,6 +16,8 @@ Route::redirect("/", "/dashboard");
 
 Route::middleware(['auth', 'verified', EnsureCpfIsFilled::class])->group(function () {
     Route::get('/dashboard', [DashboardController::class, 'index'])->name('dashboard');
+
+    Route::get('/admin', [AdminController::class, 'index'])->name('admin');
 
     Route::get('/evaluations', [DashboardController::class, 'evaluation'])->name('evaluations');
 
@@ -54,6 +57,9 @@ Route::get('/evaluations/subordinates/evaluation/{evaluationRequest}', [Evaluati
     require __DIR__ . '/settings.php';
 
     Route::get('/profile/cpf', [PersonController::class, 'cpf'])->name('profile.cpf');
+
+    Route::put('/admin/roles/{role}/permissions', [AdminController::class, 'updatePermissions'])
+    ->name('admin.roles.permissions.update');
 
 });
 Route::put('/profile/cpf', [PersonController::class, 'cpfUpdate'])->name('profile.cpf.update');

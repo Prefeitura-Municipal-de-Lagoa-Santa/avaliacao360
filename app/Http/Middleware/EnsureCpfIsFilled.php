@@ -19,20 +19,27 @@ class EnsureCpfIsFilled
         // Pega o usuário autenticado
         $user = Auth::user();
 
-        // Verifica se o usuário está logado e se o campo 'cpf' está vazio ou nulo.
-        if ($user && !$user->cpf) {
-            
-            // Verifica se o usuário JÁ NÃO ESTÁ na página de editar perfil ou tentando deslogar.
-            // Isso é crucial para evitar um loop de redirecionamento infinito.
+        // Se não está logado, só prossegue
+        if (!$user) {
+            return $next($request);
+        }
+
+        // Se o usuário tem alguma role com level >= 10, libera o acesso (NÃO bloqueia por CPF)
+        if (
+            $user->roles &&
+            $user->roles->contains(fn($role) => $role->level >= 10)
+        ) {
+            return $next($request);
+        }
+
+        // Se o campo 'cpf' está vazio ou nulo
+        if (!$user->cpf) {
+            // Evita loop: libera para rota de editar CPF ou logout
             if (!$request->routeIs('profile.cpf', 'logout')) {
-                
-                // Redireciona para a página de edição de perfil com uma mensagem.
-                // Troque 'profile.edit' pela rota correta da sua aplicação se for diferente.
                 return redirect()->route('profile.cpf');
             }
         }
 
-        // Se o CPF estiver preenchido ou a rota for permitida, deixa o usuário prosseguir.
         return $next($request);
     }
 }
