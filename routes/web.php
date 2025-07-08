@@ -37,12 +37,11 @@ Route::middleware(['auth', 'verified', EnsureCpfIsFilled::class])->group(functio
 // ROTAS PARA AVALIAÇÃO DA CHEFIA
     Route::get('/evaluations/chefia/status', [EvaluationController::class, 'checkChefiaFormStatus'])->name('evaluations.chefia.status');
     Route::get('/evaluations/chefia', [EvaluationController::class, 'showChefiaForm'])->name('evaluations.chefia.show');
-    Route::post('/evaluations/chefia/{form}', [EvaluationController::class, 'storeChefiaEvaluation'])->name('evaluations.chefia.store');
 // ROTAS PARA AUTOAVALIAÇÃO
     Route::get('/evaluations/autoavaliacao/status', [EvaluationController::class, 'checkAutoavaliacaoFormStatus'])->name('evaluations.autoavaliacao.status');
     Route::get('/evaluations/autoavaliacao', [EvaluationController::class, 'showAutoavaliacaoForm'])->name('evaluations.autoavaliacao.show');
-    Route::post('/evaluations/autoavaliacao/{form}', [EvaluationController::class, 'storeAutoavaliacao'])->name('evaluations.autoavaliacao.store');
-// Rotas para o gestor visualizar a lista de seus subordinados para avaliação
+// Rotas para salvar avaliação
+Route::post('/evaluations/{form}', [EvaluationController::class, 'store'])->name('evaluations.store');
 // Em routes.php
 Route::get('/evaluations/status', [EvaluationController::class, 'checkManagerEvaluationStatus'])->name('evaluations.status');    
 Route::get('/evaluations/subordinates', [EvaluationController::class, 'showSubordinatesList'])->name('evaluations.subordinates.list');

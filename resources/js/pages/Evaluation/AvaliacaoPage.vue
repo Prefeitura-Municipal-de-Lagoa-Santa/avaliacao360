@@ -18,9 +18,16 @@ const props = defineProps({
     type:{
         type: Object,
         required: true,
+    },
+
+    evaluationRequest: {
+        type: Object,
+        required: true, 
     }
 });
     
+const isSigned = ref(false);
+
 
 // NOVA PROPRIEDADE COMPUTADA PARA GERAR TÍTULOS DINÂMICOS
 const dynamicTitle = computed(() => {
@@ -43,7 +50,7 @@ const dynamicTitle = computed(() => {
 const canvas = ref<HTMLCanvasElement | null>(null);
 let signaturePad: SignaturePad | null = null;
 
-
+console.log(props);
 const evaluationForm = useForm({
     periodo_avaliado: String(props.form.year),
     nome: props.person.name || '',
@@ -51,7 +58,8 @@ const evaluationForm = useForm({
     cargo: props.person.current_function || props.person.current_position || '',
     secretaria: props.person.organizational_unit?.all_parents?.all_parents.name || props.person.organizational_unit?.name || '',
     lotacao: props.person.organizational_unit?.name || '',
-    evaluated_user_id: props.person.user_id,
+    evaluated_user_id: props.person.user_id || '',
+    evaluation_request_id: props.evaluationRequest.id,
     evidencias: '',
     answers: {},
 });
@@ -59,6 +67,7 @@ const evaluationForm = useForm({
 
 // ... (o resto do seu script <script setup> permanece o mesmo)
 onMounted(() => {
+    
     const initialAnswers = {};
     props.form.group_questions.forEach(group => {
         group.questions.forEach(question => {
@@ -66,12 +75,25 @@ onMounted(() => {
         });
     });
     evaluationForm.answers = initialAnswers;
+
+    
     if (canvas.value) {
         signaturePad = new SignaturePad(canvas.value, {
             backgroundColor: 'rgb(255, 255, 255)'
         });
+ 
+        //    Isso atualiza o estado quando o usuário solta o clique do mouse ou o toque.
+        canvas.value.addEventListener('pointerup', () => {
+            if (signaturePad) {
+                // Usamos um pequeno timeout para garantir que a biblioteca processe o traço antes de verificarmos se está vazio.
+                setTimeout(() => {
+                    isSigned.value = !signaturePad.isEmpty();
+                }, 50);
+            }
+        });
+
         window.addEventListener('resize', () => resizeCanvas());
-        resizeCanvas();
+        resizeCanvas(); // Chamada inicial para ajustar o tamanho
     }
 });
 
@@ -83,6 +105,8 @@ function resizeCanvas() {
         canvas.value.getContext("2d").scale(ratio, ratio);
         if (signaturePad) {
             signaturePad.clear();
+            // ADICIONE ESTA LINHA:
+            isSigned.value = false;
         }
     }
 }
@@ -90,6 +114,7 @@ function resizeCanvas() {
 function clearSignature() {
     if (signaturePad) {
         signaturePad.clear();
+        isSigned.value = false;
     }
 }
 
@@ -118,28 +143,28 @@ const grandTotal = computed(() => {
 
 const isFormReadyToSubmit = computed(() => {
     const allQuestionsAnswered = Object.values(evaluationForm.answers).every(answer => answer !== null);
-    if (!allQuestionsAnswered) {
-        return false;
-    }
-    const isSigned = signaturePad ? !signaturePad.isEmpty() : false;
-    if (!isSigned) {
-        return false;
-    }
-    return true;
+       
+
+    // MODIFICADO: Agora verifica a ref reativa `isSigned`
+    return allQuestionsAnswered && isSigned.value;
 });
 
-const submitEvaluation = () => {
-    // Determina a rota de submissão com base no tipo de formulário
-    const submissionRoute = props.form.type === 'autoavaliacao' 
-        ? route('evaluations.autoavaliacao.store', { form: props.form.id })
-        : route('evaluations.chefia.store', { form: props.form.id }); // Exemplo para chefia
 
+
+const submitEvaluation = () => {
+    // A rota agora é a mesma para todos os tipos de avaliação
+    const submissionRoute = route('evaluations.store', { form: props.form.id });
+    
     evaluationForm.transform(data => ({
+        // Garante que todos os campos necessários para a validação sejam enviados
+        
         answers: formattedAnswers.value,
         evaluated_user_id: data.evaluated_user_id,
+        evaluation_request_id: data.evaluation_request_id,
+        
     })).post(submissionRoute, {
         onSuccess: () => {
-            alert('Avaliação salva com sucesso!');
+            // O redirecionamento e a mensagem já são tratados pelo controller
         },
         onError: (errors) => {
             console.error('Erros de validação:', errors);
