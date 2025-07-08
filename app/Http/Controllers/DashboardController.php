@@ -5,6 +5,7 @@
 namespace App\Http\Controllers;
 use App\Models\Form;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -22,7 +23,7 @@ class DashboardController extends Controller
         $formTypes = [];
 
         if ($groupName === 'avaliacao') {
-            $formTypes = ['servidor', 'gestor' ,'chefia'];
+            $formTypes = ['servidor', 'gestor', 'chefia'];
         } elseif ($groupName === 'pdi') {
             $formTypes = ['pactuacao'];
         }
@@ -40,8 +41,12 @@ class DashboardController extends Controller
      *
      * @return \Inertia\Response
      */
-    public function index(): Response
+    public function index()
     {
+        if (!user_can('index')) {
+            return redirect()->route('evaluations')->with('error', 'Você não tem permissão para acessar essa área.');
+        }
+
         // Busca os prazos para ambos os grupos para o dashboard principal
         $prazoAvaliacao = $this->getGroupDeadline('avaliacao');
         $prazoPdi = $this->getGroupDeadline('pdi');
@@ -53,7 +58,7 @@ class DashboardController extends Controller
         ]);
     }
 
-    public function evaluation(): Response
+    public function evaluation()
     {
         // Busca o prazo apenas para o grupo de avaliação
         $prazo = $this->getGroupDeadline('avaliacao');
@@ -63,8 +68,13 @@ class DashboardController extends Controller
         ]);
     }
 
-    public function pdi(): Response
+    public function pdi()
     {
+
+        if (!user_can('pdi')) {
+            return redirect()->route('evaluations')->with('error', 'Você não tem permissão para acessar essa área.');
+        }
+
         // Busca o prazo apenas para o grupo de PDI
         $prazoPdi = $this->getGroupDeadline('pdi');
 
@@ -73,8 +83,11 @@ class DashboardController extends Controller
         ]);
     }
 
-    public function calendar(): Response
+    public function calendar()
     {
+        if (!user_can('calendar')) {
+            return redirect()->route('evaluations')->with('error', 'Você não tem permissão para acessar essa área.');
+        }
         // Busca todos os formulários que possuem um prazo definido
         $prazos = Form::whereNotNull('term_first')
             ->whereNotNull('term_end')
@@ -108,8 +121,12 @@ class DashboardController extends Controller
         ]);
     }
 
-    public function reports(): Response
+    public function reports()
     {
+        if (!user_can('reports')) {
+            return redirect()->route('evaluations')->with('error', 'Você não tem permissão para acessar essa área.');
+        }
+
         // Você pode passar dados do backend para o frontend aqui
         $dashboardStats = [
             'completedAssessments' => 12,
@@ -126,7 +143,12 @@ class DashboardController extends Controller
 
     public function configs()
     {
-        
+
+        if (!user_can('configs')) {
+            $previous = url()->previous();
+            return redirect(url()->previous())->with('error', 'Você não tem permissão para acessar essa área.');
+        }
+
         $forms = Form::with('groupQuestions.questions')->get()->keyBy(function ($form) {
             return $form->year . '_' . $form->type;
         });

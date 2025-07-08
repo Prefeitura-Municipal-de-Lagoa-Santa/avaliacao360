@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { ref, watch, onMounted } from 'vue';
 import { Link, usePage, router } from '@inertiajs/vue3';
+import { usePermissions } from '@/composables/usePermissions'
+const { can } = usePermissions()
 import {
   Dialog,
   DialogTrigger,
@@ -114,6 +116,7 @@ watch(isMobileMenuOpen, (isOpen) => {
         <div class="flex items-center justify-center gap-2 mr-50">
             <template v-for="(item) in navItems" :key="item.routeName">
               <Link
+                v-if="can(item.routeName)"
                 :href="item.href"
                 class="nav-item px-3 py-2 sm:px-4 sm:py-2 rounded-lg font-bold text-sm sm:text-base whitespace-nowrap cursor-pointer transition-all duration-200 ease-in-out"
                 :class="{

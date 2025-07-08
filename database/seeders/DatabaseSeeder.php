@@ -15,6 +15,7 @@ class DatabaseSeeder extends Seeder
         $this->call([
             \Database\Seeders\CreatePermissionsFromRoutesSeeder::class,
             \Database\Seeders\CreateRolesSeeder::class,
+            \Database\Seeders\CreateAdminUserSeeder::class,
         ]);
 
     }

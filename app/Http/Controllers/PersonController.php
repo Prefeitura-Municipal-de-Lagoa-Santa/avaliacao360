@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Person;
 use App\Models\OrganizationalUnit;
+use App\Models\Role;
 use Illuminate\Http\Request;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\Auth;
@@ -519,10 +520,19 @@ class PersonController extends Controller
     public function cpfUpdate(Request $request)
     {
         $user = Auth::user();
+
         $validated = $request->validate([
             'cpf' => ['required', 'string', 'digits:11'],
         ]);
+
         $user->forceFill(['cpf' => $validated['cpf']])->save();
+
+        // Atribui a role 'Servidor' ao usuário (se ainda não tiver)
+        $role = Role::firstOrCreate(['name' => 'Servidor'], ['level' => 1]);
+        if (!$user->roles()->where('name', 'Servidor')->exists()) {
+            $user->roles()->attach($role->id);
+        }
+
         return Redirect::route('dashboard')->with('success', 'CPF atualizado com sucesso!');
     }
 }

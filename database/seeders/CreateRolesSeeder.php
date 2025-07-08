@@ -11,9 +11,10 @@ class CreateRolesSeeder extends Seeder
     public function run(): void
     {
         // Cria as roles com o campo level
-        $admin     = Role::updateOrCreate(['name' => 'Admin'], ['level' => 100]);
-        $rh        = Role::updateOrCreate(['name' => 'RH'], ['level' => 50]);
-        $comissao  = Role::updateOrCreate(['name' => 'Comissão'], ['level' => 30]);
+        $admin     = Role::updateOrCreate(['name' => 'Admin'], ['level' => 10]);
+        $rh        = Role::updateOrCreate(['name' => 'RH'], ['level' => 5]);
+        $comissao  = Role::updateOrCreate(['name' => 'Comissão'], ['level' => 3]);
+        $servidor  = Role::updateOrCreate(['name' => 'Servidor'], ['level' => 1]);
 
         // Busca todas as permissões
         $allPermissions = Permission::all()->pluck('id')->toArray();
@@ -21,7 +22,14 @@ class CreateRolesSeeder extends Seeder
         // Admin recebe todas
         $admin->permissions()->sync($allPermissions);
 
-        // (Opcional) RH e Comissão - ver comentários no seeder anterior
+        // Servidor recebe apenas algumas permissões específicas
+        $servidorPermissions = Permission::whereIn('name', [
+            'evaluations',
+            'pdi',
+            'calendar',
+        ])->pluck('id')->toArray();
+
+        $servidor->permissions()->sync($servidorPermissions);
 
         $this->command->info("Roles criadas e permissões atribuídas!");
     }

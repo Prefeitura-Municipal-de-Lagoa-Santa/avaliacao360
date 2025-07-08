@@ -12,6 +12,11 @@ class AdminController extends Controller
      */
     public function index()
     {
+        if (!user_can('admin')) {
+            $previous = url()->previous();
+            return redirect(url()->previous())->with('error', 'Você não tem permissão para acessar essa área.');
+        }
+
         $roles = Role::with('permissions')->get();
         $permissions = Permission::all();
         return inertia('Admin/Index', [
