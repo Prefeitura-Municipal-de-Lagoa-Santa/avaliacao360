@@ -90,11 +90,11 @@ class EvaluationController extends Controller
         }
 
         // Se o formulário existir, continua normalmente
-        $users = User::where('id', '=', auth()->id())->first(['id', 'name', 'cpf']);
+        $user = User::where('id', '=', auth()->id())->first(['id', 'name', 'cpf']);
         $cpf = '06623986618';
 
         $Person = Person::with('organizationalUnit.allParents')
-            ->where('cpf', $cpf)
+            ->where('cpf', $user->cpf)
             ->first();
 
         //dd($Person);
@@ -129,52 +129,58 @@ class EvaluationController extends Controller
             'form' => $chefiaForm,
             'person' => $personManager,
             'type' => $type,
+            'evaluationRequest' => $pendingEvaluations,
         ]);
 
     }
 
     /**
-     * Salva as respostas da avaliação da chefia.
+     * Salva as respostas de qualquer tipo de avaliação.
      */
-    public function storeChefiaEvaluation(Request $request, Form $form)
+    public function store(Request $request, Form $form)
     {
-        // Valida os dados recebidos do formulário Vue.js
+       
+        // 1. Validação dos dados recebidos
         $validated = $request->validate([
             'answers' => 'required|array',
             'answers.*.question_id' => 'required|integer|exists:questions,id',
             'answers.*.score' => 'required|integer|min:0|max:100',
-            'evaluated_user_id' => 'required|integer|exists:users,id'
+            'evaluated_user_id' => 'required|integer|exists:users,id',
+            'evaluation_request_id' => 'required|integer|exists:evaluation_requests,id'
         ]);
-
-        // Utiliza uma transação para garantir que todas as operações no banco de dados sejam bem-sucedidas.
-        DB::transaction(function () use ($validated, $form) {
-            // 1. Cria um novo registo de avaliação
-            //    A chamada foi corrigida para corresponder às colunas da sua tabela 'evaluations'
+        dd($validated);
+        DB::transaction(function () use ($validated, $form, $request) {
+            // 2. Cria o registro da avaliação
             $evaluation = Evaluation::create([
-                'type' => 'chefia', // Adicionada a coluna 'type', que estava em falta.
+                'type' => $form->type, // Pega o tipo ('chefia', 'servidor', 'autoavaliação') do formulário
                 'form_id' => $form->id,
                 'evaluated_user_id' => $validated['evaluated_user_id'],
-                // As colunas 'evaluator_user_id', 'status' e 'evaluation_date' foram removidas
-                // porque não existem na sua migração atual.
+                'evaluator_user_id' => auth()->id(), // Pega o ID do usuário que está logado e salvando
+                'evaluation_date' => now(),
+                'status' => 'completed',
             ]);
 
-            // 2. Salva cada resposta na tabela 'answers'
+            // 3. Salva cada resposta individualmente
             foreach ($validated['answers'] as $answerData) {
                 Answer::create([
                     'evaluation_id' => $evaluation->id,
                     'question_id' => $answerData['question_id'],
-                    'response_content' => $answerData['score'], // Guarda a pontuação
+                    'response_content' => $answerData['score'],
                     'subject_user_id' => $validated['evaluated_user_id'],
                 ]);
             }
+            
+            // 4. Atualiza o status da solicitação de avaliação para 'completed'
+            $evaluationRequest = EvaluationRequest::find($validated['evaluation_request_id']);
+            if ($evaluationRequest) {
+                $evaluationRequest->status = 'completed';
+                $evaluationRequest->save();
+            }
         });
 
-        // Redireciona para a página de avaliações com uma mensagem de sucesso.
-        // O nome da rota foi corrigido de 'evaluations.index' para 'evaluations'.
+        // 5. Redireciona de volta com mensagem de sucesso
         return redirect()->route('evaluations')->with('success', 'Avaliação salva com sucesso!');
     }
-
-    // Adicione este método ao seu EvaluationController.php
 
     /**
      * Verifica a disponibilidade do formulário de autoavaliação, incluindo a regra de prazo.
@@ -272,6 +278,7 @@ class EvaluationController extends Controller
                 'form' => $autoavaliacaoForm,
                 'person' => $person,
                 'type' => $type,
+                'evaluationRequest' => $pendingRequest,
             ]);
         } else {
             // 4. Se não houver solicitação pendente, redireciona com a mensagem de que já foi preenchida.
@@ -285,13 +292,17 @@ class EvaluationController extends Controller
     public function checkManagerEvaluationStatus()
     {
         // 1. Pega os dados da pessoa logada
-        $manager = Person::where('user_id', operator: auth()->id())->first();
+        $user = auth()->user();
 
+        $user->cpf = '10798101610';
+        $manager = Person::where('cpf', operator: $user->cpf)->first();
+        
         // 2. Se não for uma pessoa ou não tiver cargo de chefia, não está disponível
         if (!$manager || is_null($manager->current_function)) {
             return response()->json(['available' => false]);
+        
         }
-
+    
         // 3. Verifica se existem solicitações PENDENTES onde este gestor é o AVALIADOR
         $hasPending = EvaluationRequest::where('requested_person_id', $manager->id)
             ->where('status', 'pending')
@@ -300,9 +311,9 @@ class EvaluationController extends Controller
                 $query->whereIn('type', ['servidor', 'gestor']);
             })
             ->exists(); // 'exists()' é mais eficiente que 'count()' aqui
-
-        return response()->json(['available' => $hasPending]);
-    }
+            
+            return response()->json(['available' => $hasPending]); 
+    } 
 
     /**
      * EXIBIÇÃO: Mostra a lista de subordinados para o gestor avaliar.

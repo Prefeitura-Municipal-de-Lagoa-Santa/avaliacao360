@@ -29,6 +29,7 @@ onMounted(async () => {
     const response = await fetch(route('evaluations.status')); // Rota para checkManagerEvaluationStatus()
     const data = await response.json();
     isManagerCardVisible.value = data.available;
+   
   } catch (error) {
     console.error("Erro ao verificar status de gestor:", error);
   }
@@ -135,7 +136,8 @@ function handleManagerEvaluationClick() {
       </DashboardCard>
 
        <DashboardCard
-      
+      v-if="isManagerCardVisible"
+      label="Avaliar Equipe"
       iconBgColor="#8b5cf6"
       buttonText="Começar agora"
       :buttonAction="handleManagerEvaluationClick"
