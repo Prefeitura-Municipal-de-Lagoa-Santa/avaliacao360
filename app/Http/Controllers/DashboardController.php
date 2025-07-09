@@ -43,8 +43,8 @@ class DashboardController extends Controller
      */
     public function index()
     {
-        if (!user_can('index')) {
-            return redirect()->route('evaluations')->with('error', 'Você não tem permissão para acessar essa área.');
+        if (!user_can('dashboard')) {
+            return redirect()->route('evaluations');
         }
 
         // Busca os prazos para ambos os grupos para o dashboard principal
