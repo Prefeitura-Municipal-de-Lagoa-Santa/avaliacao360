@@ -139,6 +139,7 @@ class EvaluationController extends Controller
      */
     public function store(Request $request, Form $form)
     {
+        dd($request->all());
        
         // 1. Validação dos dados recebidos
         $validated = $request->validate([
@@ -166,7 +167,7 @@ class EvaluationController extends Controller
                     'evaluation_id' => $evaluation->id,
                     'question_id' => $answerData['question_id'],
                     'response_content' => $answerData['score'],
-                    'subject_user_id' => $validated['evaluated_user_id'],
+                    'subject_person_id' => $validated['evaluated_user_id'],
                 ]);
             }
             

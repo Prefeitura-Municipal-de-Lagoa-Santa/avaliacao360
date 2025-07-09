@@ -62,6 +62,7 @@ const evaluationForm = useForm({
     evaluation_request_id: props.evaluationRequest.id,
     evidencias: '',
     answers: {},
+    assinatura_base64: '',
 });
 
 
@@ -152,19 +153,24 @@ const isFormReadyToSubmit = computed(() => {
 
 
 const submitEvaluation = () => {
-    // A rota agora é a mesma para todos os tipos de avaliação
+    if (signaturePad && !signaturePad.isEmpty()) {
+        evaluationForm.assinatura_base64 = signaturePad.toDataURL(); // ← captura base64
+    } else {
+        alert('Por favor, assine antes de enviar.');
+        return;
+    }
+
     const submissionRoute = route('evaluations.store', { form: props.form.id });
-    
+
     evaluationForm.transform(data => ({
-        // Garante que todos os campos necessários para a validação sejam enviados
-        
         answers: formattedAnswers.value,
         evaluated_user_id: data.evaluated_user_id,
         evaluation_request_id: data.evaluation_request_id,
-        
+        evidencias: data.evidencias,
+        assinatura_base64: data.assinatura_base64, // ← inclui no payload
     })).post(submissionRoute, {
         onSuccess: () => {
-            // O redirecionamento e a mensagem já são tratados pelo controller
+            // Mensagem ou redirecionamento já tratado
         },
         onError: (errors) => {
             console.error('Erros de validação:', errors);
@@ -172,6 +178,7 @@ const submitEvaluation = () => {
         }
     });
 };
+
 
 const formattedDate = computed(() => {
     return new Date().toLocaleDateString('pt-BR', {
