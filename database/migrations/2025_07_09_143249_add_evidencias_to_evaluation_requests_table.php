@@ -12,7 +12,7 @@ return new class extends Migration
     public function up(): void
     {
         Schema::table('evaluation_requests', function (Blueprint $table) {
-            $table->text('evidencias')->nullable()->after('alguma_coluna_existente');
+            $table->text('evidencias')->nullable()->after('status');
             // Substitua 'alguma_coluna_existente' pelo nome de uma coluna que já exista para ordenar a posição, 
             // ou remova o after se não se importar com a ordem.
         });

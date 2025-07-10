@@ -19,7 +19,7 @@ RUN apt-get update && apt-get install -y \
     # Instala o Node.js e o npm
     nodejs \
     # Instala o PHP e suas extensões
-    php8.3-fpm php8.3-mysql php8.3-mbstring \
+    php8.3-fpm php8.3-mysql php8.3-mbstring php8.3-ldap \
     php8.3-xml php8.3-gd php8.3-curl php8.3-zip php8.3-bcmath \
     # Limpa o cache para manter a imagem menor
     && apt-get clean && rm -rf /var/lib/apt/lists/*
@@ -45,6 +45,7 @@ RUN rm -f /etc/nginx/sites-enabled/default && \
 
 # Ajusta permissões das pastas do Laravel
 RUN chown -R www-data:www-data /var/www/html/storage /var/www/html/bootstrap/cache
+RUN chmod -R 775 /var/www/html/storage /var/www/html/bootstrap/cache
 
 # Expõe a porta 80, que o Nginx usará
 EXPOSE 80
