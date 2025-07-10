@@ -8,6 +8,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Inertia\Inertia;
 use Inertia\Response;
+use App\Models\EvaluationRequest;
 
 class DashboardController extends Controller
 {
@@ -42,19 +43,41 @@ class DashboardController extends Controller
      * @return \Inertia\Response
      */
     public function index()
-    {
+     {
         if (!user_can('dashboard')) {
             return redirect()->route('evaluations');
         }
 
-        // Busca os prazos para ambos os grupos para o dashboard principal
+        // Busca os prazos
         $prazoAvaliacao = $this->getGroupDeadline('avaliacao');
         $prazoPdi = $this->getGroupDeadline('pdi');
+
+        // --- INÍCIO DA ALTERAÇÃO ---
+
+        // 2. Calcule os status da avaliação
+        $completedAssessments = EvaluationRequest::where('status', 'completed')->count();
+        $pendingAssessments = EvaluationRequest::where('status', 'pending')->count();
+        $totalAssessments = $completedAssessments + $pendingAssessments;
+
+        // 3. Calcule o progresso geral, tratando a divisão por zero
+        $overallProgress = 0;
+        if ($totalAssessments > 0) {
+            $overallProgress = round(($completedAssessments / $totalAssessments) * 100);
+        }
+
+        // 4. Crie um array com os dados para o dashboard
+        $dashboardStats = [
+            'completedAssessments' => $completedAssessments,
+            'pendingAssessments'   => $pendingAssessments,
+            'overallProgress'      => $overallProgress . '%', // Formata como string de porcentagem
+        ];
+
+        // --- FIM DA ALTERAÇÃO ---
 
         return Inertia::render('Dashboard/Index', [
             'prazoAvaliacao' => $prazoAvaliacao,
             'prazoPdi' => $prazoPdi,
-            // Outros dados para o Index, se houver...
+            'dashboardStats' => $dashboardStats, // 5. Passe os dados para a view
         ]);
     }
 

@@ -566,7 +566,7 @@
 .btn-gray { background-color: #e5e7eb; color: #374151; border-color: #d1d5db; }
 .btn-gray:hover:not(:disabled) { background-color: #d1d5db; }
 .btn-blue { background-color: #3b82f6; color: white; }
-.btn-blue:hover:not(:disabled) { background-color: #2563eb; }
+.btn-blue:hover:not(:disabled) { background-color: #b7cff7; }
 .btn-green { background-color: #22c55e; color: white; }
 .btn-green:hover:not(:disabled) { background-color: #16a34a; }
 .btn-gray:disabled, .btn-blue:disabled, .btn-green:disabled {
