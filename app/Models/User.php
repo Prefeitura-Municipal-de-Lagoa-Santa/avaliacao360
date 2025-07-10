@@ -24,6 +24,7 @@ class User extends Authenticatable implements LdapAuthenticatable
         'username',
         'email',
         'password',
+        'cpf',
     ];
 
     /**
