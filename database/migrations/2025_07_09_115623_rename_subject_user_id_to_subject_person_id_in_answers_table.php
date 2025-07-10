@@ -21,7 +21,7 @@ return new class extends Migration
         // Agora recria a foreign key apontando para users (ou para a tabela correta)
         Schema::table('answers', function (Blueprint $table) {
             $table->foreign('subject_person_id')
-                  ->references('id')->on('users')
+                  ->references('id')->on('people')
                   ->onDelete('cascade');
         });
     }

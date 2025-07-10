@@ -15,6 +15,7 @@ class Answer extends Model
         'evaluation_id',
         'response_content',
         'subject_person_id',
+        'score',
     ];
 
     /**

@@ -14,6 +14,9 @@ class EvaluationRequest extends Model
         'evaluation_id',
         'requester_person_id', 
         'requested_person_id', 
+        'requested_person_id', 
+        'evidencias',
+        'assinatura_base64',
         'status',
     ];
 

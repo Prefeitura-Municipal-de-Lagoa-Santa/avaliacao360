@@ -6,17 +6,72 @@ use App\Models\Form;
 use App\Models\Person;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
-use Inertia\Response;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\DB;
 use App\Models\Evaluation;
 use App\Models\EvaluationRequest;
-use App\Models\Answer;
 use App\Models\User;
-use App\Models\OrganizationalUnit;
 
 
 class EvaluationController extends Controller
 {
+    /**
+     * Salva as respostas de qualquer tipo de avaliação.
+     */
+    public function store(Request $request)
+    {
+        $data = $request->validate([
+            'answers' => 'required|array',
+            'answers.*.question_id' => 'required|integer|exists:questions,id',
+            'answers.*.score' => 'required|integer|min:0|max:100',
+            'evaluation_request_id' => 'required|exists:evaluation_requests,id',
+            'evidencias' => 'nullable|string',
+            'assinatura_base64' => 'required|string',
+        ]);
+
+        DB::beginTransaction();
+        try {
+            $evaluationRequest = EvaluationRequest::findOrFail($data['evaluation_request_id']);
+
+            // Cria a avaliação
+            $evaluation = Evaluation::create([
+                'type' => $evaluationRequest->evaluation->type,
+                'form_id' => $evaluationRequest->evaluation->form_id,
+                'evaluated_person_id' => $evaluationRequest->requested_person_id,
+                'evaluation_request_id' => $evaluationRequest->id,
+            ]);
+
+            // Salva as respostas, incluindo subject_person_id
+            foreach ($data['answers'] as $answer) {
+                $evaluation->answers()->create([
+                    'question_id' => $answer['question_id'],
+                    'score' => $answer['score'],
+                    'subject_person_id' => $evaluationRequest->requested_person_id,
+                ]);
+            }
+
+            // Atualiza evidências e status na EvaluationRequest
+            $evaluationRequest->update([
+                'evidencias' => $data['evidencias'],
+                'assinatura_base64' => $data['assinatura_base64'],
+                'status' => 'completed',
+            ]);
+
+
+            DB::commit();
+
+            return redirect()->route('evaluations.index')->with('success', 'Avaliação salva com sucesso!');
+        } catch (\Exception $e) {
+            DB::rollBack();
+            Log::error('Erro ao salvar avaliação', [
+                'user_id' => auth()->id(),
+                'request_data' => $request->all(),
+                'exception' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+            ]);
+            return back()->withErrors(['error' => 'Erro ao salvar avaliação. O erro foi registrado para análise.']);
+        }
+    }
 
     /**
      * Verifica a disponibilidade do formulário de chefia, incluindo a regra de prazo.
@@ -66,7 +121,6 @@ class EvaluationController extends Controller
         // 4. Se todas as verificações passarem, o formulário está disponível
         return response()->json(['available' => true]);
     }
-
 
     /**
      * Exibe o formulário de avaliação da chefia.
@@ -134,54 +188,8 @@ class EvaluationController extends Controller
 
     }
 
-    /**
-     * Salva as respostas de qualquer tipo de avaliação.
-     */
-    public function store(Request $request, Form $form)
-    {
-        dd($request->all());
-       
-        // 1. Validação dos dados recebidos
-        $validated = $request->validate([
-            'answers' => 'required|array',
-            'answers.*.question_id' => 'required|integer|exists:questions,id',
-            'answers.*.score' => 'required|integer|min:0|max:100',
-            'evaluated_user_id' => 'required|integer|exists:users,id',
-            'evaluation_request_id' => 'required|integer|exists:evaluation_requests,id'
-        ]);
-        dd($validated);
-        DB::transaction(function () use ($validated, $form, $request) {
-            // 2. Cria o registro da avaliação
-            $evaluation = Evaluation::create([
-                'type' => $form->type, // Pega o tipo ('chefia', 'servidor', 'autoavaliação') do formulário
-                'form_id' => $form->id,
-                'evaluated_user_id' => $validated['evaluated_user_id'],
-                'evaluator_user_id' => auth()->id(), // Pega o ID do usuário que está logado e salvando
-                'evaluation_date' => now(),
-                'status' => 'completed',
-            ]);
 
-            // 3. Salva cada resposta individualmente
-            foreach ($validated['answers'] as $answerData) {
-                Answer::create([
-                    'evaluation_id' => $evaluation->id,
-                    'question_id' => $answerData['question_id'],
-                    'response_content' => $answerData['score'],
-                    'subject_person_id' => $validated['evaluated_user_id'],
-                ]);
-            }
-            
-            // 4. Atualiza o status da solicitação de avaliação para 'completed'
-            $evaluationRequest = EvaluationRequest::find($validated['evaluation_request_id']);
-            if ($evaluationRequest) {
-                $evaluationRequest->status = 'completed';
-                $evaluationRequest->save();
-            }
-        });
 
-        // 5. Redireciona de volta com mensagem de sucesso
-        return redirect()->route('evaluations')->with('success', 'Avaliação salva com sucesso!');
-    }
 
     /**
      * Verifica a disponibilidade do formulário de autoavaliação, incluindo a regra de prazo.
@@ -227,6 +235,8 @@ class EvaluationController extends Controller
                 'message' => "Fora do prazo. O formulário está disponível para preenchimento apenas entre {$startDate} e {$endDate}."
             ]);
         }
+
+
 
         // 4. Se todas as verificações passarem, o formulário está disponível
         return response()->json(['available' => true]);
@@ -297,13 +307,13 @@ class EvaluationController extends Controller
 
         $user->cpf = '10798101610';
         $manager = Person::where('cpf', operator: $user->cpf)->first();
-        
+
         // 2. Se não for uma pessoa ou não tiver cargo de chefia, não está disponível
         if (!$manager || is_null($manager->current_function)) {
             return response()->json(['available' => false]);
-        
+
         }
-    
+
         // 3. Verifica se existem solicitações PENDENTES onde este gestor é o AVALIADOR
         $hasPending = EvaluationRequest::where('requested_person_id', $manager->id)
             ->where('status', 'pending')
@@ -312,9 +322,9 @@ class EvaluationController extends Controller
                 $query->whereIn('type', ['servidor', 'gestor']);
             })
             ->exists(); // 'exists()' é mais eficiente que 'count()' aqui
-            
-            return response()->json(['available' => $hasPending]); 
-    } 
+
+        return response()->json(['available' => $hasPending]);
+    }
 
     /**
      * EXIBIÇÃO: Mostra a lista de subordinados para o gestor avaliar.
@@ -327,9 +337,9 @@ class EvaluationController extends Controller
         $manager = Person::where('cpf', operator: $user->cpf)->first();
 
         if (!$manager) {
-        return redirect()->route('dashboard')
-            ->with('error', 'Seu registro de gestor não foi encontrado.');
-    }
+            return redirect()->route('dashboard')
+                ->with('error', 'Seu registro de gestor não foi encontrado.');
+        }
 
         // Busca TODAS as solicitações (pendentes e concluídas) onde o gestor avalia a equipe
         $evaluationRequests = EvaluationRequest::where('requested_person_id', $manager->id)
@@ -342,7 +352,7 @@ class EvaluationController extends Controller
             ])
             ->get();
 
-              
+
         // Renderiza uma NOVA PÁGINA VUE, passando a lista de solicitações
         return Inertia::render('Evaluation/SubordinatesList', [
             'requests' => $evaluationRequests,
@@ -355,7 +365,7 @@ class EvaluationController extends Controller
      */
     public function showSubordinateEvaluationForm(EvaluationRequest $evaluationRequest)
     {
-    
+
 
         // Carrega todos os dados necessários
         $evaluationRequest->load([
