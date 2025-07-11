@@ -40,7 +40,7 @@ class FormController extends Controller
     {
         // Valida se o tipo e ano foram passados na URL
         $validated = $request->validate([
-            'type' => ['required', Rule::in(['gestor', 'chefia', 'servidor', 'pactuacao'])],
+            'type' => ['required', Rule::in(['gestor', 'chefia', 'servidor', 'comissionado', 'pactuacao'])],
             'year' => 'required|digits:4',
         ]);
 
@@ -126,7 +126,7 @@ class FormController extends Controller
 
     // 2. Definir para quais tipos de formulário a regra se aplica
     $formTypes = $validated['group'] === 'avaliacao'
-        ? ['gestor', 'chefia', 'servidor'] // Incluído 'servidor'
+        ? ['gestor', 'chefia', 'servidor', 'comissionado'] // Incluído 'servidor'
         : ['pactuacao', 'metas'];
 
     // 3. Atualizar todos os formulários do grupo de uma só vez
@@ -148,7 +148,7 @@ public function setLiberar(Request $request)
     ]);
 
     $formTypes = $validated['group'] === 'avaliacao'
-        ? ['gestor', 'chefia', 'servidor']
+        ? ['gestor', 'chefia', 'servidor', 'comissionado']
         : ['pactuacao'];
 
     Form::where('year', $validated['year'])
@@ -166,7 +166,7 @@ public function setLiberar(Request $request)
         $validatedData = $request->validate([
             'title' => 'required|string|max:100',
             'year' => 'required|digits:4',
-            'type' => ['required', 'string', Rule::in(['gestor', 'chefia', 'servidor', 'pactuacao'])],
+            'type' => ['required', 'string', Rule::in(['gestor', 'chefia', 'comissionado', 'servidor', 'pactuacao'])],
             'groups' => 'required|array|min:1',
             'groups.*.name' => 'required|string|max:150',
             'groups.*.weight' => 'required|numeric|min:0', // Peso do grupo

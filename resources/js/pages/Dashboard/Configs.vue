@@ -70,11 +70,11 @@ const formsForSelectedYear = computed(() => {
   return Object.values(props.forms).filter(form => String(form.year) === selectedYear.value);
 });
 
-const isAvaliacaoGroupReleased = computed(() => formsForSelectedYear.value.filter(form => ['servidor', 'gestor', 'chefia'].includes(form.type)).some(form => form.release));
+const isAvaliacaoGroupReleased = computed(() => formsForSelectedYear.value.filter(form => ['servidor', 'gestor', 'chefia', 'comissionado'].includes(form.type)).some(form => form.release));
 const isPdiGroupReleased = computed(() => formsForSelectedYear.value.filter(form => ['pactuacao'].includes(form.type)).some(form => form.release));
 
 const avaliacaoReleaseData = computed(() => {
-  const f = formsForSelectedYear.value.find(form => ['servidor', 'gestor', 'chefia'].includes(form.type) && form.release_data);
+  const f = formsForSelectedYear.value.find(form => ['servidor', 'gestor', 'chefia', 'comissionado'].includes(form.type) && form.release_data);
   return f ? new Date(f.release_data!).toLocaleDateString('pt-BR') : 'Data não encontrada';
 });
 
@@ -88,7 +88,7 @@ const getFormForType = (type: string) => props.forms[`${selectedYear.value}_${ty
 
 function openPrazoModal(group: 'avaliacao' | 'pdi') {
   prazoGroup.value = group;
-  const formTypes = group === 'avaliacao' ? ['servidor', 'gestor', 'chefia'] : ['pactuacao'];
+  const formTypes = group === 'avaliacao' ? ['servidor', 'gestor', 'chefia', 'comissionado'] : ['pactuacao'];
   const existingForm = formsForSelectedYear.value.find(f => formTypes.includes(f.type) && f.term_first && f.term_end);
 
   if (existingForm) {
@@ -302,6 +302,20 @@ onUnmounted(() => {
                     <span>Editar</span> <component :is="icons.FilePenLineIcon" class="size-5" />
                 </button>
                 <button v-else-if="!getFormForType('chefia')" @click="handleCreate('chefia')" class="btn btn-create">
+                    <span>Criar</span> <component :is="icons.PlusIcon" class="size-5" />
+                </button>
+            </div>
+          </div>
+          <div class="setting-item">
+            <label>Formulário IV - Comissionado:</label>
+            <div class="button-group">
+                 <button v-if="getFormForType('comissionado')" @click="handleView(getFormForType('comissionado').id)" class="btn btn-blue">
+                    <span>Visualizar</span> <component :is="icons.EyeIcon" class="size-5" />
+                </button>
+                <button v-if="getFormForType('comissionado') && !isAvaliacaoGroupReleased" @click="handleEdit(getFormForType('comissionado').id)" class="btn btn-yellow">
+                    <span>Editar</span> <component :is="icons.FilePenLineIcon" class="size-5" />
+                </button>
+                <button v-else-if="!getFormForType('comissionado')" @click="handleCreate('comissionado')" class="btn btn-create">
                     <span>Criar</span> <component :is="icons.PlusIcon" class="size-5" />
                 </button>
             </div>
