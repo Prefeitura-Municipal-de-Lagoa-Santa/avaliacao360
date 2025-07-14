@@ -25,6 +25,7 @@ class Person extends Model
         'current_function',
         'organizational_unit_id',
         'user_id',
+        'direct_manager_id',
     ];
 
     protected $casts = [
@@ -56,18 +57,18 @@ class Person extends Model
         $probationaryCutoffDate = Carbon::now()->subYears(3);
 
         $query->where('functional_status', 'TRABALHANDO')
-              ->where(function (Builder $subQuery) use ($probationaryCutoffDate) {
-                  // A pessoa é elegível se:
-                  // 1. O tipo de vínculo NÃO ESTÁ na lista de probatório.
-                  $subQuery->whereNotIn('bond_type', ['1 - Efetivo', '8 - Concursado'])
-                           // OU 2. Já passou do período probatório de 3 anos.
-                           ->orWhere('admission_date', '<=', $probationaryCutoffDate)
-                           // OU 3. TEM uma função de chefia (mesmo que esteja em probatório).
-                           ->orWhere(function(Builder $bossQuery) {
-                               $bossQuery->whereNotNull('current_function')
-                                         ->orWhere('current_position', '380-SECRETARIO MUNICIPAL');
-                           });
-              });
+            ->where(function (Builder $subQuery) use ($probationaryCutoffDate) {
+                // A pessoa é elegível se:
+                // 1. O tipo de vínculo NÃO ESTÁ na lista de probatório.
+                $subQuery->whereNotIn('bond_type', ['1 - Efetivo', '8 - Concursado'])
+                    // OU 2. Já passou do período probatório de 3 anos.
+                    ->orWhere('admission_date', '<=', $probationaryCutoffDate)
+                    // OU 3. TEM uma função de chefia (mesmo que esteja em probatório).
+                    ->orWhere(function (Builder $bossQuery) {
+                    $bossQuery->whereNotNull('current_function')
+                        ->orWhere('current_position', '380-SECRETARIO MUNICIPAL');
+                });
+            });
     }
 
     /**
@@ -85,7 +86,7 @@ class Person extends Model
         if (!is_null($this->current_function) || $this->current_position === '380-SECRETARIO MUNICIPAL') {
             return true;
         }
-        
+
         // Regra 3: Verifica o estágio probatório.
         $probationaryCutoffDate = Carbon::now()->subYears(3);
         $isProbationaryBond = in_array($this->bond_type, ['1 - Efetivo', '8 - Concursado']);
@@ -99,4 +100,23 @@ class Person extends Model
         // Se passou por todas as verificações, é elegível.
         return true;
     }
+
+    // Relacionamento com o chefe direto
+    public function directManager()
+    {
+        return $this->belongsTo(Person::class, 'direct_manager_id');
+    }
+
+    // Relacionamento para listar todos os subordinados dessa pessoa
+    public function subordinates()
+    {
+        return $this->hasMany(Person::class, 'direct_manager_id');
+    }
+
+    public function jobFunction()
+    {
+        return $this->belongsTo(JobFunction::class);
+    }
+
+
 }

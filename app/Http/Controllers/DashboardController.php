@@ -125,8 +125,6 @@ class DashboardController extends Controller
             })
             ->exists();
 
-        dd($selfEvaluationVisible, $bossEvaluationVisible, $teamEvaluationVisible, $people->id);
-
         return Inertia::render('Dashboard/Evaluation', [
             'prazo' => $prazo,
             'selfEvaluationVisible' => $selfEvaluationVisible,
