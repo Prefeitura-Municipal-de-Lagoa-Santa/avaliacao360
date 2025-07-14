@@ -422,16 +422,18 @@ class PersonController extends Controller
         }
 
         $jobFunctionId = null;
-        if ($functionName) {
+        if ($functionCode) {
             $jobFunction = \App\Models\JobFunction::firstOrCreate(
-                ['code' => $functionCode, 'name' => $functionName],
+                ['code' => $functionCode], // só pelo código
                 [
+                    'name' => $functionName,
                     'type' => 'servidor',      // ou ajuste conforme sua regra
-                    'is_manager' => true      // ou ajuste conforme sua regra
+                    'is_manager' => false      // ou ajuste conforme sua regra
                 ]
             );
             $jobFunctionId = $jobFunction->id;
         }
+
 
         return [
             'name' => trim($data['NOME'] ?? ''),
