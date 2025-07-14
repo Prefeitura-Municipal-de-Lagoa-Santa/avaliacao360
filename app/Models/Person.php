@@ -22,10 +22,12 @@ class Person extends Model
         'admission_date',
         'dismissal_date',
         'current_position',
-        'current_function',
         'organizational_unit_id',
         'user_id',
         'direct_manager_id',
+        'sala',
+        'descricao_sala',
+        'job_function_id',
     ];
 
     protected $casts = [
@@ -115,8 +117,7 @@ class Person extends Model
 
     public function jobFunction()
     {
-        return $this->belongsTo(JobFunction::class);
+        return $this->belongsTo(JobFunction::class, 'job_function_id');
     }
-
 
 }

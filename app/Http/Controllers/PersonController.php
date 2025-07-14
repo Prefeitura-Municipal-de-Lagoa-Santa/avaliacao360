@@ -6,7 +6,6 @@ use App\Models\Person;
 use App\Models\OrganizationalUnit;
 use App\Models\Role;
 use Illuminate\Http\Request;
-use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Redirect;
@@ -16,6 +15,8 @@ use Carbon\Carbon;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
+use App\Jobs\PreviewPersonCsvJob;
+
 
 class PersonController extends Controller
 {
@@ -145,74 +146,31 @@ class PersonController extends Controller
         try {
             $file = $request->file('file');
             $tempFileName = 'person_upload_' . uniqid() . '.' . $file->getClientOriginalExtension();
-            $tempFilePath = $file->storeAs('temp_uploads', $tempFileName, $this->tempDisk);
 
-            $rowsData = $this->getCsvRowsAsMap($tempFilePath);
+            // Garanta que o disco está igual ao do Job
+            $disk = $this->tempDisk ?? 'local';
+            $tempFilePath = $file->storeAs('temp_uploads', $tempFileName, $disk);
 
-            // FASE 1: CRIAÇÃO/ATUALIZAÇÃO DE UNIDADES
-            $this->createOrUpdateUnitsFromCsv($rowsData);
+            // Chame o Job diretamente, SINCRONAMENTE
+            $job = new PreviewPersonCsvJob($tempFilePath, $disk);
+            $result = $job->handle();
 
-            // FASE 2: RESOLUÇÃO DE HIERARQUIA POSICIONAL
-            $this->resolveUnitHierarchy();
-
-            // FASE 3: PROCESSAMENTO DE PESSOAS PARA PREVIEW
-            $organizationalUnitsLookup = OrganizationalUnit::all()->keyBy('code');
-            $registrationNumbers = array_column($rowsData, 'MATRICULA');
-            $existingPersons = Person::whereIn('registration_number', $registrationNumbers)->get()->keyBy('registration_number');
-
-            $summary = ['new' => 0, 'updated' => 0, 'unchanged' => 0, 'errors' => 0, 'skipped' => 0];
-            $errorsList = [];
-            $detailedChanges = [];
-
-            foreach ($rowsData as $index => $data) {
-                if ($this->shouldSkipRow($data)) {
-                    $summary['skipped']++;
-                    continue;
-                }
-                try {
-                    $personData = $this->transformPersonData($data, $organizationalUnitsLookup);
-                    $this->validateRow($personData);
-
-                    $existingPerson = $existingPersons->get($personData['registration_number']);
-                    if ($existingPerson) {
-                        $diff = $this->comparePersonData($existingPerson, $personData);
-                        if (empty($diff)) {
-                            $summary['unchanged']++;
-                        } else {
-                            $summary['updated']++;
-                            $detailedChanges[] = [
-                                'status' => 'updated',
-                                'name' => $existingPerson->name,
-                                'registration_number' => $existingPerson->registration_number,
-                                'changes' => $diff
-                            ];
-                        }
-                    } else {
-                        $summary['new']++;
-                        $detailedChanges[] = [
-                            'status' => 'new',
-                            'name' => $personData['name'],
-                            'registration_number' => $personData['registration_number']
-                        ];
-                    }
-                } catch (\Exception $e) {
-                    $summary['errors']++;
-                    $errorsList[] = 'Linha ' . ($index + 2) . ': ' . $e->getMessage();
-                }
-            }
-
-            return response()->json([
-                'message' => 'Pré-visualização gerada com sucesso.',
-                'summary' => $summary,
-                'errors' => $errorsList,
-                'detailed_changes' => $detailedChanges,
-                'temp_file_path' => $tempFilePath,
-            ]);
+            return response()->json($result);
 
         } catch (\Exception $e) {
-            return response()->json(['message' => 'Erro inesperado no preview.'], 500);
+            \Log::error('Erro no previewUpload', ['exception' => $e]);
+            // Exibir o erro real para debug (remova em produção)
+            return response()->json([
+                'message' => 'Erro inesperado no preview.',
+                'exception' => $e->getMessage(),
+                'file' => $e->getFile(),
+                'line' => $e->getLine(),
+            ], 500);
         }
     }
+
+
+
 
     /**
      * Etapa 2: Confirma e aplica as mudanças do CSV no banco de dados.
@@ -220,8 +178,9 @@ class PersonController extends Controller
     public function confirmUpload(Request $request)
     {
         $validator = Validator::make($request->all(), ['temp_file_path' => 'required|string']);
-        if ($validator->fails())
+        if ($validator->fails()) {
             return response()->json(['errors' => $validator->errors()], 422);
+        }
 
         $tempFilePath = $request->input('temp_file_path');
         if (!Storage::disk($this->tempDisk)->exists($tempFilePath)) {
@@ -229,39 +188,67 @@ class PersonController extends Controller
         }
 
         DB::beginTransaction();
+        $successCount = 0;
+        $skippedCount = 0;
+        $errorCount = 0;
+        $errorsList = [];
         try {
             $rowsData = $this->getCsvRowsAsMap($tempFilePath);
 
-            // Executa a mesma lógica robusta de criação e hierarquia
+            // Unidades e hierarquia (ajuste conforme sua regra)
             $this->createOrUpdateUnitsFromCsv($rowsData);
             $this->resolveUnitHierarchy();
 
-            // Processa e salva as pessoas
             $organizationalUnitsLookup = OrganizationalUnit::all()->keyBy('code');
-            $processedCount = 0;
-            foreach ($rowsData as $data) {
-                if ($this->shouldSkipRow($data))
+
+            foreach ($rowsData as $index => $data) {
+                if ($this->shouldSkipRow($data)) {
+                    $skippedCount++;
+                    \Log::info('Linha pulada no confirmUpload:', $data);
                     continue;
+                }
                 try {
                     $personData = $this->transformPersonData($data, $organizationalUnitsLookup);
                     $this->validateRow($personData);
-                    Person::updateOrCreate(['registration_number' => $personData['registration_number']], $personData);
-                    $processedCount++;
+
+                    // Verificação extra: todos os campos obrigatórios estão presentes?
+                    if (!$personData['name'] || !$personData['registration_number']) {
+                        $errorCount++;
+                        $errorsList[] = "Linha " . ($index + 2) . ": Nome ou matrícula em branco.";
+                        \Log::warning('Pessoa ignorada por falta de dados obrigatórios', $personData);
+                        continue;
+                    }
+
+                    Person::updateOrCreate(
+                        ['registration_number' => $personData['registration_number']],
+                        $personData
+                    );
+                    \Log::info('Pessoa criada/atualizada:', $personData);
+                    $successCount++;
                 } catch (\Exception $e) {
+                    $errorCount++;
+                    $errorsList[] = "Linha " . ($index + 2) . ": " . $e->getMessage();
+                    \Log::error('Erro ao importar pessoa:', ['linha' => $index + 2, 'error' => $e->getMessage(), 'dados' => $data]);
                 }
             }
 
             DB::commit();
             Storage::disk($this->tempDisk)->delete($tempFilePath);
-            return response()->json(['message' => "Operação concluída! {$processedCount} pessoas foram criadas/atualizadas."]);
+
+            return response()->json([
+                'message' => "Operação concluída! $successCount pessoas foram criadas/atualizadas. ($skippedCount puladas, $errorCount com erro)",
+                'errors' => $errorsList,
+            ]);
         } catch (\Exception $e) {
             DB::rollBack();
             if (isset($tempFilePath) && Storage::disk($this->tempDisk)->exists($tempFilePath)) {
                 Storage::disk($this->tempDisk)->delete($tempFilePath);
             }
-            return response()->json(['message' => 'Erro inesperado ao salvar. Nenhuma alteração foi feita.'], 500);
+            \Log::error('Erro inesperado ao salvar no confirmUpload', ['exception' => $e]);
+            return response()->json(['message' => 'Erro inesperado ao salvar. Nenhuma alteração foi feita.', 'exception' => $e->getMessage()], 500);
         }
     }
+
 
     // --- MÉTODOS AUXILIARES DA LÓGICA DE UPLOAD ---
 
@@ -398,8 +385,13 @@ class PersonController extends Controller
     {
         $regime = strtoupper(trim($data['REGIME_TRABALHO'] ?? ''));
         $situacao = strtoupper(trim($data['SITUACAO'] ?? ''));
-        return $regime === 'ESTAGIARIO' || $situacao === 'CESSADO';
+        $pular = $regime === 'ESTAGIARIO' || $situacao === 'CESSADO';
+        if ($pular) {
+            \Log::info('PULANDO REGISTRO:', ['nome' => $data['NOME'] ?? '', 'matricula' => $data['MATRICULA'] ?? '', 'regime' => $regime, 'situacao' => $situacao]);
+        }
+        return $pular;
     }
+
 
     private function transformPersonData(array $data, \Illuminate\Support\Collection $organizationalUnitsLookup): array
     {
@@ -412,20 +404,47 @@ class PersonController extends Controller
 
         $status = trim($data['SITUACAO'] ?? '');
 
+        // --- Busca/cria função ---
+        $functionRaw = $emptyToNull($data['FUNCAO'] ?? null);
+
+        $functionCode = null;
+        $functionName = null;
+
+        if ($functionRaw && strpos($functionRaw, '-') !== false) {
+            [$functionCode, $functionName] = array_map('trim', explode('-', $functionRaw, 2));
+        } elseif ($functionRaw) {
+            $functionName = $functionRaw;
+        }
+
+        $jobFunctionId = null;
+        if ($functionName) {
+            $jobFunction = \App\Models\JobFunction::firstOrCreate(
+                ['code' => $functionCode, 'name' => $functionName],
+                [
+                    'type' => 'servidor',      // ou ajuste conforme sua regra
+                    'is_manager' => false      // ou ajuste conforme sua regra
+                ]
+            );
+            $jobFunctionId = $jobFunction->id;
+        }
+        
         return [
             'name' => trim($data['NOME'] ?? ''),
             'registration_number' => $emptyToNull($data['MATRICULA'] ?? null),
-            'cpf' => $emptyToNull(preg_replace('/[^0-9]/', '', $data['CPF'] ?? '')),
+            'cpf' => $emptyToNull(str_pad(preg_replace('/[^0-9]/', '', $data['CPF'] ?? ''), 11, '0', STR_PAD_LEFT)),
             'bond_type' => $emptyToNull($data['VINCULO'] ?? null),
             'functional_status' => $status === '' ? null : strtoupper($status),
             'rg_number' => $emptyToNull($data['RG_NUMERO'] ?? null),
             'admission_date' => $this->formatDate($data['ADMISSAO'] ?? null),
             'dismissal_date' => $this->formatDate($data['DEMISSAO'] ?? null),
             'current_position' => $emptyToNull($data['CARGO'] ?? null),
-            'current_function' => $emptyToNull($data['FUNCAO'] ?? null),
             'organizational_unit_id' => $organizationalUnitId,
+            'job_function_id' => $jobFunctionId,
+            'sala' => $data['SALA'] ?? null,
+            'descricao_sala' => $data['DESCRICAO_SALA'] ?? null,
         ];
     }
+
 
     private function comparePersonData(Person $person, array $newData): array
     {
