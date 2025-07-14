@@ -15,87 +15,115 @@ class UpdatePersonManagersJob implements ShouldQueue
 {
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
-    // Você pode adicionar filtros ou parâmetros se quiser rodar só para algumas pessoas, etc.
-    public function __construct()
-    {
-    }
+    private array $estruturaChefias = [];
+
+    public function __construct() {}
 
     public function handle()
     {
-        Log::info('[UpdatePersonManagersJob] Iniciando atualização de chefias via organograma.');
-
         $topLevelUnits = OrganizationalUnit::whereNull('parent_id')->get();
-        $totalUnidades = $topLevelUnits->count();
-
-        Log::info("[UpdatePersonManagersJob] Unidades de topo encontradas: $totalUnidades");
 
         foreach ($topLevelUnits as $unit) {
             $this->processUnitRecursive($unit, null);
         }
 
-        Log::info('[UpdatePersonManagersJob] Atualização de chefias finalizada.');
+        // Loga a estrutura final de chefias
+        $log = "\n[UpdatePersonManagersJob] Estrutura final de chefias:";
+        foreach ($this->estruturaChefias as $unidade => $salas) {
+            $log .= "\n- Unidade: {$unidade}";
+            foreach ($salas as $nomeSala => $chefe) {
+                $log .= "\n    - Sala: " . ($nomeSala !== '' ? $nomeSala : '[SEM SALA]') . ' -> Chefe: ' . ($chefe ?: '[SEM CHEFE]');
+            }
+        }
+        Log::info($log);
     }
 
-    /**
-     * Função recursiva que percorre a árvore organizacional,
-     * define o chefe da unidade (apenas is_manager = true) e atualiza os membros.
-     */
-    private function processUnitRecursive(OrganizationalUnit $unit, ?Person $chefePai)
+    private function processUnitRecursive(OrganizationalUnit $unit, ?Person $chefePai = null)
     {
-        // Define o chefe da unidade (apenas quem tem is_manager = true)
-        $chefeAtual = $this->findUnitManager($unit);
+        $salas = Person::where('organizational_unit_id', $unit->id)
+            ->pluck('sala')
+            ->unique()
+            ->filter();
 
-        // Todos os membros da unidade (menos o chefe)
-        $membros = $this->findUnitMembers($unit, $chefeAtual);
+        $nomeUnidade = $unit->name ?? ("Unidade ID " . $unit->id);
+        $this->estruturaChefias[$nomeUnidade] = [];
 
-        // Atualiza os membros da unidade para apontar o chefe correto
-        if ($chefeAtual) {
-            foreach ($membros as $membro) {
-                if ($membro->direct_manager_id != $chefeAtual->id) {
-                    $old = $membro->direct_manager_id;
-                    $membro->direct_manager_id = $chefeAtual->id;
-                    $membro->save();
-                    Log::info("[UpdatePersonManagersJob] Atualizado manager de {$membro->name} (ID: {$membro->id}) de {$old} para {$chefeAtual->id}");
-                }
+        // Variável que pode ser atualizada para cada sala:
+        $chefePaiParaFilhos = $chefePai;
+
+        foreach ($salas as $sala) {
+            $chefeAtual = $this->findUnitManager($unit, $sala);
+            $membros = Person::where('organizational_unit_id', $unit->id)
+                ->where('sala', $sala)
+                ->get();
+
+            // Se sala == código da unidade E tem chefe, passa esse chefe para os filhos
+            if ($unit->code == $sala && $chefeAtual) {
+                $chefePaiParaFilhos = $chefeAtual;
             }
-        } elseif ($chefePai) {
-            // Se não há chefe na unidade, aponta para o chefe pai (hierarquia superior)
-            foreach ($membros as $membro) {
-                if ($membro->direct_manager_id != $chefePai->id) {
-                    $old = $membro->direct_manager_id;
-                    $membro->direct_manager_id = $chefePai->id;
-                    $membro->save();
-                    Log::info("[UpdatePersonManagersJob] Atualizado manager de {$membro->name} (ID: {$membro->id}) de {$old} para {$chefePai->id}");
+
+            if ($chefeAtual) {
+                foreach ($membros as $membro) {
+                    if ($membro->id !== $chefeAtual->id && $membro->direct_manager_id != $chefeAtual->id) {
+                        $membro->direct_manager_id = $chefeAtual->id;
+                        $membro->save();
+                    }
                 }
+                $this->estruturaChefias[$nomeUnidade][$sala] = $chefeAtual->name;
+            } elseif ($chefePai) {
+                foreach ($membros as $membro) {
+                    if ($membro->direct_manager_id != $chefePai->id) {
+                        $membro->direct_manager_id = $chefePai->id;
+                        $membro->save();
+                    }
+                }
+                $this->estruturaChefias[$nomeUnidade][$sala] = $chefePai->name;
+            } else {
+                $this->estruturaChefias[$nomeUnidade][$sala] = null;
             }
         }
 
-        // Recursão para as unidades filhas
+        // Pessoas sem sala
+        $chefeAtual = $this->findUnitManager($unit, null);
+        $membrosSemSala = Person::where('organizational_unit_id', $unit->id)
+            ->whereNull('sala')
+            ->get();
+        if ($membrosSemSala->count() > 0) {
+            if ($chefeAtual) {
+                foreach ($membrosSemSala as $membro) {
+                    if ($membro->id !== $chefeAtual->id && $membro->direct_manager_id != $chefeAtual->id) {
+                        $membro->direct_manager_id = $chefeAtual->id;
+                        $membro->save();
+                    }
+                }
+                $this->estruturaChefias[$nomeUnidade]['[SEM SALA]'] = $chefeAtual->name;
+            } elseif ($chefePai) {
+                foreach ($membrosSemSala as $membro) {
+                    if ($membro->direct_manager_id != $chefePai->id) {
+                        $membro->direct_manager_id = $chefePai->id;
+                        $membro->save();
+                    }
+                }
+                $this->estruturaChefias[$nomeUnidade]['[SEM SALA]'] = $chefePai->name;
+            } else {
+                $this->estruturaChefias[$nomeUnidade]['[SEM SALA]'] = null;
+            }
+        }
+
+        // Recursão para unidades filhas, passando o chefePai (pode ter sido atualizado)
         foreach ($unit->children as $childUnit) {
-            $this->processUnitRecursive($childUnit, $chefeAtual ?? $chefePai);
+            $this->processUnitRecursive($childUnit, $chefePaiParaFilhos);
         }
     }
 
-    /**
-     * Busca o chefe da unidade (apenas is_manager = true e status 'TRABALHANDO').
-     */
-    private function findUnitManager(OrganizationalUnit $unit): ?Person
+    private function findUnitManager(OrganizationalUnit $unit, $sala): ?Person
     {
         return Person::where('organizational_unit_id', $unit->id)
             ->where('functional_status', 'TRABALHANDO')
-            ->where('is_manager', true)
-            ->first();
-    }
-
-    /**
-     * Busca todos os membros da unidade, exceto o chefe (se houver).
-     */
-    private function findUnitMembers(OrganizationalUnit $unit, ?Person $chefeAtual)
-    {
-        return Person::where('organizational_unit_id', $unit->id)
-            ->when($chefeAtual, function ($q) use ($chefeAtual) {
-                $q->where('id', '!=', $chefeAtual->id);
+            ->where('sala', $sala)
+            ->whereHas('jobFunction', function ($q) {
+                $q->where('type', 'chefe');
             })
-            ->get();
+            ->first();
     }
 }
