@@ -9,6 +9,7 @@ class JobFunction extends Model
     protected $fillable = [
         'name',
         'type',
+        'is_manager'
     ];
 
     public function people()
