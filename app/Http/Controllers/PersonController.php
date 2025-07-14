@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Jobs\UpdatePersonManagersJob;
 use App\Models\Person;
 use App\Models\OrganizationalUnit;
 use App\Models\Role;
@@ -175,6 +176,7 @@ class PersonController extends Controller
     /**
      * Etapa 2: Confirma e aplica as mudanças do CSV no banco de dados.
      */
+
     public function confirmUpload(Request $request)
     {
         $validator = Validator::make($request->all(), ['temp_file_path' => 'required|string']);
@@ -195,7 +197,7 @@ class PersonController extends Controller
         try {
             $rowsData = $this->getCsvRowsAsMap($tempFilePath);
 
-            // Unidades e hierarquia (ajuste conforme sua regra)
+            // Cria/atualiza unidades organizacionais
             $this->createOrUpdateUnitsFromCsv($rowsData);
             $this->resolveUnitHierarchy();
 
@@ -211,7 +213,6 @@ class PersonController extends Controller
                     $personData = $this->transformPersonData($data, $organizationalUnitsLookup);
                     $this->validateRow($personData);
 
-                    // Verificação extra: todos os campos obrigatórios estão presentes?
                     if (!$personData['name'] || !$personData['registration_number']) {
                         $errorCount++;
                         $errorsList[] = "Linha " . ($index + 2) . ": Nome ou matrícula em branco.";
@@ -235,8 +236,11 @@ class PersonController extends Controller
             DB::commit();
             Storage::disk($this->tempDisk)->delete($tempFilePath);
 
+            // Dispara o Job para atualizar chefias em background
+            UpdatePersonManagersJob::dispatch();
+
             return response()->json([
-                'message' => "Operação concluída! $successCount pessoas foram criadas/atualizadas. ($skippedCount puladas, $errorCount com erro)",
+                'message' => "Operação concluída! $successCount pessoas foram criadas/atualizadas. ($skippedCount puladas, $errorCount com erro). A atualização das chefias será processada em segundo plano.",
                 'errors' => $errorsList,
             ]);
         } catch (\Exception $e) {
@@ -248,6 +252,7 @@ class PersonController extends Controller
             return response()->json(['message' => 'Erro inesperado ao salvar. Nenhuma alteração foi feita.', 'exception' => $e->getMessage()], 500);
         }
     }
+
 
 
     // --- MÉTODOS AUXILIARES DA LÓGICA DE UPLOAD ---
@@ -422,12 +427,12 @@ class PersonController extends Controller
                 ['code' => $functionCode, 'name' => $functionName],
                 [
                     'type' => 'servidor',      // ou ajuste conforme sua regra
-                    'is_manager' => false      // ou ajuste conforme sua regra
+                    'is_manager' => true      // ou ajuste conforme sua regra
                 ]
             );
             $jobFunctionId = $jobFunction->id;
         }
-        
+
         return [
             'name' => trim($data['NOME'] ?? ''),
             'registration_number' => $emptyToNull($data['MATRICULA'] ?? null),
