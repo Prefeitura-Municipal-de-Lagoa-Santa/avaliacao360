@@ -17,6 +17,9 @@ import {
 // Recebe as props do controller
 const props = defineProps<{
   prazo: { term_first: string; term_end: string; } | null;
+  selfEvaluationVisible: boolean;
+  bossEvaluationVisible: boolean;
+  teamEvaluationVisible: boolean;
 }>();
 
 // Estado para controlar o diálogo
@@ -110,10 +113,13 @@ function handleManagerEvaluationClick() {
   <DashboardLayout pageTitle="Dashboard de Avaliação">
 
     <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-         <DashboardCard
+
+      <DashboardCard
         label="Autoavaliação"
         iconBgColor="#1d82c4"
-        :buttonAction="handleAutoavaliacaoClick" buttonText="Começar agora"
+        :buttonAction="handleAutoavaliacaoClick"
+        buttonText="Começar agora"
+        v-if="selfEvaluationVisible"
       >
         <template #icon>
           <icons.ListTodo />
@@ -127,6 +133,7 @@ function handleManagerEvaluationClick() {
         iconBgColor="#ef4444"
         buttonText="Começar agora"
         :buttonAction="handleChefiaEvaluationClick"
+        v-if="bossEvaluationVisible"
       >
         <template #icon>
           <icons.ListTodo>
@@ -136,11 +143,11 @@ function handleManagerEvaluationClick() {
       </DashboardCard>
 
        <DashboardCard
-      v-if="isManagerCardVisible"
       label="Avaliar Equipe"
       iconBgColor="#8b5cf6"
       buttonText="Começar agora"
       :buttonAction="handleManagerEvaluationClick"
+      v-if="teamEvaluationVisible"
     >
       <template #icon>
         <icons.Users />

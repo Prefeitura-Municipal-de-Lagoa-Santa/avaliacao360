@@ -4,6 +4,7 @@
 
 namespace App\Http\Controllers;
 use App\Models\Form;
+use App\Models\Person;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Inertia\Inertia;
@@ -43,7 +44,7 @@ class DashboardController extends Controller
      * @return \Inertia\Response
      */
     public function index()
-     {
+    {
         if (!user_can('dashboard')) {
             return redirect()->route('evaluations');
         }
@@ -68,8 +69,8 @@ class DashboardController extends Controller
         // 4. Crie um array com os dados para o dashboard
         $dashboardStats = [
             'completedAssessments' => $completedAssessments,
-            'pendingAssessments'   => $pendingAssessments,
-            'overallProgress'      => $overallProgress . '%', // Formata como string de porcentagem
+            'pendingAssessments' => $pendingAssessments,
+            'overallProgress' => $overallProgress . '%', // Formata como string de porcentagem
         ];
 
         // --- FIM DA ALTERAÇÃO ---
@@ -83,13 +84,57 @@ class DashboardController extends Controller
 
     public function evaluation()
     {
-        // Busca o prazo apenas para o grupo de avaliação
+        $people = Person::where('cpf', Auth::user()->cpf)->first();
         $prazo = $this->getGroupDeadline('avaliacao');
+
+        $estaNoPrazo = false;
+        if ($prazo && $prazo->term_first && $prazo->term_end) {
+            $hoje = now();
+            $inicio = $prazo->term_first;
+            $fim = $prazo->term_end;
+            $estaNoPrazo = $hoje->between($inicio, $fim);
+        }
+
+        if (!$people) {
+            return Inertia::render('Dashboard/Evaluation', [
+                'prazo' => $prazo,
+                'selfEvaluationVisible' => false,
+                'bossEvaluationVisible' => false,
+                'teamEvaluationVisible' => false,
+            ]);
+        }
+
+        $selfEvaluationVisible = $estaNoPrazo && EvaluationRequest::where('requested_person_id', $people->id)
+            ->where('status', 'pending')
+            ->whereHas('evaluation', function ($query) {
+                $query->where('type', 'servidor');
+            })
+            ->exists();
+
+        $bossEvaluationVisible = $estaNoPrazo && EvaluationRequest::where('requested_person_id', $people->id)
+            ->where('status', 'pending')
+            ->whereHas('evaluation', function ($query) {
+                $query->where('type', 'chefia');
+            })
+            ->exists();
+
+        $teamEvaluationVisible = $estaNoPrazo && EvaluationRequest::where('requested_person_id', $people->id)
+            ->where('status', 'pending')
+            ->whereHas('evaluation', function ($query) {
+                $query->where('type', 'equipe');
+            })
+            ->exists();
 
         return Inertia::render('Dashboard/Evaluation', [
             'prazo' => $prazo,
+            'selfEvaluationVisible' => $selfEvaluationVisible,
+            'bossEvaluationVisible' => $bossEvaluationVisible,
+            'teamEvaluationVisible' => $teamEvaluationVisible,
         ]);
     }
+
+
+
 
     public function pdi()
     {

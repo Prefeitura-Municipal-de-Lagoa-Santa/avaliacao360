@@ -71,6 +71,7 @@ class PersonController extends Controller
             'organizational_unit_id' => 'nullable|exists:organizational_units,id',
             'cpf' => 'nullable|string|max:14',
             'bond_type' => 'nullable|string|max:255',
+            'direct_manager_id' => ['nullable', 'exists:people,id'],
         ]);
         Person::create($validatedData);
         return Redirect::route('people.index')->with('success', 'Pessoa criada com sucesso!');
@@ -114,6 +115,7 @@ class PersonController extends Controller
             'rg_number' => 'nullable|string|max:255',
             'admission_date' => 'nullable|date',
             'dismissal_date' => 'nullable|date',
+            'direct_manager_id' => ['nullable', 'exists:people,id'],
         ]);
 
         $person->update($validatedData);
