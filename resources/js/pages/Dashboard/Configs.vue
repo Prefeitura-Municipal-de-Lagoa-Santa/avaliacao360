@@ -414,6 +414,13 @@ onUnmounted(() => {
           </button>
         </div>
         <div class="setting-item">
+          <label>Grupo de Funções:</label>
+          <button @click="router.get(route('funcoes.index'))" class="btn btn-yellow">
+            <span>Editar</span>
+            <component :is="icons.BookOpenCheck" class="size-5" />
+          </button>
+        </div>
+        <div class="setting-item">
           <label>Organograma:</label>
           <button @click="router.get(route('organizational-chart.index'))" class="btn btn-yellow">
             <span>Ver</span>

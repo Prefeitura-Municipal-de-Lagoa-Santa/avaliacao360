@@ -16,6 +16,7 @@ class DatabaseSeeder extends Seeder
             \Database\Seeders\CreatePermissionsFromRoutesSeeder::class,
             \Database\Seeders\CreateRolesSeeder::class,
             \Database\Seeders\CreateAdminUserSeeder::class,
+            \Database\Seeders\JobFunctionSeeder::class,
         ]);
 
     }
