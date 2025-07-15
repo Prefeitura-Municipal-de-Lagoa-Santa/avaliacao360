@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import DashboardLayout from '@/layouts/DashboardLayout.vue';
 import { Head, router } from '@inertiajs/vue3';
+import { ArrowLeftIcon } from 'lucide-vue-next';
+
 
 const props = defineProps<{
     jobFunctions: Array<{
@@ -15,16 +17,29 @@ const props = defineProps<{
 function updateType(id: number, type: string) {
     router.patch(route('funcoes.updateType', id), { type });
 }
+
+// Função para navegar para a página anterior.
+function goBack() {
+    window.history.back();
+}
 </script>
 
 <template>
+
     <Head title="Gerenciar Grupos de Funções" />
     <DashboardLayout pageTitle="Gerenciamento de Grupos de Funções">
-        <div class="mb-6">
+        <div class="detail-page-header">
+            <div>
             <h2 class="text-2xl font-bold">Funções — Gerencie o grupo (type)</h2>
             <p class="text-sm text-gray-500">Selecione o grupo para cada função na tabela abaixo.</p>
+            </div>
+            <div>
+            <button @click="goBack" class="back-btn">
+                <ArrowLeftIcon class="size-4 mr-2" />
+                Voltar
+            </button>
         </div>
-
+    </div>
         <div class="overflow-x-auto">
             <table class="min-w-full border border-gray-200 rounded-lg shadow-sm">
                 <thead class="bg-gray-50">
@@ -45,12 +60,10 @@ function updateType(id: number, type: string) {
                             </span>
                         </td>
                         <td class="px-3 py-2">
-                            <select
-                                class="w-full border rounded px-2 py-1 text-sm"
-                                :value="func.type"
-                                @change="updateType(func.id, $event.target.value)"
-                            >
-                                <option v-for="(label, value) in props.types" :key="value" :value="value">{{ label }}</option>
+                            <select class="w-full border rounded px-2 py-1 text-sm" :value="func.type"
+                                @change="updateType(func.id, $event.target.value)">
+                                <option v-for="(label, value) in props.types" :key="value" :value="value">{{ label }}
+                                </option>
                             </select>
                         </td>
                     </tr>
