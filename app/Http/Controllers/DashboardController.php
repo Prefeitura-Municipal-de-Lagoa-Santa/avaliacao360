@@ -86,7 +86,7 @@ class DashboardController extends Controller
     {
         $people = Person::where('cpf', Auth::user()->cpf)->first();
         $prazo = $this->getGroupDeadline('avaliacao');
-
+        
         $estaNoPrazo = false;
         if ($prazo && $prazo->term_first && $prazo->term_end) {
             $hoje = now();
@@ -104,10 +104,15 @@ class DashboardController extends Controller
             ]);
         }
 
+        // AUTOAVALIAÇÃO: inclui gestor, comissionado e servidor
         $selfEvaluationVisible = $estaNoPrazo && EvaluationRequest::where('requested_person_id', $people->id)
             ->where('status', 'pending')
             ->whereHas('evaluation', function ($query) {
-                $query->where('type', 'servidor');
+                $query->whereIn('type', [
+                    'autoavaliaçãoGestor',
+                    'autoavaliaçãoComissionado',
+                    'autoavaliação',
+                ]);
             })
             ->exists();
 
@@ -132,6 +137,7 @@ class DashboardController extends Controller
             'teamEvaluationVisible' => $teamEvaluationVisible,
         ]);
     }
+
 
 
 

@@ -41,14 +41,22 @@ onMounted(async () => {
 // Função para formatar o prazo para exibição
 function formatPrazo(prazo: { term_first: string; term_end: string; } | null): string {
   if (!prazo) return 'Não definido';
- 
+
   const options: Intl.DateTimeFormatOptions = { day: '2-digit', month: '2-digit' };
-  
-  const inicio = new Date(prazo.term_first).toLocaleDateString('pt-BR', options);
-  const fim = new Date(prazo.term_end).toLocaleDateString('pt-BR', options);
-  
-  return `${inicio} - ${fim}`;
+
+  // Ajusta -1 dia em cada data, conforme exemplo da imagem
+  const inicio = new Date(prazo.term_first);
+  inicio.setDate(inicio.getDate() + 1);
+
+  const fim = new Date(prazo.term_end);
+  fim.setDate(fim.getDate() + 1);
+
+  const inicioFmt = inicio.toLocaleDateString('pt-BR', options);
+  const fimFmt = fim.toLocaleDateString('pt-BR', options);
+
+  return `${inicioFmt} - ${fimFmt}`;
 }
+
 
 function goToCalendar() {
   router.get(route('calendar'));

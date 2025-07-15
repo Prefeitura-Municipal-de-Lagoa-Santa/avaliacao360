@@ -21,11 +21,11 @@ class GenerateEvaluationsJob implements ShouldQueue
     protected string $year;
     protected Form $chefiaForm;
     protected Form $servidorForm;
-    protected Form $gestorForm; 
+    protected Form $gestorForm;
     protected ?Form $comissionadoForm = null;
     protected int $chefiaCreatedCount = 0;
     protected int $servidorCreatedCount = 0;
-    protected int $autoCreatedCount = 0; 
+    protected int $autoCreatedCount = 0;
 
     public function __construct(string $year)
     {
@@ -78,19 +78,35 @@ class GenerateEvaluationsJob implements ShouldQueue
         Log::info("======================================================================");
     }
 
+    private function pessoasElegiveis()
+    {
+        // Retorna apenas quem NÃO é 3 - Concursado ou tem função
+        return Person::eligibleForEvaluation()
+            ->where(function ($query) {
+                $query->where('bond_type', '!=', '8 - Concursado')
+                      ->orWhereNotNull('job_function_id');
+            });
+    }
+
     private function generateSelfEvaluations(): void
     {
         Log::info("--- Etapa de Autoavaliações ---");
-        
-        $people = Person::eligibleForEvaluation()->get();
+
+        $people = $this->pessoasElegiveis()->get();
         Log::info("Pessoas elegíveis para autoavaliação encontradas: {$people->count()}");
 
         foreach ($people as $person) {
-            $isManager = !is_null($person->current_function);
+            $jobFunction = $person->jobFunction;
+            $isManager = $jobFunction && $jobFunction->is_manager;
+            $isComissionado = $jobFunction && !$jobFunction->is_manager && $this->comissionadoForm;
 
             if ($isManager) {
                 $evaluation = Evaluation::firstOrCreate(
                     ['form_id' => $this->gestorForm->id, 'evaluated_person_id' => $person->id, 'type' => 'autoavaliaçãoGestor']
+                );
+            } elseif ($isComissionado) {
+                $evaluation = Evaluation::firstOrCreate(
+                    ['form_id' => $this->comissionadoForm->id, 'evaluated_person_id' => $person->id, 'type' => 'autoavaliaçãoComissionado']
                 );
             } else {
                 $evaluation = Evaluation::firstOrCreate(
@@ -102,7 +118,7 @@ class GenerateEvaluationsJob implements ShouldQueue
                 ['evaluation_id' => $evaluation->id, 'requested_person_id' => $person->id],
                 ['requester_person_id' => $person->id, 'status' => 'pending']
             );
-            
+
             if ($request->wasRecentlyCreated) {
                 $this->autoCreatedCount++;
             }
@@ -112,27 +128,28 @@ class GenerateEvaluationsJob implements ShouldQueue
     private function generateManagerEvaluations(): void
     {
         Log::info("--- Etapa de Avaliações de Chefia por direct_manager_id ---");
-        
-        $peopleWithManagers = Person::whereNotNull('direct_manager_id')->eligibleForEvaluation()->get();
+
+        $peopleWithManagers = $this->pessoasElegiveis()
+            ->whereNotNull('direct_manager_id')
+            ->get();
 
         foreach ($peopleWithManagers as $person) {
             $manager = $person->directManager;
             if (!$manager) continue;
 
-            // Lógica para definir o formulário e o tipo de avaliação
             $jobFunction = $person->jobFunction;
-            $formToUse = $this->servidorForm;
-            $evaluationType = 'servidor';
 
-            if ($jobFunction && !$jobFunction->is_manager && $this->comissionadoForm) {
-                $formToUse = $this->comissionadoForm;
-                $evaluationType = 'comissionado';
-            } elseif (!is_null($person->current_function)) {
+            if ($jobFunction && $jobFunction->is_manager) {
                 $formToUse = $this->gestorForm;
                 $evaluationType = 'gestor';
+            } elseif ($jobFunction && !$jobFunction->is_manager && $this->comissionadoForm) {
+                $formToUse = $this->comissionadoForm;
+                $evaluationType = 'comissionado';
+            } else {
+                $formToUse = $this->servidorForm;
+                $evaluationType = 'servidor';
             }
 
-            // Avaliação do subordinado pelo chefe
             $evaluation = Evaluation::firstOrCreate(
                 ['form_id' => $formToUse->id, 'evaluated_person_id' => $person->id, 'type' => $evaluationType]
             );
@@ -160,17 +177,22 @@ class GenerateEvaluationsJob implements ShouldQueue
 
     private function generateManagerSelfIfNoSubordinates(): void
     {
-        $managers = Person::whereHas('jobFunction', function($q) {
-            $q->where('is_manager', true);
-        })->eligibleForEvaluation()->get();
+        $managers = $this->pessoasElegiveis()
+            ->whereHas('jobFunction', function ($q) {
+                $q->where('is_manager', true);
+            })
+            ->get();
 
         foreach ($managers as $manager) {
             $hasSubordinates = Person::where('direct_manager_id', $manager->id)
                 ->eligibleForEvaluation()
+                ->where(function ($query) {
+                    $query->where('bond_type', '!=', '3 - Concursado')
+                          ->orWhereNotNull('job_function_id');
+                })
                 ->exists();
 
             if (!$hasSubordinates) {
-                // Avaliação de gestor (autoavaliação, se ainda não criada)
                 $evaluation = Evaluation::firstOrCreate(
                     ['form_id' => $this->gestorForm->id, 'evaluated_person_id' => $manager->id, 'type' => 'gestor']
                 );
