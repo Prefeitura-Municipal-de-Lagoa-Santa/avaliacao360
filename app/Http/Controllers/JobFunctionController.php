@@ -16,8 +16,7 @@ class JobFunctionController extends Controller
 
         $types = [
             'chefe' => 'Gestor',
-            'assessor_1' => 'Assessores - Tipo 1',
-            'assessor_2' => 'Assessores - Tipo 2'
+            'comissionado' => 'Comissionados',
         ];
 
         return Inertia::render('JobFunctions/Index', [
@@ -31,7 +30,7 @@ class JobFunctionController extends Controller
     {
         $jobFunction = JobFunction::findOrFail($id);
 
-        $types = ['chefe', 'assessor_1', 'assessor_2']; // ou os types permitidos
+        $types = ['chefe', 'comissionado', 'assessor_2']; // ou os types permitidos
 
         $request->validate([
             'type' => 'required|string|in:' . implode(',', $types),

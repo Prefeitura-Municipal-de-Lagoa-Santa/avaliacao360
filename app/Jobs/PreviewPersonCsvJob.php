@@ -123,7 +123,7 @@ class PreviewPersonCsvJob
         $situacao = strtoupper(trim($data['SITUACAO'] ?? ''));
         $pular = $regime === 'ESTAGIARIO' || $situacao === 'CESSADO';
         if ($pular) {
-            \Log::info('[SKIP ROW]', $data);
+            // \Log::info('[SKIP ROW]', $data);
         }
         return $pular;
     }
