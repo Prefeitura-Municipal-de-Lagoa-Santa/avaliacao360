@@ -58,6 +58,22 @@ class Questions2025FullSeeder extends Seeder
                     'Promove um clima organizacional saudável?',
                 ]
             ],
+            [
+                'type' => 'comissionado',
+                'name' => 'Formulário Anual de Desempenho 2025 - Comissionado',
+                'perguntas' => [
+                    'Define estratégias alinhadas aos objetivos institucionais?',
+                    'Promove a integração entre diferentes setores?',
+                    'Toma decisões assertivas diante de desafios?',
+                    'Garante transparência nos processos da unidade?',
+                    'Monitora resultados e propõe melhorias contínuas?',
+                    'Incentiva a inovação e a busca por soluções?',
+                    'Desenvolve políticas para o crescimento da equipe?',
+                    'Avalia o desempenho de subordinados de forma justa?',
+                    'Lida com situações de crise de forma eficiente?',
+                    'Promove um clima organizacional saudável?',
+                ]
+            ],
         ];
 
         foreach ($formularios as $formulario) {

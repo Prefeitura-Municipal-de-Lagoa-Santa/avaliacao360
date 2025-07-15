@@ -5,14 +5,12 @@ namespace App\Jobs;
 use App\Models\Evaluation;
 use App\Models\EvaluationRequest;
 use App\Models\Form;
-use App\Models\OrganizationalUnit;
 use App\Models\Person;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
-use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
@@ -24,17 +22,17 @@ class GenerateEvaluationsJob implements ShouldQueue
     protected Form $chefiaForm;
     protected Form $servidorForm;
     protected Form $gestorForm; 
+    protected ?Form $comissionadoForm = null;
     protected int $chefiaCreatedCount = 0;
     protected int $servidorCreatedCount = 0;
     protected int $autoCreatedCount = 0; 
-
 
     public function __construct(string $year)
     {
         $this->year = $year;
     }
 
-     public function handle(): void
+    public function handle(): void
     {
         Log::info("======================================================================");
         Log::info("INICIANDO JOB: Geração de avaliações para o ano: {$this->year}");
@@ -42,28 +40,30 @@ class GenerateEvaluationsJob implements ShouldQueue
 
         DB::beginTransaction();
         try {
-            // ALTERADO: Carregando todos os formulários necessários
-            $this->servidorForm = Form::where('type', 'servidor')->where('year', '>=', $this->year)->firstOrFail();
-            $this->gestorForm = Form::where('type', 'gestor')->where('year', '>=', $this->year)->firstOrFail();
-            // O formulário de chefia pode ser opcional dependendo da lógica
-            $this->chefiaForm = Form::where('type', 'chefia')->where('year', '>=', $this->year)->firstOrFail();
+            $this->servidorForm     = Form::where('type', 'servidor')->where('year', '>=', $this->year)->firstOrFail();
+            $this->gestorForm       = Form::where('type', 'gestor')->where('year', '>=', $this->year)->firstOrFail();
+            $this->chefiaForm       = Form::where('type', 'chefia')->where('year', '>=', $this->year)->firstOrFail();
+            $this->comissionadoForm = Form::where('type', 'comissionado')->where('year', '>=', $this->year)->first();
 
             Log::info("[Formulário Servidor] Encontrado: ID {$this->servidorForm->id}");
             Log::info("[Formulário Gestor] Encontrado: ID {$this->gestorForm->id}");
             Log::info("[Formulário Chefia] Encontrado: ID {$this->chefiaForm->id}");
-            
-            // Etapa 1: Gerar todas as autoavaliações
-            $this->generateSelfEvaluations();
+            Log::info("[Formulário Comissionado] Encontrado: ID " . ($this->comissionadoForm ? $this->comissionadoForm->id : 'NÃO ENCONTRADO'));
 
-            // Etapa 2: Gerar avaliações hierárquicas
-            Log::info("--- Etapa de Avaliações Hierárquicas (Chefia e Gestor) ---");
-            $topLevelUnits = OrganizationalUnit::whereNull('parent_id')->get();
-            Log::info("Unidades de topo encontradas: {$topLevelUnits->count()}");
-            
-            foreach ($topLevelUnits as $unit) {
-                $this->processOrganizationalUnit($unit, null);
+            // ======= APAGAR AVALIAÇÕES DO MESMO ANO OLHANDO O FORM =======
+            $formsIds = Form::where('year', $this->year)->pluck('id');
+            $evaluationIds = Evaluation::whereIn('form_id', $formsIds)->pluck('id');
+            if ($evaluationIds->count()) {
+                EvaluationRequest::whereIn('evaluation_id', $evaluationIds)->delete();
+                Evaluation::whereIn('id', $evaluationIds)->delete();
+                Log::info("Todas as avaliações e requests do ano {$this->year} foram removidas antes da nova geração.");
             }
-            
+            // =============================================================
+
+            $this->generateSelfEvaluations();
+            $this->generateManagerEvaluations();
+            $this->generateManagerSelfIfNoSubordinates();
+
             Log::info("[Autoavaliação] Novas autoavaliações criadas: {$this->autoCreatedCount}");
             Log::info("[Chefia] Novas avaliações de chefia (de cima para baixo) criadas: {$this->chefiaCreatedCount}");
             Log::info("[Gestor] Novas avaliações de gestor (de baixo para cima) criadas: {$this->servidorCreatedCount}");
@@ -77,177 +77,112 @@ class GenerateEvaluationsJob implements ShouldQueue
         }
         Log::info("======================================================================");
     }
-    // app/Jobs/GenerateEvaluationsJob.php
 
-private function generateSelfEvaluations(): void
-{
-    Log::info("--- Etapa de Autoavaliações ---");
-    
-    $people = Person::eligibleForEvaluation()->get();
-    Log::info("Pessoas elegíveis para autoavaliação encontradas: {$people->count()}");
-
-    foreach ($people as $person) {
-        // Verifica se a pessoa é um gestor
-        $isManager = !is_null($person->current_function);
-
-        if ($isManager) {
-            // Lógica para GESTOR: autoavaliação do tipo 'autoavaliaçãoGestor' com form 'gestor'
-            $evaluation = Evaluation::firstOrCreate(
-                ['form_id' => $this->gestorForm->id, 'evaluated_person_id' => $person->id, 'type' => 'autoavaliaçãoGestor']
-            );
-        } else {
-            // Lógica para SERVIDOR: autoavaliação do tipo 'autoavaliação' com form 'servidor'
-            $evaluation = Evaluation::firstOrCreate(
-                ['form_id' => $this->servidorForm->id, 'evaluated_person_id' => $person->id, 'type' => 'autoavaliação']
-            );
-        }
-
-        // Cria a solicitação para a pessoa responder sua própria avaliação
-        $request = EvaluationRequest::firstOrCreate(
-            ['evaluation_id' => $evaluation->id, 'requested_person_id' => $person->id],
-            ['requester_person_id' => $person->id, 'status' => 'pending']
-        );
-        
-        if ($request->wasRecentlyCreated) {
-            $this->autoCreatedCount++;
-        }
-    }
-}
-
-    private function processOrganizationalUnit(OrganizationalUnit $unit, ?Person $parentBoss): void
+    private function generateSelfEvaluations(): void
     {
-        Log::info("[Hierarquia] Processando unidade: {$unit->name} (ID: {$unit->id})");
-
-        $currentBoss = Person::where('organizational_unit_id', $unit->id)
-            ->where('functional_status', 'TRABALHANDO')
-            ->where(function ($query) {
-                $query->whereNotNull('current_function')
-                      ->orWhere('current_position', '380-SECRETARIO MUNICIPAL');
-            })
-            ->first();
+        Log::info("--- Etapa de Autoavaliações ---");
         
-        $membersQuery = Person::where('organizational_unit_id', $unit->id)->eligibleForEvaluation(); 
+        $people = Person::eligibleForEvaluation()->get();
+        Log::info("Pessoas elegíveis para autoavaliação encontradas: {$people->count()}");
 
-        if ($currentBoss) {
-            $membersQuery->where('id', '!=', $currentBoss->id);
-        }
-        $members = $membersQuery->get();
+        foreach ($people as $person) {
+            $isManager = !is_null($person->current_function);
 
-        if ($currentBoss) {
-            Log::info("[Hierarquia]   -> Chefe encontrado: {$currentBoss->name} (ID: {$currentBoss->id})");
-            $this->createDownwardEvaluationRequests($members, $currentBoss);
+            if ($isManager) {
+                $evaluation = Evaluation::firstOrCreate(
+                    ['form_id' => $this->gestorForm->id, 'evaluated_person_id' => $person->id, 'type' => 'autoavaliaçãoGestor']
+                );
+            } else {
+                $evaluation = Evaluation::firstOrCreate(
+                    ['form_id' => $this->servidorForm->id, 'evaluated_person_id' => $person->id, 'type' => 'autoavaliação']
+                );
+            }
+
+            $request = EvaluationRequest::firstOrCreate(
+                ['evaluation_id' => $evaluation->id, 'requested_person_id' => $person->id],
+                ['requester_person_id' => $person->id, 'status' => 'pending']
+            );
             
-            if ($parentBoss) {
-                Log::info("[Hierarquia]     -> Chefe superior ({$parentBoss->name}) irá avaliar {$currentBoss->name}.");
-                if($currentBoss->isEligibleForEvaluation()) {
-                    $this->createDownwardEvaluationRequests(collect([$currentBoss]), $parentBoss);
-                } else {
-                     Log::info("[Hierarquia]     -> Chefe ({$currentBoss->name}) não é elegível para avaliação, pulando.");
-                }
-
-                Log::info("[Hierarquia]     -> Chefe ({$currentBoss->name}) irá avaliar seu chefe superior ({$parentBoss->name}).");
-                if ($parentBoss->isEligibleForEvaluation()) {
-                    $this->createServerToBossEvaluationRequests($parentBoss, collect([$currentBoss]));
-                } else {
-                    Log::info("[Hierarquia]     -> Chefe superior ({$parentBoss->name}) não é elegível para ser avaliado, pulando.");
-                }
-
-            } else {
-                Log::info("[Hierarquia]     -> {$currentBoss->name} está no topo da hierarquia, não tem avaliador superior.");
+            if ($request->wasRecentlyCreated) {
+                $this->autoCreatedCount++;
             }
-
-            if ($currentBoss->isEligibleForEvaluation()) {
-                Log::info("[Hierarquia]   -> Servidores irão avaliar o chefe {$currentBoss->name}.");
-                $this->createServerToBossEvaluationRequests($currentBoss, $members);
-            } else {
-                Log::info("[Hierarquia]   -> Chefe {$currentBoss->name} não é elegível para ser avaliado, pulando avaliação de servidores.");
-            }
-
-        } else {
-            Log::info("[Hierarquia]   -> Nenhum chefe encontrado nesta unidade.");
-            if ($parentBoss) {
-                // De cima para baixo: Chefe superior avalia os membros.
-                Log::info("[Hierarquia]     -> Chefe superior ({$parentBoss->name}) irá avaliar os {$members->count()} membros desta unidade.");
-                $this->createDownwardEvaluationRequests($members, $parentBoss);
-
-                // De baixo para cima: Membros da unidade sem chefe avaliam o chefe superior.
-                Log::info("[Hierarquia]     -> Membros desta unidade irão avaliar seu chefe superior ({$parentBoss->name}).");
-                if($parentBoss->isEligibleForEvaluation()) {
-                    $this->createServerToBossEvaluationRequests($parentBoss, $members);
-                } else {
-                    Log::info("[Hierarquia]     -> Chefe superior ({$parentBoss->name}) não é elegível para ser avaliado, pulando.");
-                }
-
-            } else {
-                Log::info("[Hierarquia]     -> Unidade sem chefe e sem hierarquia superior. Ninguém para avaliar os membros.");
-            }
-        }
-
-        foreach ($unit->children as $childUnit) {
-            $this->processOrganizationalUnit($childUnit, $currentBoss ?? $parentBoss);
         }
     }
 
-    // app/Jobs/GenerateEvaluationsJob.php
-
-private function createDownwardEvaluationRequests(Collection $evaluatedPeople, Person $evaluator): void
-{
-    foreach ($evaluatedPeople as $evaluated) {
-        // Verifica se o AVALIADO é um gestor
-        $isEvaluatedAManager = !is_null($evaluated->current_function);
+    private function generateManagerEvaluations(): void
+    {
+        Log::info("--- Etapa de Avaliações de Chefia por direct_manager_id ---");
         
-        // CORREÇÃO: O tipo e o formulário da avaliação dependem da função do AVALIADO
-        if ($isEvaluatedAManager) {
-            // Se o avaliado é um gestor, a avaliação é do tipo 'gestor' com formulário 'gestor'
-            $formToUse = $this->gestorForm;
-            $evaluationType = 'gestor';
-        } else {
-            // Se o avaliado é um servidor, a avaliação é do tipo 'servidor' com formulário 'servidor'
+        $peopleWithManagers = Person::whereNotNull('direct_manager_id')->eligibleForEvaluation()->get();
+
+        foreach ($peopleWithManagers as $person) {
+            $manager = $person->directManager;
+            if (!$manager) continue;
+
+            // Lógica para definir o formulário e o tipo de avaliação
+            $jobFunction = $person->jobFunction;
             $formToUse = $this->servidorForm;
             $evaluationType = 'servidor';
-        }
-        
-        $evaluation = Evaluation::firstOrCreate(
-            ['form_id' => $formToUse->id, 'evaluated_person_id' => $evaluated->id, 'type' => $evaluationType]
-        );
-        
-        $request = EvaluationRequest::firstOrCreate(
-            ['evaluation_id' => $evaluation->id, 'requested_person_id' => $evaluator->id],
-            ['requester_person_id' => $evaluated->id, 'status' => 'pending']
-        );
-        
-        if ($request->wasRecentlyCreated) {
-            $this->chefiaCreatedCount++;
+
+            if ($jobFunction && !$jobFunction->is_manager && $this->comissionadoForm) {
+                $formToUse = $this->comissionadoForm;
+                $evaluationType = 'comissionado';
+            } elseif (!is_null($person->current_function)) {
+                $formToUse = $this->gestorForm;
+                $evaluationType = 'gestor';
+            }
+
+            // Avaliação do subordinado pelo chefe
+            $evaluation = Evaluation::firstOrCreate(
+                ['form_id' => $formToUse->id, 'evaluated_person_id' => $person->id, 'type' => $evaluationType]
+            );
+            $request = EvaluationRequest::firstOrCreate(
+                ['evaluation_id' => $evaluation->id, 'requested_person_id' => $manager->id],
+                ['requester_person_id' => $person->id, 'status' => 'pending']
+            );
+            if ($request->wasRecentlyCreated) {
+                $this->chefiaCreatedCount++;
+            }
+
+            // Avaliação do chefe pelos subordinados (tipo chefia)
+            $evaluationBoss = Evaluation::firstOrCreate(
+                ['form_id' => $this->chefiaForm->id, 'evaluated_person_id' => $manager->id, 'type' => 'chefia']
+            );
+            $requestBoss = EvaluationRequest::firstOrCreate(
+                ['evaluation_id' => $evaluationBoss->id, 'requested_person_id' => $person->id],
+                ['requester_person_id' => $manager->id, 'status' => 'pending']
+            );
+            if ($requestBoss->wasRecentlyCreated) {
+                $this->servidorCreatedCount++;
+            }
         }
     }
-}
-    // app/Jobs/GenerateEvaluationsJob.php
 
-private function createServerToBossEvaluationRequests(Person $bossToEvaluate, Collection $evaluatingMembers): void
-{
-    // CORREÇÃO: Todos os membros da equipe (servidores e gestores) avaliam o chefe
-    // usando o formulário e o tipo 'chefia'.
-    $evaluation = Evaluation::firstOrCreate([
-        'form_id' => $this->chefiaForm->id, // Formulário de chefia
-        'evaluated_person_id' => $bossToEvaluate->id,
-        'type' => 'chefia' // Tipo de avaliação é chefia
-    ]);
+    private function generateManagerSelfIfNoSubordinates(): void
+    {
+        $managers = Person::whereHas('jobFunction', function($q) {
+            $q->where('is_manager', true);
+        })->eligibleForEvaluation()->get();
 
-    // Cria uma solicitação para cada membro da equipe
-    foreach ($evaluatingMembers as $member) {
-        $request = EvaluationRequest::firstOrCreate(
-            [
-                'evaluation_id' => $evaluation->id,
-                'requested_person_id' => $member->id,
-            ],
-            [
-                'requester_person_id' => $bossToEvaluate->id,
-                'status' => 'pending'
-            ]
-        );
-        if ($request->wasRecentlyCreated) {
-            $this->servidorCreatedCount++;
+        foreach ($managers as $manager) {
+            $hasSubordinates = Person::where('direct_manager_id', $manager->id)
+                ->eligibleForEvaluation()
+                ->exists();
+
+            if (!$hasSubordinates) {
+                // Avaliação de gestor (autoavaliação, se ainda não criada)
+                $evaluation = Evaluation::firstOrCreate(
+                    ['form_id' => $this->gestorForm->id, 'evaluated_person_id' => $manager->id, 'type' => 'gestor']
+                );
+                $request = EvaluationRequest::firstOrCreate(
+                    ['evaluation_id' => $evaluation->id, 'requested_person_id' => $manager->id],
+                    ['requester_person_id' => $manager->id, 'status' => 'pending']
+                );
+                if ($request->wasRecentlyCreated) {
+                    $this->autoCreatedCount++;
+                    Log::info("[Gestor sem subordinados] Criada avaliação individual para {$manager->name} (ID {$manager->id})");
+                }
+            }
         }
     }
-}
 }
