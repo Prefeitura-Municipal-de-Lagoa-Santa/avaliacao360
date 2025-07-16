@@ -86,7 +86,6 @@ class DashboardController extends Controller
     {
         $people = Person::where('cpf', Auth::user()->cpf)->first();
         $prazo = $this->getGroupDeadline('avaliacao');
-        
         $estaNoPrazo = false;
         if ($prazo && $prazo->term_first && $prazo->term_end) {
             $hoje = now();
@@ -101,11 +100,14 @@ class DashboardController extends Controller
                 'selfEvaluationVisible' => false,
                 'bossEvaluationVisible' => false,
                 'teamEvaluationVisible' => false,
+                'selfEvaluationCompleted' => false,
+                'bossEvaluationCompleted' => false,
+                'teamEvaluationCompleted' => false,
             ]);
         }
 
-        // AUTOAVALIAÇÃO: inclui gestor, comissionado e servidor
-        $selfEvaluationVisible = $estaNoPrazo && EvaluationRequest::where('requested_person_id', $people->id)
+        // Flags padrão (para dentro do prazo)
+        $selfEvaluationVisible = EvaluationRequest::where('requested_person_id', $people->id)
             ->where('status', 'pending')
             ->whereHas('evaluation', function ($query) {
                 $query->whereIn('type', [
@@ -116,30 +118,65 @@ class DashboardController extends Controller
             })
             ->exists();
 
-        $bossEvaluationVisible = $estaNoPrazo && EvaluationRequest::where('requested_person_id', $people->id)
+        $bossEvaluationVisible = EvaluationRequest::where('requested_person_id', $people->id)
             ->where('status', 'pending')
             ->whereHas('evaluation', function ($query) {
                 $query->where('type', 'chefia');
             })
             ->exists();
 
-        $teamEvaluationVisible = $estaNoPrazo && EvaluationRequest::where('requested_person_id', $people->id)
+        $teamEvaluationVisible = EvaluationRequest::where('requested_person_id', $people->id)
             ->where('status', 'pending')
             ->whereHas('evaluation', function ($query) {
                 $query->where('type', 'equipe');
             })
             ->exists();
 
+        $selfEvaluationCompleted = EvaluationRequest::where('requested_person_id', $people->id)
+            ->where('status', 'completed')
+            ->whereHas('evaluation', function ($query) {
+                $query->whereIn('type', [
+                    'autoavaliaçãoGestor',
+                    'autoavaliaçãoComissionado',
+                    'autoavaliação',
+                ]);
+            })
+            ->exists();
+
+        $bossEvaluationCompleted = EvaluationRequest::where('requested_person_id', $people->id)
+            ->where('status', 'completed')
+            ->whereHas('evaluation', function ($query) {
+                $query->where('type', 'chefia');
+            })
+            ->exists();
+        
+        $teamEvaluationCompleted = EvaluationRequest::where('requested_person_id', $people->id)
+            ->where('status', 'completed')
+            ->whereHas('evaluation', function ($query) {
+                $query->where('type', 'equipe');
+            })
+            ->exists();
+
+        // Fora do prazo: todos os flags false
+        if (!$estaNoPrazo) {
+            $selfEvaluationVisible = false;
+            $bossEvaluationVisible = false;
+            $teamEvaluationVisible = false;
+            $selfEvaluationCompleted = false;
+            $bossEvaluationCompleted = false;
+            $teamEvaluationCompleted = false;
+        }
+
         return Inertia::render('Dashboard/Evaluation', [
             'prazo' => $prazo,
             'selfEvaluationVisible' => $selfEvaluationVisible,
             'bossEvaluationVisible' => $bossEvaluationVisible,
             'teamEvaluationVisible' => $teamEvaluationVisible,
+            'selfEvaluationCompleted' => $selfEvaluationCompleted,
+            'bossEvaluationCompleted' => $bossEvaluationCompleted,
+            'teamEvaluationCompleted' => $teamEvaluationCompleted,
         ]);
     }
-
-
-
 
 
     public function pdi()

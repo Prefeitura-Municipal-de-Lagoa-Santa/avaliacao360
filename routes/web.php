@@ -65,8 +65,8 @@ Route::middleware(['auth', 'verified', EnsureCpfIsFilled::class])->group(functio
     Route::get('/funcoes', [JobFunctionController::class, 'index'])->name('funcoes.index');
     Route::patch('/funcoes/{id}/type', [JobFunctionController::class, 'updateType'])->name('funcoes.updateType');
 
-    Route::get('/avaliacoes/pendentes', [EvaluationController::class, 'pending'])
-    ->name('avaliacoes.pendentes');
+    Route::get('/evaluations/pending', [EvaluationController::class, 'pending'])
+    ->name('evaluations.pending');
 
 });
 Route::put('/profile/cpf', [PersonController::class, 'cpfUpdate'])->name('profile.cpf.update');

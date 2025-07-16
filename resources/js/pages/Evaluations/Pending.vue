@@ -26,7 +26,7 @@ const props = defineProps<{
 const search = ref(props.filters.search ?? '')
 
 watch(search, debounce((value: string | null) => {
-    router.get(route('avaliacoes.pendentes'), { search: value }, {
+    router.get(route('evaluations.pending'), { search: value }, {
         preserveState: true,
         replace: true,
     })
