@@ -60,18 +60,25 @@ class Person extends Model
 
         $query->where('functional_status', 'TRABALHANDO')
             ->where(function (Builder $subQuery) use ($probationaryCutoffDate) {
-                // A pessoa é elegível se:
-                // 1. O tipo de vínculo NÃO ESTÁ na lista de probatório.
-                $subQuery->whereNotIn('bond_type', ['1 - Efetivo', '8 - Concursado'])
-                    // OU 2. Já passou do período probatório de 3 anos.
-                    ->orWhere('admission_date', '<=', $probationaryCutoffDate)
-                    // OU 3. TEM uma função de chefia (mesmo que esteja em probatório).
-                    ->orWhere(function (Builder $bossQuery) {
-                    $bossQuery->whereNotNull('current_function')
-                        ->orWhere('current_position', '380-SECRETARIO MUNICIPAL');
+                // 0. Exclui "3 - Concursado" sem função
+                $subQuery->where(function (Builder $q) {
+                    $q->where('bond_type', '!=', '3 - Concursado')
+                        ->orWhereNotNull('job_function_id');
+                })
+                    // 1. O tipo de vínculo NÃO ESTÁ na lista de probatório
+                    ->where(function (Builder $q) use ($probationaryCutoffDate) {
+                    $q->whereNotIn('bond_type', ['1 - Efetivo', '8 - Concursado'])
+                        // OU 2. Já passou do período probatório de 3 anos.
+                        ->orWhere('admission_date', '<=', $probationaryCutoffDate)
+                        // OU 3. TEM uma função de chefia (mesmo que esteja em probatório)
+                        ->orWhere(function (Builder $bossQuery) {
+                            $bossQuery->whereNotNull('job_function_id');
+                        });
                 });
             });
     }
+
+
 
     /**
      * Verifica se uma instância específica de Person é elegível para avaliação.
