@@ -17,6 +17,7 @@ use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use App\Jobs\PreviewPersonCsvJob;
+use App\Models\JobFunction;
 
 
 class PersonController extends Controller
@@ -83,7 +84,9 @@ class PersonController extends Controller
     {
         $organizationalUnits = OrganizationalUnit::orderBy('name')->get(['id', 'name']);
         $functionalStatuses = ['ATIVO', 'INATIVO', 'CEDIDO', 'AFASTADO', 'LICENÇA', 'FÉRIAS', 'EXONERADO', 'APOSENTADO', 'TRABALHANDO'];
+        $jobFunctions = JobFunction::orderBy('name')->get(['id', 'name']);
 
+       // dd($person);
         return Inertia::render('People/Edit', [
             'person' => [
                 'id' => $person->id,
@@ -96,11 +99,13 @@ class PersonController extends Controller
                 'admission_date' => $person->admission_date ? $person->admission_date->format('Y-m-d') : null,
                 'dismissal_date' => $person->dismissal_date ? $person->dismissal_date->format('Y-m-d') : null,
                 'current_position' => $person->current_position,
-                'current_function' => $person->current_function,
+                //'current_function' => $jobFunctions->name,
+                'job_function_id' => $person->job_function_id,
                 'organizational_unit_id' => $person->organizational_unit_id,
             ],
             'organizationalUnits' => $organizationalUnits,
             'functionalStatuses' => $functionalStatuses,
+            'jobFunctions' => $jobFunctions,
         ]);
     }
 
@@ -118,6 +123,8 @@ class PersonController extends Controller
             'admission_date' => 'nullable|date',
             'dismissal_date' => 'nullable|date',
             'direct_manager_id' => ['nullable', 'exists:people,id'],
+            'job_function_id' => 'nullable|exists:job_functions,id', 
+
         ]);
 
         $person->update($validatedData);
