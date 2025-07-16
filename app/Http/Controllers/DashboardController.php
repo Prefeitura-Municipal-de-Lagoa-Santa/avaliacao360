@@ -81,11 +81,11 @@ class DashboardController extends Controller
             'dashboardStats' => $dashboardStats, // 5. Passe os dados para a view
         ]);
     }
-
     public function evaluation()
     {
         $people = Person::where('cpf', Auth::user()->cpf)->first();
         $prazo = $this->getGroupDeadline('avaliacao');
+
         $estaNoPrazo = false;
         if ($prazo && $prazo->term_first && $prazo->term_end) {
             $hoje = now();
@@ -103,11 +103,15 @@ class DashboardController extends Controller
                 'selfEvaluationCompleted' => false,
                 'bossEvaluationCompleted' => false,
                 'teamEvaluationCompleted' => false,
+                // IDs para página de resultado
+                'selfEvaluationRequestId' => null,
+                'bossEvaluationRequestId' => null,
+                'teamEvaluationRequestId' => null,
             ]);
         }
 
-        // Flags padrão (para dentro do prazo)
-        $selfEvaluationVisible = EvaluationRequest::where('requested_person_id', $people->id)
+        // Busca pendentes normalmente (prazo + pending)
+        $selfEvaluationVisible = $estaNoPrazo && EvaluationRequest::where('requested_person_id', $people->id)
             ->where('status', 'pending')
             ->whereHas('evaluation', function ($query) {
                 $query->whereIn('type', [
@@ -118,21 +122,22 @@ class DashboardController extends Controller
             })
             ->exists();
 
-        $bossEvaluationVisible = EvaluationRequest::where('requested_person_id', $people->id)
+        $bossEvaluationVisible = $estaNoPrazo && EvaluationRequest::where('requested_person_id', $people->id)
             ->where('status', 'pending')
             ->whereHas('evaluation', function ($query) {
                 $query->where('type', 'chefia');
             })
             ->exists();
 
-        $teamEvaluationVisible = EvaluationRequest::where('requested_person_id', $people->id)
+        $teamEvaluationVisible = $estaNoPrazo && EvaluationRequest::where('requested_person_id', $people->id)
             ->where('status', 'pending')
             ->whereHas('evaluation', function ($query) {
                 $query->where('type', 'equipe');
             })
             ->exists();
 
-        $selfEvaluationCompleted = EvaluationRequest::where('requested_person_id', $people->id)
+        // Busca avaliações COMPLETAS (pega o primeiro ID de cada tipo)
+        $selfCompletedRequest = EvaluationRequest::where('requested_person_id', $people->id)
             ->where('status', 'completed')
             ->whereHas('evaluation', function ($query) {
                 $query->whereIn('type', [
@@ -141,23 +146,36 @@ class DashboardController extends Controller
                     'autoavaliação',
                 ]);
             })
-            ->exists();
+            ->latest()
+            ->first();
 
-        $bossEvaluationCompleted = EvaluationRequest::where('requested_person_id', $people->id)
+        $bossCompletedRequest = EvaluationRequest::where('requested_person_id', $people->id)
             ->where('status', 'completed')
             ->whereHas('evaluation', function ($query) {
                 $query->where('type', 'chefia');
             })
-            ->exists();
-        
-        $teamEvaluationCompleted = EvaluationRequest::where('requested_person_id', $people->id)
+            ->latest()
+            ->first();
+
+        $teamCompletedRequest = EvaluationRequest::where('requested_person_id', $people->id)
             ->where('status', 'completed')
             ->whereHas('evaluation', function ($query) {
                 $query->where('type', 'equipe');
             })
-            ->exists();
+            ->latest()
+            ->first();
 
-        // Fora do prazo: todos os flags false
+        // Flags booleanos (se tem completed)
+        $selfEvaluationCompleted = !!$selfCompletedRequest;
+        $bossEvaluationCompleted = !!$bossCompletedRequest;
+        $teamEvaluationCompleted = !!$teamCompletedRequest;
+
+        // IDs para o front abrir página de resultado correta
+        $selfEvaluationRequestId = $selfCompletedRequest?->id;
+        $bossEvaluationRequestId = $bossCompletedRequest?->id;
+        $teamEvaluationRequestId = $teamCompletedRequest?->id;
+
+        // Fora do prazo: tudo falso/nulo (opcional, mas bom para segurança)
         if (!$estaNoPrazo) {
             $selfEvaluationVisible = false;
             $bossEvaluationVisible = false;
@@ -165,6 +183,9 @@ class DashboardController extends Controller
             $selfEvaluationCompleted = false;
             $bossEvaluationCompleted = false;
             $teamEvaluationCompleted = false;
+            $selfEvaluationRequestId = null;
+            $bossEvaluationRequestId = null;
+            $teamEvaluationRequestId = null;
         }
 
         return Inertia::render('Dashboard/Evaluation', [
@@ -175,9 +196,12 @@ class DashboardController extends Controller
             'selfEvaluationCompleted' => $selfEvaluationCompleted,
             'bossEvaluationCompleted' => $bossEvaluationCompleted,
             'teamEvaluationCompleted' => $teamEvaluationCompleted,
+            // IDs para visualizar resultado de cada tipo
+            'selfEvaluationRequestId' => $selfEvaluationRequestId,
+            'bossEvaluationRequestId' => $bossEvaluationRequestId,
+            'teamEvaluationRequestId' => $teamEvaluationRequestId,
         ]);
     }
-
 
     public function pdi()
     {

@@ -14,7 +14,7 @@ import {
   DialogClose,
 } from '@/components/ui/dialog';
 
-// Recebe as props do controller
+// Props recebidas do controller
 const props = defineProps<{
   prazo: { term_first: string; term_end: string; } | null;
   selfEvaluationVisible: boolean;
@@ -23,9 +23,13 @@ const props = defineProps<{
   selfEvaluationCompleted: boolean;
   bossEvaluationCompleted: boolean;
   teamEvaluationCompleted: boolean;
+  // Novos: IDs para abrir resultado dinâmico
+  selfEvaluationRequestId?: number | null;
+  bossEvaluationRequestId?: number | null;
+  teamEvaluationRequestId?: number | null;
 }>();
 
-// Checagem se está dentro do prazo
+// Computed para checar se está dentro do prazo
 const dentroDoPrazo = computed(() => {
   if (!props.prazo?.term_first || !props.prazo?.term_end) return false;
   const hoje = new Date();
@@ -39,11 +43,12 @@ const dentroDoPrazo = computed(() => {
   return hoje >= inicio && hoje <= fim;
 });
 
-// Estado para controlar o diálogo
+// Estado do diálogo de aviso
 const isDialogOpen = ref(false);
 const dialogMessage = ref('');
 const isManagerCardVisible = ref(false);
 
+// Checagem para painel de gestor (opcional)
 onMounted(async () => {
   try {
     const response = await fetch(route('evaluations.status'));
@@ -54,16 +59,16 @@ onMounted(async () => {
   }
 });
 
-// Função para formatar o prazo para exibição (ajusta -1 dia)
+// Formata o prazo para "dd/mm - dd/mm"
 function formatPrazo(prazo: { term_first: string; term_end: string; } | null): string {
   if (!prazo) return 'Não definido';
   const options: Intl.DateTimeFormatOptions = { day: '2-digit', month: '2-digit' };
 
   const inicio = new Date(prazo.term_first);
-  inicio.setDate(inicio.getDate() + 1);
+  inicio.setDate(inicio.getDate() - 1);
 
   const fim = new Date(prazo.term_end);
-  fim.setDate(fim.getDate() + 1);
+  fim.setDate(fim.getDate() - 1);
 
   const inicioFmt = inicio.toLocaleDateString('pt-BR', options);
   const fimFmt = fim.toLocaleDateString('pt-BR', options);
@@ -113,15 +118,10 @@ function handleManagerEvaluationClick() {
   router.get(route('evaluations.subordinates.list'));
 }
 
-// Funções para ver respostas/resultados das avaliações já realizadas
-function showSelfEvaluationResult() {
-  router.get(route('evaluations.autoavaliacao.result'));
-}
-function showBossEvaluationResult() {
-  router.get(route('evaluations.chefia.result'));
-}
-function showTeamEvaluationResult() {
-  router.get(route('evaluations.equipe.result'));
+// Função dinâmica para visualizar resultado
+function showEvaluationResult(evaluationRequestId: number | null | undefined) {
+  if (!evaluationRequestId) return;
+  router.get(route('evaluations.result', { evaluationRequest: evaluationRequestId }));
 }
 
 function showDetailsForDeadline() {
@@ -133,12 +133,14 @@ function showDetailsForDeadline() {
   <Head title="Dashboard" />
   <DashboardLayout pageTitle="Dashboard de Avaliação">
     <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-
+      {{ props.self }}
       <!-- Card Autoavaliação -->
       <DashboardCard
         label="Autoavaliação"
         iconBgColor="#1d82c4"
-        :buttonAction="props.selfEvaluationCompleted ? showSelfEvaluationResult : handleAutoavaliacaoClick"
+        :buttonAction="props.selfEvaluationCompleted
+          ? () => showEvaluationResult(props.selfEvaluationRequestId)
+          : handleAutoavaliacaoClick"
         :buttonText="props.selfEvaluationCompleted ? 'Ver respostas' : 'Começar agora'"
         v-if="dentroDoPrazo && (props.selfEvaluationVisible || props.selfEvaluationCompleted)"
       >
@@ -146,11 +148,14 @@ function showDetailsForDeadline() {
           <icons.ListTodo />
         </template>
       </DashboardCard>
+
       <!-- Card Avaliação Chefia -->
       <DashboardCard
         label="Avaliação Chefia"
         iconBgColor="#ef4444"
-        :buttonAction="props.bossEvaluationCompleted ? showBossEvaluationResult : handleChefiaEvaluationClick"
+        :buttonAction="props.bossEvaluationCompleted
+          ? () => showEvaluationResult(props.bossEvaluationRequestId)
+          : handleChefiaEvaluationClick"
         :buttonText="props.bossEvaluationCompleted ? 'Ver respostas' : 'Começar agora'"
         v-if="dentroDoPrazo && (props.bossEvaluationVisible || props.bossEvaluationCompleted)"
       >
@@ -158,11 +163,14 @@ function showDetailsForDeadline() {
           <icons.ListTodo />
         </template>
       </DashboardCard>
+
       <!-- Card Avaliar Equipe -->
       <DashboardCard
         label="Avaliar Equipe"
         iconBgColor="#8b5cf6"
-        :buttonAction="props.teamEvaluationCompleted ? showTeamEvaluationResult : handleManagerEvaluationClick"
+        :buttonAction="props.teamEvaluationCompleted
+          ? () => showEvaluationResult(props.teamEvaluationRequestId)
+          : handleManagerEvaluationClick"
         :buttonText="props.teamEvaluationCompleted ? 'Ver respostas' : 'Começar agora'"
         v-if="dentroDoPrazo && (props.teamEvaluationVisible || props.teamEvaluationCompleted)"
       >

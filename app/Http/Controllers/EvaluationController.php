@@ -423,6 +423,21 @@ class EvaluationController extends Controller
         ]);
     }
 
-
+    public function showEvaluationResult(EvaluationRequest $evaluationRequest)
+    {
+        $evaluation = $evaluationRequest->evaluation;
+        $answers = $evaluation ? $evaluation->answers : collect();
+        dd($answers);
+        return Inertia::render('Evaluation/AvaliacaoResultadoPage', [
+            'form' => $evaluation?->form,
+            'person' => $evaluation?->evaluated,
+            'type' => $evaluation?->type,
+            'evaluation' => [
+                'answers' => $answers,
+                'evidencias' => $evaluationRequest->evidencias,
+                'assinatura_base64' => $evaluationRequest->assinatura_base64,
+            ]
+        ]);
+    }
 
 }
