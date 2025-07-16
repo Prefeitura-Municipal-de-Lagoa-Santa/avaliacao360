@@ -82,7 +82,8 @@ class DashboardController extends Controller
         ]);
     }
     public function evaluation()
-    {
+    {   
+        // dd(Auth::user()->cpf);
         $people = Person::where('cpf', Auth::user()->cpf)->first();
         $prazo = $this->getGroupDeadline('avaliacao');
 
@@ -132,7 +133,10 @@ class DashboardController extends Controller
         $teamEvaluationVisible = $estaNoPrazo && EvaluationRequest::where('requested_person_id', $people->id)
             ->where('status', 'pending')
             ->whereHas('evaluation', function ($query) {
-                $query->where('type', 'equipe');
+                $query->where('type', [
+                    'servidor',
+                    'comissionado',
+                ]);
             })
             ->exists();
 
