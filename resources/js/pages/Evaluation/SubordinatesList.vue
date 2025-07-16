@@ -12,8 +12,8 @@ const props = defineProps<{
         id: number;
         name: string;
         current_position?: string;
-        job_function?: { name: string } | null; // <- pode vir null
-        jobFunction?: { name: string } | null;  // <- dependendo do backend, use o certo!
+        job_function?: { name: string } | null;
+        jobFunction?: { name: string } | null;
       }
     }
   }>
@@ -22,7 +22,9 @@ const props = defineProps<{
 function goToEvaluation(requestId: number) {
   router.get(route('evaluations.subordinate.show', { evaluationRequest: requestId }));
 }
-
+function goToEvaluationResult(requestId: number) {
+  router.get(route('evaluations.autoavaliacao.result', { evaluationRequest: requestId }));
+}
 function goBack() {
   window.history.back();
 }
@@ -38,7 +40,6 @@ function goBack() {
         Voltar
       </button>
     </div>
-
     <div class="bg-white p-6 rounded-lg shadow-md">
       <div v-if="requests.length === 0" class="flex flex-col items-center justify-center py-12 text-gray-500">
         <svg class="w-16 h-16 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -63,7 +64,6 @@ function goBack() {
             <tr v-for="req in requests" :key="req.id" class="border-t">
               <td class="table-cell font-medium">{{ req.evaluation.evaluated.name }}</td>
               <td class="table-cell text-gray-600">
-                <!-- Fallback de função/cargo -->
                 {{
                   req.evaluation.evaluated.job_function?.name
                   || req.evaluation.evaluated.jobFunction?.name
@@ -82,13 +82,21 @@ function goBack() {
                 </span>
               </td>
               <td class="table-cell text-right">
-                <button v-if="req.status === 'pending'" @click="goToEvaluation(req.id)" class="flex items-center ml-auto px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-700 transition">
+                <button
+                  v-if="req.status === 'pending'"
+                  @click="goToEvaluation(req.id)"
+                  class="flex items-center ml-auto px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-700 transition"
+                >
                   <Edit class="size-4 mr-2" />
                   Avaliar
                 </button>
-                <button v-else class="flex items-center ml-auto px-4 py-2 bg-gray-400 text-white rounded-lg cursor-not-allowed" disabled>
+                <button
+                  v-else
+                  @click="goToEvaluationResult(req.id)"
+                  class="flex items-center ml-auto px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition"
+                >
                   <CheckCircle2 class="size-4 mr-2" />
-                  Avaliado
+                  Ver avaliação
                 </button>
               </td>
             </tr>
@@ -98,22 +106,3 @@ function goBack() {
     </div>
   </DashboardLayout>
 </template>
-
-<style scoped>
-.text-left {
-  text-align: left;
-}
-.text-center {
-  text-align: center;
-}
-.table-header {
-  padding: 0.75rem 1rem;
-  font-weight: 600;
-  background: #f3f4f6;
-  border-bottom: 2px solid #e5e7eb;
-}
-.table-cell {
-  padding: 0.75rem 1rem;
-  vertical-align: middle;
-}
-</style>
