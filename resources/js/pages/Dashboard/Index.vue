@@ -35,8 +35,7 @@ const CheckCircleIcon = `<svg class="w-8 h-8" fill="none" stroke="currentColor" 
 
 
 function showDetailsForDeadline() {
-  console.log('Exibindo detalhes...');
-  
+  router.get(route('evaluations.pending'));
 }
 </script>
 

@@ -64,6 +64,10 @@ Route::middleware(['auth', 'verified', EnsureCpfIsFilled::class])->group(functio
 
     Route::get('/funcoes', [JobFunctionController::class, 'index'])->name('funcoes.index');
     Route::patch('/funcoes/{id}/type', [JobFunctionController::class, 'updateType'])->name('funcoes.updateType');
+
+    Route::get('/evaluations/pending', [EvaluationController::class, 'pending'])
+        ->name('evaluations.pending');
+
 });
 Route::put('/profile/cpf', [PersonController::class, 'cpfUpdate'])->name('profile.cpf.update');
 Route::get('/organizational-chart', [OrganizationalChartController::class, 'index'])
@@ -71,4 +75,8 @@ Route::get('/organizational-chart', [OrganizationalChartController::class, 'inde
 
 Route::post('/releases-generate/{year}', [ReleaseController::class, 'generateRelease'])
     ->name('releases.generate');
+
+Route::get('/evaluations/result/{evaluationRequest}', [EvaluationController::class, 'showEvaluationResult'])
+    ->name('evaluations.result');
+
 require __DIR__ . '/auth.php';

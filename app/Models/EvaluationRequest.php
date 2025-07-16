@@ -12,8 +12,8 @@ class EvaluationRequest extends Model
 
     protected $fillable = [
         'evaluation_id',
-        'requester_person_id', 
-        'requested_person_id', 
+        'requester_person_id',
+        'requested_person_id',
         'evidencias',
         'assinatura_base64',
         'status',
@@ -35,4 +35,10 @@ class EvaluationRequest extends Model
     {
         return $this->belongsTo(Person::class, 'requested_person_id');
     }
+
+    public function requestedPerson()
+    {
+        return $this->belongsTo(Person::class, 'requested_person_id');
+    }
+
 }

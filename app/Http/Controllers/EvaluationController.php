@@ -248,43 +248,39 @@ class EvaluationController extends Controller
      */
     public function showAutoavaliacaoForm()
     {
-        // 1. Obter o usuário autenticado e seu registro 'Person' correspondente.
         $user = auth()->user();
         if (!$user || !$user->cpf) {
             return redirect()->route('evaluations')->with('error', 'CPF não encontrado para o usuário autenticado.');
         }
 
-        $user->cpf = '06623986618';
-
-        $person = Person::where('cpf', operator: $user->cpf)->first();
-
+        $person = Person::where('cpf', $user->cpf)->first();
         if (!$person) {
             return redirect()->route('evaluations')
                 ->with('error', 'Dados de servidor não encontrados para o seu usuário.');
         }
 
-        // 2. Buscar a SOLICITAÇÃO de autoavaliação pendente ('pending') para esta pessoa.
+        // Busca qualquer tipo de autoavaliação pendente
         $pendingRequest = EvaluationRequest::where('requested_person_id', $person->id)
             ->where('status', 'pending')
             ->whereHas('evaluation', function ($query) {
-                $query->where('type', 'autoavaliação');
+                $query->whereIn('type', [
+                    'autoavaliação',
+                    'autoavaliaçãoGestor',
+                    'autoavaliaçãoComissionado',
+                ]);
             })
             ->with([
-                // Carrega o formulário completo, incluindo grupos e perguntas
                 'evaluation.form.groupQuestions.questions'
             ])
             ->first();
 
-        // 3. Se uma solicitação pendente for encontrada, exibe o formulário.
         if ($pendingRequest) {
 
             $type = $pendingRequest->evaluation->type;
             $autoavaliacaoForm = $pendingRequest->evaluation->form;
 
-            // Carrega os relacionamentos da pessoa necessários para a view
             $person->load('organizationalUnit.allParents');
 
-            // Renderiza a página de avaliação com o formulário e os dados da pessoa
             return Inertia::render('Evaluation/AvaliacaoPage', [
                 'form' => $autoavaliacaoForm,
                 'person' => $person,
@@ -292,11 +288,11 @@ class EvaluationController extends Controller
                 'evaluationRequest' => $pendingRequest,
             ]);
         } else {
-            // 4. Se não houver solicitação pendente, redireciona com a mensagem de que já foi preenchida.
             return redirect()->route('evaluations')
                 ->with('error', 'A avaliação já foi preenchida/enviada.');
         }
     }
+
     /**
      * VERIFICAÇÃO: Verifica se o usuário é um gestor com avaliações pendentes da equipe.
      */
@@ -382,4 +378,66 @@ class EvaluationController extends Controller
             'type' => $evaluationRequest->evaluation->type,
         ]);
     }
+
+    public function pending(Request $request)
+    {
+        $search = $request->input('search');
+
+        $query = EvaluationRequest::with([
+            'evaluation.form',
+            'evaluation.evaluatedPerson',
+            'requestedPerson'
+        ])->where('status', 'pending');
+
+        if ($search) {
+            $query->where(function ($q) use ($search) {
+                $q->whereHas('evaluation.evaluatedPerson', function ($q) use ($search) {
+                    $q->where('name', 'like', "%{$search}%");
+                })
+                    ->orWhereHas('requestedPerson', function ($q) use ($search) {
+                        $q->where('name', 'like', "%{$search}%");
+                    });
+            });
+        }
+
+        $pendingRequests = $query
+            ->orderByDesc('created_at')
+            ->paginate(20)
+            ->through(function ($request) {
+                return [
+                    'id' => $request->id,
+                    'type' => $request->evaluation->type ?? '-',
+                    'form_name' => $request->evaluation->form->name ?? '-',
+                    'avaliado' => $request->evaluation->evaluatedPerson->name ?? '-',
+                    'avaliador' => $request->requestedPerson->name ?? '-',
+                    'created_at' => $request->created_at ? $request->created_at->format('d/m/Y H:i') : '',
+                ];
+            })
+            ->withQueryString();
+
+        return inertia('Evaluations/Pending', [
+            'pendingRequests' => $pendingRequests,
+            'filters' => [
+                'search' => $search,
+            ],
+        ]);
+    }
+
+    public function showEvaluationResult(EvaluationRequest $evaluationRequest)
+    {
+        $evaluation = $evaluationRequest->evaluation;
+        $answers = $evaluation ? $evaluation->answers : collect();
+        dd($answers);
+        return Inertia::render('Evaluation/AvaliacaoResultadoPage', [
+            'form' => $evaluation?->form,
+            'person' => $evaluation?->evaluated,
+            'type' => $evaluation?->type,
+            'evaluation' => [
+                'answers' => $answers,
+                'evidencias' => $evaluationRequest->evidencias,
+                'assinatura_base64' => $evaluationRequest->assinatura_base64,
+            ]
+        ]);
+    }
+
 }

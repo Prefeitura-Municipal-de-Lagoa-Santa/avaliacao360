@@ -81,7 +81,6 @@ class DashboardController extends Controller
             'dashboardStats' => $dashboardStats, // 5. Passe os dados para a view
         ]);
     }
-
     public function evaluation()
     {
         $people = Person::where('cpf', Auth::user()->cpf)->first();
@@ -101,13 +100,25 @@ class DashboardController extends Controller
                 'selfEvaluationVisible' => false,
                 'bossEvaluationVisible' => false,
                 'teamEvaluationVisible' => false,
+                'selfEvaluationCompleted' => false,
+                'bossEvaluationCompleted' => false,
+                'teamEvaluationCompleted' => false,
+                // IDs para página de resultado
+                'selfEvaluationRequestId' => null,
+                'bossEvaluationRequestId' => null,
+                'teamEvaluationRequestId' => null,
             ]);
         }
 
+        // Busca pendentes normalmente (prazo + pending)
         $selfEvaluationVisible = $estaNoPrazo && EvaluationRequest::where('requested_person_id', $people->id)
             ->where('status', 'pending')
             ->whereHas('evaluation', function ($query) {
-                $query->where('type', 'servidor');
+                $query->whereIn('type', [
+                    'autoavaliaçãoGestor',
+                    'autoavaliaçãoComissionado',
+                    'autoavaliação',
+                ]);
             })
             ->exists();
 
@@ -125,16 +136,72 @@ class DashboardController extends Controller
             })
             ->exists();
 
+        // Busca avaliações COMPLETAS (pega o primeiro ID de cada tipo)
+        $selfCompletedRequest = EvaluationRequest::where('requested_person_id', $people->id)
+            ->where('status', 'completed')
+            ->whereHas('evaluation', function ($query) {
+                $query->whereIn('type', [
+                    'autoavaliaçãoGestor',
+                    'autoavaliaçãoComissionado',
+                    'autoavaliação',
+                ]);
+            })
+            ->latest()
+            ->first();
+
+        $bossCompletedRequest = EvaluationRequest::where('requested_person_id', $people->id)
+            ->where('status', 'completed')
+            ->whereHas('evaluation', function ($query) {
+                $query->where('type', 'chefia');
+            })
+            ->latest()
+            ->first();
+
+        $teamCompletedRequest = EvaluationRequest::where('requested_person_id', $people->id)
+            ->where('status', 'completed')
+            ->whereHas('evaluation', function ($query) {
+                $query->where('type', 'equipe');
+            })
+            ->latest()
+            ->first();
+
+        // Flags booleanos (se tem completed)
+        $selfEvaluationCompleted = !!$selfCompletedRequest;
+        $bossEvaluationCompleted = !!$bossCompletedRequest;
+        $teamEvaluationCompleted = !!$teamCompletedRequest;
+
+        // IDs para o front abrir página de resultado correta
+        $selfEvaluationRequestId = $selfCompletedRequest?->id;
+        $bossEvaluationRequestId = $bossCompletedRequest?->id;
+        $teamEvaluationRequestId = $teamCompletedRequest?->id;
+
+        // Fora do prazo: tudo falso/nulo (opcional, mas bom para segurança)
+        if (!$estaNoPrazo) {
+            $selfEvaluationVisible = false;
+            $bossEvaluationVisible = false;
+            $teamEvaluationVisible = false;
+            $selfEvaluationCompleted = false;
+            $bossEvaluationCompleted = false;
+            $teamEvaluationCompleted = false;
+            $selfEvaluationRequestId = null;
+            $bossEvaluationRequestId = null;
+            $teamEvaluationRequestId = null;
+        }
+
         return Inertia::render('Dashboard/Evaluation', [
             'prazo' => $prazo,
             'selfEvaluationVisible' => $selfEvaluationVisible,
             'bossEvaluationVisible' => $bossEvaluationVisible,
             'teamEvaluationVisible' => $teamEvaluationVisible,
+            'selfEvaluationCompleted' => $selfEvaluationCompleted,
+            'bossEvaluationCompleted' => $bossEvaluationCompleted,
+            'teamEvaluationCompleted' => $teamEvaluationCompleted,
+            // IDs para visualizar resultado de cada tipo
+            'selfEvaluationRequestId' => $selfEvaluationRequestId,
+            'bossEvaluationRequestId' => $bossEvaluationRequestId,
+            'teamEvaluationRequestId' => $teamEvaluationRequestId,
         ]);
     }
-
-
-
 
     public function pdi()
     {
