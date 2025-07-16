@@ -169,6 +169,7 @@ function confirmAndLiberar() {
     preserveScroll: true,
     onSuccess: () => {
       isLiberarModalVisible.value = false; // Fecha o dialog em caso de sucesso
+      generateRelease();
     }
   });
 }
