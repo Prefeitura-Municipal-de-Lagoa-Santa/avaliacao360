@@ -50,6 +50,11 @@ const prazoDateFim = ref('');
 
 // --- ESTADO PARA UPLOAD DE CSV DE PESSOAS ---
 const isPreviewModalVisible = ref(false);
+const isLiberarModalVisible = ref(false);
+const liberarModalTitle = ref('');
+const liberarModalDescription = ref('');
+const groupToLiberar = ref<'avaliacao' | 'pdi' | null>(null);
+const isConfirmationDialog = ref(false);
 const isProcessing = ref(false);
 const fileInput = ref<HTMLInputElement | null>(null);
 const fileName = ref('');
@@ -76,6 +81,22 @@ const isPdiGroupReleased = computed(() => formsForSelectedYear.value.filter(form
 const avaliacaoReleaseData = computed(() => {
   const f = formsForSelectedYear.value.find(form => ['servidor', 'gestor', 'chefia', 'comissionado'].includes(form.type) && form.release_data);
   return f ? new Date(f.release_data!).toLocaleDateString('pt-BR') : 'Data não encontrada';
+});
+
+const canManuallyGenerateEvaluations = computed(() => {
+
+  const avaliacaoForm = formsForSelectedYear.value.find(form => 
+    ['servidor', 'gestor', 'chefia', 'comissionado'].includes(form.type)
+  );
+
+  if (!avaliacaoForm || !avaliacaoForm.term_first) {
+    return false;
+  }
+
+  const startDate = new Date(avaliacaoForm.term_first);
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  return startDate > today;
 });
 
 const pdiReleaseData = computed(() => {
@@ -119,9 +140,37 @@ function handleSetPrazo() {
 }
 
 function handleLiberar(group: 'avaliacao' | 'pdi') {
-  if (confirm(`Tem certeza que deseja LIBERAR os formulários de ${group.toUpperCase()} para ${selectedYear.value}?`)) {
-    router.post(route('configs.liberar.store'), { year: selectedYear.value, group: group }, { preserveScroll: true });
+  // 1. Verifica se os prazos estão definidos para o grupo
+  const formTypes = group === 'avaliacao' ? ['servidor', 'gestor', 'chefia', 'comissionado'] : ['pactuacao'];
+  const formComPrazo = formsForSelectedYear.value.find(f => formTypes.includes(f.type) && f.term_first && f.term_end);
+
+  if (!formComPrazo) {
+    // 2. Se os prazos NÃO estiverem definidos, configura o dialog como um AVISO
+    isConfirmationDialog.value = false;
+    liberarModalTitle.value = 'Prazos Não Definidos';
+    liberarModalDescription.value = 'É necessário definir os prazos de início e encerramento antes de poder liberar este grupo de formulários.';
+  } else {
+    // 3. Se os prazos ESTIVEREM definidos, configura o dialog como uma CONFIRMAÇÃO
+    isConfirmationDialog.value = true;
+    groupToLiberar.value = group; // Armazena o grupo para usar na confirmação
+    liberarModalTitle.value = 'Confirmar Liberação';
+    liberarModalDescription.value = `Tem certeza que deseja LIBERAR os formulários de ${group.toUpperCase()} para o ano de ${selectedYear.value}? Esta ação não pode ser desfeita.`;
   }
+
+  isLiberarModalVisible.value = true;
+}
+function confirmAndLiberar() {
+  if (!groupToLiberar.value) return;
+
+  router.post(route('configs.liberar.store'), {
+    year: selectedYear.value,
+    group: groupToLiberar.value
+  }, {
+    preserveScroll: true,
+    onSuccess: () => {
+      isLiberarModalVisible.value = false; // Fecha o dialog em caso de sucesso
+    }
+  });
 }
 
 function handleCreate(type: string) { router.get(route('configs.create', { year: selectedYear.value, type: type })); }
@@ -143,18 +192,18 @@ async function handleFileSelect(event: Event) {
     showFlashModal('error', 'Por favor, selecione um arquivo .csv');
     return;
   }
-  
+
   fileName.value = file.name;
   isProcessing.value = true;
   isPreviewModalVisible.value = true;
-  
+
   const formData = new FormData();
   formData.append('file', file);
 
   try {
     const response = await axios.post(route('persons.preview'), formData);
     const data = response.data;
-    
+
     uploadSummary.value = data.summary;
     uploadErrors.value = data.errors;
     uploadDetails.value = data.detailed_changes;
@@ -167,32 +216,32 @@ async function handleFileSelect(event: Event) {
   } finally {
     isProcessing.value = false;
     if (target) {
-        target.value = '';
+      target.value = '';
     }
   }
 }
 
 async function handleConfirmUpload() {
-    if (!tempFilePath.value) {
-        // Substituído
-        showFlashModal('error', "Nenhum arquivo temporário encontrado para confirmar.");
-        return;
-    }
-    isProcessing.value = true;
-    try {
-        const response = await axios.post(route('persons.confirm'), {
-            temp_file_path: tempFilePath.value
-        });
-        // Substituído
-        showFlashModal('success', response.data.message);
-        closePreviewModal();
-        router.reload({ preserveScroll: true });
-    } catch (error: any) {
-        // Substituído
-        showFlashModal('error', 'Erro ao confirmar o upload: ' + (error.response?.data?.message || error.message));
-    } finally {
-        isProcessing.value = false;
-    }
+  if (!tempFilePath.value) {
+    // Substituído
+    showFlashModal('error', "Nenhum arquivo temporário encontrado para confirmar.");
+    return;
+  }
+  isProcessing.value = true;
+  try {
+    const response = await axios.post(route('persons.confirm'), {
+      temp_file_path: tempFilePath.value
+    });
+    // Substituído
+    showFlashModal('success', response.data.message);
+    closePreviewModal();
+    router.reload({ preserveScroll: true });
+  } catch (error: any) {
+    // Substituído
+    showFlashModal('error', 'Erro ao confirmar o upload: ' + (error.response?.data?.message || error.message));
+  } finally {
+    isProcessing.value = false;
+  }
 }
 
 function generateRelease() {
@@ -223,22 +272,23 @@ function closePreviewModal() {
 
 // --- CONTROLO DO MODAL ---
 const handleKeydown = (e: KeyboardEvent) => {
-    if (e.key === 'Escape' && isPreviewModalVisible.value) {
-        closePreviewModal();
-    }
+  if (e.key === 'Escape' && isPreviewModalVisible.value) {
+    closePreviewModal();
+  }
 };
 
 onMounted(() => {
-    window.addEventListener('keydown', handleKeydown);
+  window.addEventListener('keydown', handleKeydown);
 });
 
 onUnmounted(() => {
-    window.removeEventListener('keydown', handleKeydown);
+  window.removeEventListener('keydown', handleKeydown);
 });
 
 </script>
 
 <template>
+
   <Head title="Configurações" />
   <DashboardLayout pageTitle="Configurações">
 
@@ -250,7 +300,7 @@ onUnmounted(() => {
     </div>
 
     <div class="space-y-8 max-w-4xl mx-auto">
-      
+
       <div class="settings-section">
         <h3>Formulários</h3>
         <div class="setting-item">
@@ -267,95 +317,126 @@ onUnmounted(() => {
           <div class="setting-item">
             <label>Formulário I - Servidor:</label>
             <div class="button-group">
-              <button v-if="getFormForType('servidor')" @click="handleView(getFormForType('servidor').id)" class="btn btn-blue">
-                <span>Visualizar</span> <component :is="icons.EyeIcon" class="size-5" />
+              <button v-if="getFormForType('servidor')" @click="handleView(getFormForType('servidor').id)"
+                class="btn btn-blue">
+                <span>Visualizar</span>
+                <component :is="icons.EyeIcon" class="size-5" />
               </button>
-              <button v-if="getFormForType('servidor') && !isAvaliacaoGroupReleased" @click="handleEdit(getFormForType('servidor').id)" class="btn btn-yellow">
-                <span>Editar</span> <component :is="icons.FilePenLineIcon" class="size-5" />
+              <button v-if="getFormForType('servidor') && !isAvaliacaoGroupReleased"
+                @click="handleEdit(getFormForType('servidor').id)" class="btn btn-yellow">
+                <span>Editar</span>
+                <component :is="icons.FilePenLineIcon" class="size-5" />
               </button>
               <button v-else-if="!getFormForType('servidor')" @click="handleCreate('servidor')" class="btn btn-create">
-                <span>Criar</span> <component :is="icons.PlusIcon" class="size-5" />
+                <span>Criar</span>
+                <component :is="icons.PlusIcon" class="size-5" />
               </button>
             </div>
           </div>
           <div class="setting-item">
             <label>Formulário II - Gestor:</label>
             <div class="button-group">
-                <button v-if="getFormForType('gestor')" @click="handleView(getFormForType('gestor').id)" class="btn btn-blue">
-                    <span>Visualizar</span> <component :is="icons.EyeIcon" class="size-5" />
-                </button>
-                <button v-if="getFormForType('gestor') && !isAvaliacaoGroupReleased" @click="handleEdit(getFormForType('gestor').id)" class="btn btn-yellow">
-                    <span>Editar</span> <component :is="icons.FilePenLineIcon" class="size-5" />
-                </button>
-                <button v-else-if="!getFormForType('gestor')" @click="handleCreate('gestor')" class="btn btn-create">
-                    <span>Criar</span> <component :is="icons.PlusIcon" class="size-5" />
-                </button>
+              <button v-if="getFormForType('gestor')" @click="handleView(getFormForType('gestor').id)"
+                class="btn btn-blue">
+                <span>Visualizar</span>
+                <component :is="icons.EyeIcon" class="size-5" />
+              </button>
+              <button v-if="getFormForType('gestor') && !isAvaliacaoGroupReleased"
+                @click="handleEdit(getFormForType('gestor').id)" class="btn btn-yellow">
+                <span>Editar</span>
+                <component :is="icons.FilePenLineIcon" class="size-5" />
+              </button>
+              <button v-else-if="!getFormForType('gestor')" @click="handleCreate('gestor')" class="btn btn-create">
+                <span>Criar</span>
+                <component :is="icons.PlusIcon" class="size-5" />
+              </button>
             </div>
           </div>
           <div class="setting-item">
             <label>Formulário III - Equipe do Gestor:</label>
             <div class="button-group">
-                 <button v-if="getFormForType('chefia')" @click="handleView(getFormForType('chefia').id)" class="btn btn-blue">
-                    <span>Visualizar</span> <component :is="icons.EyeIcon" class="size-5" />
-                </button>
-                <button v-if="getFormForType('chefia') && !isAvaliacaoGroupReleased" @click="handleEdit(getFormForType('chefia').id)" class="btn btn-yellow">
-                    <span>Editar</span> <component :is="icons.FilePenLineIcon" class="size-5" />
-                </button>
-                <button v-else-if="!getFormForType('chefia')" @click="handleCreate('chefia')" class="btn btn-create">
-                    <span>Criar</span> <component :is="icons.PlusIcon" class="size-5" />
-                </button>
+              <button v-if="getFormForType('chefia')" @click="handleView(getFormForType('chefia').id)"
+                class="btn btn-blue">
+                <span>Visualizar</span>
+                <component :is="icons.EyeIcon" class="size-5" />
+              </button>
+              <button v-if="getFormForType('chefia') && !isAvaliacaoGroupReleased"
+                @click="handleEdit(getFormForType('chefia').id)" class="btn btn-yellow">
+                <span>Editar</span>
+                <component :is="icons.FilePenLineIcon" class="size-5" />
+              </button>
+              <button v-else-if="!getFormForType('chefia')" @click="handleCreate('chefia')" class="btn btn-create">
+                <span>Criar</span>
+                <component :is="icons.PlusIcon" class="size-5" />
+              </button>
             </div>
           </div>
           <div class="setting-item">
             <label>Formulário IV - Comissionado:</label>
             <div class="button-group">
-                 <button v-if="getFormForType('comissionado')" @click="handleView(getFormForType('comissionado').id)" class="btn btn-blue">
-                    <span>Visualizar</span> <component :is="icons.EyeIcon" class="size-5" />
-                </button>
-                <button v-if="getFormForType('comissionado') && !isAvaliacaoGroupReleased" @click="handleEdit(getFormForType('comissionado').id)" class="btn btn-yellow">
-                    <span>Editar</span> <component :is="icons.FilePenLineIcon" class="size-5" />
-                </button>
-                <button v-else-if="!getFormForType('comissionado')" @click="handleCreate('comissionado')" class="btn btn-create">
-                    <span>Criar</span> <component :is="icons.PlusIcon" class="size-5" />
-                </button>
+              <button v-if="getFormForType('comissionado')" @click="handleView(getFormForType('comissionado').id)"
+                class="btn btn-blue">
+                <span>Visualizar</span>
+                <component :is="icons.EyeIcon" class="size-5" />
+              </button>
+              <button v-if="getFormForType('comissionado') && !isAvaliacaoGroupReleased"
+                @click="handleEdit(getFormForType('comissionado').id)" class="btn btn-yellow">
+                <span>Editar</span>
+                <component :is="icons.FilePenLineIcon" class="size-5" />
+              </button>
+              <button v-else-if="!getFormForType('comissionado')" @click="handleCreate('comissionado')"
+                class="btn btn-create">
+                <span>Criar</span>
+                <component :is="icons.PlusIcon" class="size-5" />
+              </button>
             </div>
           </div>
           <div class="setting-item border-t pt-4 mt-4">
             <label>Ações da Avaliação:</label>
             <div v-if="!isAvaliacaoGroupReleased" class="button-group">
               <button class="btn btn-orange" @click="openPrazoModal('avaliacao')">
-                <span>Prazo</span> <component :is="icons.ClockIcon" class="size-5" />
+                <span>Prazo</span>
+                <component :is="icons.ClockIcon" class="size-5" />
               </button>
               <button class="btn btn-pine" @click="handleLiberar('avaliacao')">
-                <span>Liberar</span> <component :is="icons.SendIcon" class="size-5" />
+                <span>Liberar</span>
+                <component :is="icons.SendIcon" class="size-5" />
               </button>
             </div>
             <div v-else class="text-green-600 font-semibold flex items-center gap-2">
               <component :is="icons.CheckCircle2Icon" class="size-5" />
               Liberado em: {{ avaliacaoReleaseData }}
-              <Dialog>
+              <Dialog v-if="canManuallyGenerateEvaluations">
                 <DialogTrigger as-child>
-                    <button class="px-2 py-3 rounded-lg font-medium text-base transition-colors flex items-center justify-center gap-3">
-                        Gerar Avaliações
-                    </button>
+                  <button
+                    class="px-2 py-3 rounded-lg font-medium text-base transition-colors flex items-center justify-center gap-3">
+                    <component :is="icons.SquarePenIcon" class="size-5" />
+                    Gerar Avaliações
+                  </button>
                 </DialogTrigger>
-                 <DialogContent class="sm:max-w-md bg-white">
-                    <DialogHeader>
-                        <DialogTitle class="text-lg font-semibold text-gray-900">Gerar avaliações</DialogTitle>
-                        <DialogDescription class="mt-2 text-sm text-gray-600">
-                            Tem certeza que deseja gerar as avaliações para o ano de {{ selectedYear }}? Isso irá criar os formulários de avaliação para todos os gestores.
-                        </DialogDescription>
-                    </DialogHeader>
-                    <DialogFooter class="mt-6 flex flex-col-reverse sm:flex-row sm:justify-end sm:space-x-2">
-                        <DialogClose as-child>
-                            <button type="button" class="w-full sm:w-auto inline-flex justify-center rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50">
-                                Cancelar
-                            </button>
-                        </DialogClose>
-                        <button @click="generateRelease" type="button" class="w-full sm:w-auto inline-flex justify-center rounded-md border border-transparent bg-green-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-green-700">
-                            Sim, Gerar
-                        </button>
-                    </DialogFooter>
+                <DialogContent class="sm:max-w-md bg-white">
+                  <DialogHeader>
+                    <DialogTitle class="text-lg font-semibold text-gray-900">Gerar avaliações</DialogTitle>
+                    <DialogDescription class="mt-2 text-sm text-gray-600">
+                      Tem certeza que deseja gerar as avaliações para o ano de {{ selectedYear }}? Isso irá criar os
+                      formulários de avaliação para todos os gestores.
+                    </DialogDescription>
+                  </DialogHeader>
+                  <DialogFooter class="mt-6 flex flex-col-reverse sm:flex-row sm:justify-end sm:space-x-2">
+                    <DialogClose as-child>
+                      <button type="button"
+                        class="w-full sm:w-auto inline-flex justify-center rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50">
+                        Cancelar
+                      </button>
+                    </DialogClose>
+
+                    <DialogClose as-child>
+                      <button @click="generateRelease" type="button"
+                        class="w-full sm:w-auto inline-flex justify-center rounded-md border border-transparent bg-green-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-green-700">
+                        Sim, Gerar
+                      </button>
+                    </DialogClose>
+                  </DialogFooter>
                 </DialogContent>
               </Dialog>
             </div>
@@ -365,27 +446,75 @@ onUnmounted(() => {
         <div class="form-section">
           <h4>PDI - PLANO DE DESENVOLVIMENTO INDIVIDUAL</h4>
           <div class="setting-item">
-            <label>Formulário de Pactuação PDI:</label>
+            <label>Formulário de Pactuação - Servidor:</label>
             <div class="button-group">
-                <button v-if="getFormForType('pactuacao')" @click="handleView(getFormForType('pactuacao').id)" class="btn btn-blue">
-                    <span>Visualizar</span> <component :is="icons.EyeIcon" class="size-5" />
-                </button>
-                <button v-if="getFormForType('pactuacao') && !isPdiGroupReleased" @click="handleEdit(getFormForType('pactuacao').id)" class="btn btn-yellow">
-                    <span>Editar</span> <component :is="icons.FilePenLineIcon" class="size-5" />
-                </button>
-                <button v-else-if="!getFormForType('pactuacao')" @click="handleCreate('pactuacao')" class="btn btn-create">
-                    <span>Criar</span> <component :is="icons.PlusIcon" class="size-5" />
-                </button>
+              <button v-if="getFormForType('pactuacao')" @click="handleView(getFormForType('pactuacao').id)"
+                class="btn btn-blue">
+                <span>Visualizar</span>
+                <component :is="icons.EyeIcon" class="size-5" />
+              </button>
+              <button v-if="getFormForType('pactuacao') && !isPdiGroupReleased"
+                @click="handleEdit(getFormForType('pactuacao').id)" class="btn btn-yellow">
+                <span>Editar</span>
+                <component :is="icons.FilePenLineIcon" class="size-5" />
+              </button>
+              <button v-else-if="!getFormForType('pactuacao')" @click="handleCreate('pactuacao')"
+                class="btn btn-create">
+                <span>Criar</span>
+                <component :is="icons.PlusIcon" class="size-5" />
+              </button>
+            </div>
+          </div>
+          <div class="setting-item">
+            <label>Formulário de Pactuação - Comissionado:</label>
+            <div class="button-group">
+              <button v-if="getFormForType('pactuacao')" @click="handleView(getFormForType('pactuacao').id)"
+                class="btn btn-blue">
+                <span>Visualizar</span>
+                <component :is="icons.EyeIcon" class="size-5" />
+              </button>
+              <button v-if="getFormForType('pactuacao') && !isPdiGroupReleased"
+                @click="handleEdit(getFormForType('pactuacao').id)" class="btn btn-yellow">
+                <span>Editar</span>
+                <component :is="icons.FilePenLineIcon" class="size-5" />
+              </button>
+              <button v-else-if="!getFormForType('pactuacao')" @click="handleCreate('pactuacao')"
+                class="btn btn-create">
+                <span>Criar</span>
+                <component :is="icons.PlusIcon" class="size-5" />
+              </button>
+            </div>
+          </div>
+          <div class="setting-item">
+            <label>Formulário de Pactuação - Gestor:</label>
+            <div class="button-group">
+              <button v-if="getFormForType('pactuacao')" @click="handleView(getFormForType('pactuacao').id)"
+                class="btn btn-blue">
+                <span>Visualizar</span>
+                <component :is="icons.EyeIcon" class="size-5" />
+              </button>
+              <button v-if="getFormForType('pactuacao') && !isPdiGroupReleased"
+                @click="handleEdit(getFormForType('pactuacao').id)" class="btn btn-yellow">
+                <span>Editar</span>
+                <component :is="icons.FilePenLineIcon" class="size-5" />
+              </button>
+              <button v-else-if="!getFormForType('pactuacao')" @click="handleCreate('pactuacao')"
+                class="btn btn-create">
+                <span>Criar</span>
+                <component :is="icons.PlusIcon" class="size-5" />
+              </button>
             </div>
           </div>
           <div class="setting-item border-t pt-4 mt-4">
             <label>Ações do PDI:</label>
             <div v-if="!isPdiGroupReleased" class="button-group">
               <button class="btn btn-orange" @click="openPrazoModal('pdi')">
-                <span>Prazo</span> <component :is="icons.ClockIcon" class="size-5" />
+                <span>Prazo</span>
+                <component :is="icons.ClockIcon" class="size-5" />
               </button>
               <button class="btn btn-pine" @click="handleLiberar('pdi')">
-                <span>Liberar</span> <component :is="icons.SendIcon" class="size-5" />
+                <span>Liberar</span>
+                <component :is="icons.SendIcon" class="size-5" />
               </button>
             </div>
             <div v-else class="text-green-600 font-semibold flex items-center gap-2">
@@ -400,7 +529,7 @@ onUnmounted(() => {
         <h3>Gestão de Pessoas</h3>
         <div class="setting-item">
           <label>Upload de Planilha de Pessoas:</label>
-          <button @click="triggerFileInput" class="btn btn-blue">
+          <button @click="triggerFileInput" class="btn btn-yellow">
             <span>Upload</span>
             <component :is="icons.UploadCloudIcon" class="size-5" />
           </button>
@@ -430,17 +559,21 @@ onUnmounted(() => {
       </div>
     </div>
 
-    <div v-if="isPrazoModalVisible" class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
+    <div v-if="isPrazoModalVisible"
+      class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
       <div class="bg-white rounded-lg shadow-xl p-6 w-full max-w-md m-4">
         <h3 class="text-lg font-bold text-gray-800">Definir Prazo para {{ prazoGroup?.toUpperCase() }}</h3>
-        <p class="text-sm text-gray-600 mt-2">Selecione a data limite para o preenchimento dos formulários de {{ prazoGroup }} para o ano de {{ selectedYear }}.</p>
+        <p class="text-sm text-gray-600 mt-2">Selecione a data limite para o preenchimento dos formulários de {{
+          prazoGroup }} para o ano de {{ selectedYear }}.</p>
         <div class="my-4">
           <label for="prazo-date-inicio" class="block font-medium text-sm text-gray-700 mb-1">Data de início:</label>
-          <input type="date" id="prazo-date-inicio" v-model="prazoDateInicio" class="form-input rounded-md w-full border-gray-300 shadow-sm text-black">
+          <input type="date" id="prazo-date-inicio" v-model="prazoDateInicio"
+            class="form-input rounded-md w-full border-gray-300 shadow-sm text-black">
         </div>
         <div class="my-4">
           <label for="prazo-date-fim" class="block font-medium text-sm text-gray-700 mb-1">Data de encerramento:</label>
-          <input type="date" id="prazo-date-fim" v-model="prazoDateFim" class="form-input rounded-md w-full border-gray-300 shadow-sm text-black">
+          <input type="date" id="prazo-date-fim" v-model="prazoDateFim"
+            class="form-input rounded-md w-full border-gray-300 shadow-sm text-black">
         </div>
         <div class="flex justify-end gap-3 mt-6">
           <button @click="isPrazoModalVisible = false" class="btn btn-gray">Cancelar</button>
@@ -448,81 +581,126 @@ onUnmounted(() => {
         </div>
       </div>
     </div>
-    
-    <div v-if="isPreviewModalVisible" class="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-60 backdrop-blur-sm p-4" @click.self="closePreviewModal">
-        <div class="bg-white rounded-2xl shadow-2xl w-full max-w-4xl flex flex-col max-h-[90vh]">
-            <div class="flex justify-between items-center p-4 border-b">
-                <h3 class="text-lg font-bold text-gray-800">Pré-visualização do Upload</h3>
-                <button @click="closePreviewModal" class="p-1 rounded-full hover:bg-gray-200">
-                    <icons.XIcon class="size-5 text-gray-600"/>
-                </button>
-            </div>
 
-            <div class="p-6 overflow-y-auto flex-grow">
-                 <p class="text-sm text-gray-600 mb-4">Arquivo selecionado: <strong class="font-medium text-gray-900">{{ fileName }}</strong></p>
-
-                <div v-if="isProcessing" class="flex flex-col items-center justify-center text-center p-8 gap-4">
-                    <icons.LoaderCircleIcon class="size-8 animate-spin text-indigo-600"/>
-                    <p class="text-gray-600">Processando o arquivo, por favor aguarde...</p>
-                </div>
-
-                <div v-else class="flex flex-col gap-6">
-                    <div v-if="uploadSummary">
-                        <h4 class="font-semibold text-gray-700 mb-2">Resumo da Análise</h4>
-                        <div class="grid grid-cols-2 md:grid-cols-4 gap-4 text-center">
-                            <div class="flex flex-col items-center justify-center p-4 bg-blue-50 border border-blue-200 rounded-lg"><span class="text-2xl font-bold text-blue-600">{{ uploadSummary.new }}</span><span class="text-xs text-blue-500">Novos</span></div>
-                            <div class="flex flex-col items-center justify-center p-4 bg-yellow-50 border border-yellow-200 rounded-lg"><span class="text-2xl font-bold text-yellow-600">{{ uploadSummary.updated }}</span><span class="text-xs text-yellow-500">Atualizados</span></div>
-                            <div class="flex flex-col items-center justify-center p-4 bg-gray-100 border border-gray-200 rounded-lg"><span class="text-2xl font-bold text-gray-600">{{ uploadSummary.unchanged }}</span><span class="text-xs text-gray-500">Inalterados</span></div>
-                            <div class="flex flex-col items-center justify-center p-4 bg-red-50 border border-red-200 rounded-lg"><span class="text-2xl font-bold text-red-600">{{ uploadSummary.errors }}</span><span class="text-xs text-red-500">Com Erros</span></div>
-                        </div>
-                    </div>
-
-                    <div v-if="uploadErrors && uploadErrors.length > 0">
-                         <h4 class="font-semibold text-gray-700 mb-2">Erros Encontrados</h4>
-                        <div class="max-h-32 overflow-y-auto bg-red-50 border border-red-200 text-red-800 rounded-lg p-3 text-sm space-y-1">
-                            <p v-for="(error, index) in uploadErrors" :key="index">{{ error }}</p>
-                        </div>
-                    </div>
-
-                    <div v-if="uploadDetails && uploadDetails.length > 0">
-                        <h4 class="font-semibold text-gray-700 mb-2">Dados a Serem Importados/Atualizados</h4>
-                        <div class="max-h-64 overflow-y-auto space-y-3 p-3 bg-gray-50 rounded-lg border">
-                            <div v-for="(detail, index) in uploadDetails" :key="index" class="text-sm">
-                                <p class="font-semibold">
-                                    <span v-if="detail.status === 'new'" class="inline-block align-middle text-xs py-0.5 px-2 rounded-full bg-blue-100 text-blue-700 font-bold">[NOVO]</span>
-                                    <span v-if="detail.status === 'updated'" class="inline-block align-middle text-xs py-0.5 px-2 rounded-full bg-yellow-100 text-yellow-800 font-bold">[ATUALIZADO]</span>
-                                    <span class="text-gray-800 ml-2">{{ detail.name }}</span>
-                                    <span class="text-gray-500 text-xs ml-1">(Matrícula: {{ detail.registration_number }})</span>
-                                </p>
-                                <ul v-if="detail.status === 'updated' && detail.changes && Object.keys(detail.changes).length > 0" class="text-xs list-disc pl-8 mt-1.5 text-gray-600 space-y-1">
-                                    <li v-for="(change, field) in detail.changes" :key="field">
-                                        <strong class="capitalize font-medium">{{ field.replace(/_/g, ' ') }}:</strong> 
-                                        de <code class="bg-red-100 text-red-800 px-1.5 py-0.5 rounded">'{{ change.from }}'</code>
-                                        para <code class="bg-green-100 text-green-800 px-1.5 py-0.5 rounded">'{{ change.to }}'</code>
-                                    </li>
-                                </ul>
-                            </div>
-                        </div>
-                    </div>
-
-                </div>
-            </div>
-
-            <div class="flex justify-end gap-3 p-4 border-t bg-gray-50 rounded-b-2xl">
-                <button @click="closePreviewModal" class="btn btn-gray">Cancelar</button>
-                <button @click="handleConfirmUpload" class="btn btn-green" :disabled="isProcessing || (uploadErrors && uploadErrors.length > 0)">
-                    <span v-if="!isProcessing">Confirmar Upload</span>
-                    <span v-else>
-                        <icons.LoaderCircleIcon class="size-5 animate-spin mr-2"/>
-                        Processando...
-                    </span>
-                </button>
-            </div>
-             <p v-if="uploadErrors && uploadErrors.length > 0 && !isProcessing" class="px-6 pb-2 -mt-2 text-xs text-red-600 text-right">
-                O upload só será liberado após a correção dos erros no arquivo.
-            </p>
+    <div v-if="isPreviewModalVisible"
+      class="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-60 backdrop-blur-sm p-4"
+      @click.self="closePreviewModal">
+      <div class="bg-white rounded-2xl shadow-2xl w-full max-w-4xl flex flex-col max-h-[90vh]">
+        <div class="flex justify-between items-center p-4 border-b">
+          <h3 class="text-lg font-bold text-gray-800">Pré-visualização do Upload</h3>
+          <button @click="closePreviewModal" class="p-1 rounded-full hover:bg-gray-200">
+            <icons.XIcon class="size-5 text-gray-600" />
+          </button>
         </div>
-    </div>
 
+        <div class="p-6 overflow-y-auto flex-grow">
+          <p class="text-sm text-gray-600 mb-4">Arquivo selecionado: <strong class="font-medium text-gray-900">{{
+            fileName }}</strong></p>
+
+          <div v-if="isProcessing" class="flex flex-col items-center justify-center text-center p-8 gap-4">
+            <icons.LoaderCircleIcon class="size-8 animate-spin text-indigo-600" />
+            <p class="text-gray-600">Processando o arquivo, por favor aguarde...</p>
+          </div>
+
+          <div v-else class="flex flex-col gap-6">
+            <div v-if="uploadSummary">
+              <h4 class="font-semibold text-gray-700 mb-2">Resumo da Análise</h4>
+              <div class="grid grid-cols-2 md:grid-cols-4 gap-4 text-center">
+                <div class="flex flex-col items-center justify-center p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                  <span class="text-2xl font-bold text-blue-600">{{ uploadSummary.new }}</span><span
+                    class="text-xs text-blue-500">Novos</span>
+                </div>
+                <div
+                  class="flex flex-col items-center justify-center p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
+                  <span class="text-2xl font-bold text-yellow-600">{{ uploadSummary.updated }}</span><span
+                    class="text-xs text-yellow-500">Atualizados</span>
+                </div>
+                <div
+                  class="flex flex-col items-center justify-center p-4 bg-gray-100 border border-gray-200 rounded-lg">
+                  <span class="text-2xl font-bold text-gray-600">{{ uploadSummary.unchanged }}</span><span
+                    class="text-xs text-gray-500">Inalterados</span>
+                </div>
+                <div class="flex flex-col items-center justify-center p-4 bg-red-50 border border-red-200 rounded-lg">
+                  <span class="text-2xl font-bold text-red-600">{{ uploadSummary.errors }}</span><span
+                    class="text-xs text-red-500">Com Erros</span>
+                </div>
+              </div>
+            </div>
+
+            <div v-if="uploadErrors && uploadErrors.length > 0">
+              <h4 class="font-semibold text-gray-700 mb-2">Erros Encontrados</h4>
+              <div
+                class="max-h-32 overflow-y-auto bg-red-50 border border-red-200 text-red-800 rounded-lg p-3 text-sm space-y-1">
+                <p v-for="(error, index) in uploadErrors" :key="index">{{ error }}</p>
+              </div>
+            </div>
+
+            <div v-if="uploadDetails && uploadDetails.length > 0">
+              <h4 class="font-semibold text-gray-700 mb-2">Dados a Serem Importados/Atualizados</h4>
+              <div class="max-h-64 overflow-y-auto space-y-3 p-3 bg-gray-50 rounded-lg border">
+                <div v-for="(detail, index) in uploadDetails" :key="index" class="text-sm">
+                  <p class="font-semibold">
+                    <span v-if="detail.status === 'new'"
+                      class="inline-block align-middle text-xs py-0.5 px-2 rounded-full bg-blue-100 text-blue-700 font-bold">[NOVO]</span>
+                    <span v-if="detail.status === 'updated'"
+                      class="inline-block align-middle text-xs py-0.5 px-2 rounded-full bg-yellow-100 text-yellow-800 font-bold">[ATUALIZADO]</span>
+                    <span class="text-gray-800 ml-2">{{ detail.name }}</span>
+                    <span class="text-gray-500 text-xs ml-1">(Matrícula: {{ detail.registration_number }})</span>
+                  </p>
+                  <ul v-if="detail.status === 'updated' && detail.changes && Object.keys(detail.changes).length > 0"
+                    class="text-xs list-disc pl-8 mt-1.5 text-gray-600 space-y-1">
+                    <li v-for="(change, field) in detail.changes" :key="field">
+                      <strong class="capitalize font-medium">{{ field.replace(/_/g, ' ') }}:</strong>
+                      de <code class="bg-red-100 text-red-800 px-1.5 py-0.5 rounded">'{{ change.from }}'</code>
+                      para <code class="bg-green-100 text-green-800 px-1.5 py-0.5 rounded">'{{ change.to }}'</code>
+                    </li>
+                  </ul>
+                </div>
+              </div>
+            </div>
+
+          </div>
+        </div>
+
+        <div class="flex justify-end gap-3 p-4 border-t bg-gray-50 rounded-b-2xl">
+          <button @click="closePreviewModal" class="btn btn-gray">Cancelar</button>
+          <button @click="handleConfirmUpload" class="btn btn-green"
+            :disabled="isProcessing || (uploadErrors && uploadErrors.length > 0)">
+            <span v-if="!isProcessing">Confirmar Upload</span>
+            <span v-else>
+              <icons.LoaderCircleIcon class="size-5 animate-spin mr-2" />
+              Processando...
+            </span>
+          </button>
+        </div>
+        <p v-if="uploadErrors && uploadErrors.length > 0 && !isProcessing"
+          class="px-6 pb-2 -mt-2 text-xs text-red-600 text-right">
+          O upload só será liberado após a correção dos erros no arquivo.
+        </p>
+      </div>
+    </div>
+    <Dialog :open="isLiberarModalVisible" @update:open="isLiberarModalVisible = false">
+      <DialogContent class="sm:max-w-md bg-white">
+        <DialogHeader>
+          <DialogTitle class="text-lg font-semibold text-gray-900">{{ liberarModalTitle }}</DialogTitle>
+          <DialogDescription class="mt-2 text-sm text-gray-600">
+            {{ liberarModalDescription }}
+          </DialogDescription>
+        </DialogHeader>
+        <DialogFooter class="mt-6 flex flex-col-reverse sm:flex-row sm:justify-end sm:space-x-2">
+          <DialogClose as-child>
+            <button type="button"
+              class="w-full sm:w-auto inline-flex justify-center rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 shadow-sm hover:bg-red-400">
+              {{ isConfirmationDialog ? 'Cancelar' : 'Fechar' }}
+            </button>
+          </DialogClose>
+
+          <button v-if="isConfirmationDialog" @click="confirmAndLiberar" type="button"
+            class="w-full sm:w-auto inline-flex justify-center rounded-md border border-transparent bg-green-700 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-green-500">
+            Sim, Liberar
+          </button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   </DashboardLayout>
 </template>
