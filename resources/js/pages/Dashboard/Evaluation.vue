@@ -23,7 +23,6 @@ const props = defineProps<{
   selfEvaluationCompleted: boolean;
   bossEvaluationCompleted: boolean;
   teamEvaluationCompleted: boolean;
-  // Novos: IDs para abrir resultado dinâmico
   selfEvaluationRequestId?: number | null;
   bossEvaluationRequestId?: number | null;
   teamEvaluationRequestId?: number | null;
@@ -121,8 +120,9 @@ function handleManagerEvaluationClick() {
 // Função dinâmica para visualizar resultado
 function showEvaluationResult(evaluationRequestId: number | null | undefined) {
   if (!evaluationRequestId) return;
-  router.get(route('evaluations.result', { evaluationRequest: evaluationRequestId }));
+  router.get(route('evaluations.autoavaliacao.result', { evaluationRequest: evaluationRequestId }));
 }
+
 
 function showDetailsForDeadline() {
   alert('Ação de exemplo. (Substitua este alert por um modal ou navegação)');
@@ -133,7 +133,7 @@ function showDetailsForDeadline() {
   <Head title="Dashboard" />
   <DashboardLayout pageTitle="Dashboard de Avaliação">
     <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-      {{ props.self }}
+
       <!-- Card Autoavaliação -->
       <DashboardCard
         label="Autoavaliação"

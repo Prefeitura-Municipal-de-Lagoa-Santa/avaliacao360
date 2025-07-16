@@ -117,8 +117,7 @@ class Person extends Model
 
     public function jobFunction()
     {
-        return $this->belongsTo(JobFunction::class);
+        return $this->belongsTo(JobFunction::class, 'job_function_id');
     }
-
 
 }

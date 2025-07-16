@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\Form;
 use App\Models\Person;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
 use Inertia\Inertia;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\DB;
@@ -32,16 +33,16 @@ class EvaluationController extends Controller
         DB::beginTransaction();
         try {
             $evaluationRequest = EvaluationRequest::findOrFail($data['evaluation_request_id']);
+            $evaluation = $evaluationRequest->evaluation;
 
-            // Cria a avaliação
-            $evaluation = Evaluation::create([
-                'type' => $evaluationRequest->evaluation->type,
-                'form_id' => $evaluationRequest->evaluation->form_id,
-                'evaluated_person_id' => $evaluationRequest->requested_person_id,
-                'evaluation_request_id' => $evaluationRequest->id,
-            ]);
+            if (!$evaluation) {
+                throw new \Exception('Avaliação não encontrada para esta solicitação.');
+            }
 
-            // Salva as respostas, incluindo subject_person_id
+            // Opcional: Deletar respostas antigas para sobrescrever (ou atualize, se preferir)
+            $evaluation->answers()->delete();
+
+            // Salva as novas respostas
             foreach ($data['answers'] as $answer) {
                 $evaluation->answers()->create([
                     'question_id' => $answer['question_id'],
@@ -50,20 +51,19 @@ class EvaluationController extends Controller
                 ]);
             }
 
-            // Atualiza evidências e status na EvaluationRequest
+            // Atualiza evidências, assinatura e status na EvaluationRequest
             $evaluationRequest->update([
                 'evidencias' => $data['evidencias'],
                 'assinatura_base64' => $data['assinatura_base64'],
                 'status' => 'completed',
             ]);
 
-
             DB::commit();
 
-            return redirect()->route('evaluations.index')->with('success', 'Avaliação salva com sucesso!');
+            return redirect()->route('evaluations')->with('success', 'Avaliação salva com sucesso!');
         } catch (\Exception $e) {
             DB::rollBack();
-            Log::error('Erro ao salvar avaliação', [
+            \Log::error('Erro ao salvar avaliação', [
                 'user_id' => auth()->id(),
                 'request_data' => $request->all(),
                 'exception' => $e->getMessage(),
@@ -72,6 +72,7 @@ class EvaluationController extends Controller
             return back()->withErrors(['error' => 'Erro ao salvar avaliação. O erro foi registrado para análise.']);
         }
     }
+
 
     /**
      * Verifica a disponibilidade do formulário de chefia, incluindo a regra de prazo.
@@ -129,66 +130,48 @@ class EvaluationController extends Controller
     {
         $currentYear = date('Y');
 
-        // Altera de firstOrFail() para first() para não gerar erro 404
         $chefiaForm = Form::where('type', 'chefia')
             ->where('year', $currentYear)
             ->where('release', true)
             ->with('groupQuestions.questions')
             ->first();
 
-
-        // Se o formulário não for encontrado, redireciona de volta com uma mensagem de erro
         if (!$chefiaForm) {
             return redirect()->route('evaluations')
                 ->with('error', 'A avaliação da chefia para este período ainda não foi liberada.');
         }
 
-        // Se o formulário existir, continua normalmente
         $user = User::where('id', '=', auth()->id())->first(['id', 'name', 'cpf']);
-        $cpf = '06623986618';
-
-        $Person = Person::with('organizationalUnit.allParents')
+        $Person = Person::with('organizationalUnit.allParents', 'jobFunction')
             ->where('cpf', $user->cpf)
             ->first();
 
-        //dd($Person);
-
         if (!$Person) {
-            // Retorna um erro se o usuário não tiver um registro 'Person' associado
-            return redirect()->route('dashboard') // ou outra rota apropriada
+            return redirect()->route('dashboard')
                 ->with('error', 'Dados de servidor não encontrados para o seu usuário.');
         }
 
-        // 2. Busca as solicitações de avaliação de chefia pendentes para este gestor
-        $pendingEvaluations = EvaluationRequest::where('requested_person_id', $Person->id) // O gestor é o solicitante
-            //->where('status', 'pending') // Filtra apenas pelas pendentes
+        $pendingEvaluations = EvaluationRequest::where('requested_person_id', $Person->id)
             ->whereHas('evaluation', function ($query) {
-                $query->where('type', 'chefia'); // Garante que a avaliação é do tipo 'chefia'
+                $query->where('type', 'chefia');
             })
             ->with([
-                // Carrega os dados da pessoa a ser avaliada (o subordinado)
                 'requester.organizationalUnit.allParents',
-                // Carrega o formulário completo associado a esta avaliação
+                'requester.jobFunction', // Carrega jobFunction do avaliado
                 'evaluation.form.groupQuestions.questions'
             ])
             ->first();
 
-
-        $type = $pendingEvaluations->evaluation->type;
+        $type = $pendingEvaluations->evaluation->type ?? null;
         $personManager = $pendingEvaluations ? $pendingEvaluations->requester : null;
 
-        // 3. Renderiza a página, passando a lista de avaliações pendentes
-        // A página Vue poderá então exibir uma lista como: "Avaliar 'Fulano'", "Avaliar 'Ciclano'"
-        return Inertia::render('Evaluation/AvaliacaoPage', [ // Pode ser uma nova página ou a sua página de avaliação
+        return Inertia::render('Evaluation/AvaliacaoPage', [
             'form' => $chefiaForm,
             'person' => $personManager,
             'type' => $type,
             'evaluationRequest' => $pendingEvaluations,
         ]);
-
     }
-
-
 
 
     /**
@@ -253,15 +236,18 @@ class EvaluationController extends Controller
             return redirect()->route('evaluations')->with('error', 'CPF não encontrado para o usuário autenticado.');
         }
 
-        $person = Person::where('cpf', $user->cpf)->first();
+        // Carregando o relacionamento jobFunction e organizationalUnit.allParents
+        $person = Person::with('jobFunction', 'organizationalUnit.allParents')
+            ->where('cpf', $user->cpf)
+            ->first();
+
         if (!$person) {
             return redirect()->route('evaluations')
                 ->with('error', 'Dados de servidor não encontrados para o seu usuário.');
         }
 
-        // Busca qualquer tipo de autoavaliação pendente
-        $pendingRequest = EvaluationRequest::where('requested_person_id', $person->id)
-            ->where('status', 'pending')
+        $evaluationRequest = EvaluationRequest::where('requested_person_id', $person->id)
+            ->whereIn('status', ['pending', 'completed'])
             ->whereHas('evaluation', function ($query) {
                 $query->whereIn('type', [
                     'autoavaliação',
@@ -270,22 +256,29 @@ class EvaluationController extends Controller
                 ]);
             })
             ->with([
-                'evaluation.form.groupQuestions.questions'
+                'evaluation.answers',
+                'evaluation.form.groupQuestions.questions',
+                'evaluation.evaluated.jobFunction', // importante caso precise do avaliado (normalmente igual ao $person)
             ])
+            ->latest()
             ->first();
 
-        if ($pendingRequest) {
+        if ($evaluationRequest) {
+            $type = $evaluationRequest->evaluation->type;
+            $autoavaliacaoForm = $evaluationRequest->evaluation->form;
 
-            $type = $pendingRequest->evaluation->type;
-            $autoavaliacaoForm = $pendingRequest->evaluation->form;
-
-            $person->load('organizationalUnit.allParents');
+            // já está carregado com jobFunction
+            // $person->load('organizationalUnit.allParents');
 
             return Inertia::render('Evaluation/AvaliacaoPage', [
                 'form' => $autoavaliacaoForm,
                 'person' => $person,
                 'type' => $type,
-                'evaluationRequest' => $pendingRequest,
+                'evaluationRequest' => $evaluationRequest,
+                'answers' => $evaluationRequest->evaluation->answers ?? [],
+                'evidencias' => $evaluationRequest->evidencias ?? '',
+                'assinatura_base64' => $evaluationRequest->assinatura_base64 ?? '',
+                'status' => $evaluationRequest->status,
             ]);
         } else {
             return redirect()->route('evaluations')
@@ -301,7 +294,6 @@ class EvaluationController extends Controller
         // 1. Pega os dados da pessoa logada
         $user = auth()->user();
 
-        $user->cpf = '10798101610';
         $manager = Person::where('cpf', operator: $user->cpf)->first();
 
         // 2. Se não for uma pessoa ou não tiver cargo de chefia, não está disponível
@@ -327,10 +319,7 @@ class EvaluationController extends Controller
      */
     public function showSubordinatesList()
     {
-        $user = auth()->user();
-
-        $user->cpf = '10798101610';
-        $manager = Person::where('cpf', operator: $user->cpf)->first();
+        $manager = Person::where('cpf', Auth::user()->cpf)->first();
 
         if (!$manager) {
             return redirect()->route('dashboard')
@@ -339,21 +328,23 @@ class EvaluationController extends Controller
 
         // Busca TODAS as solicitações (pendentes e concluídas) onde o gestor avalia a equipe
         $evaluationRequests = EvaluationRequest::where('requested_person_id', $manager->id)
-            ->whereHas('evaluation', function ($query) {
-                $query->whereIn('type', ['servidor', 'gestor']);
+            ->whereHas('evaluation', function ($query) use ($manager) {
+                $query->whereIn('type', ['servidor', 'gestor', 'comissionado'])
+                    // Aqui exclui o próprio gestor da lista de avaliados
+                    ->where('evaluated_person_id', '!=', $manager->id);
             })
             ->with([
-                // Carrega os dados da pessoa AVALIADA (o subordinado)
-                'evaluation.evaluated:id,name,current_position',
+                'evaluation.evaluated:id,name,current_position,job_function_id',
+                'evaluation.evaluated.jobFunction:id,name',
             ])
             ->get();
 
-
-        // Renderiza uma NOVA PÁGINA VUE, passando a lista de solicitações
         return Inertia::render('Evaluation/SubordinatesList', [
             'requests' => $evaluationRequests,
         ]);
     }
+
+
 
     /**
      * EXIBIÇÃO: Mostra o formulário para avaliar um subordinado específico.
@@ -361,23 +352,20 @@ class EvaluationController extends Controller
      */
     public function showSubordinateEvaluationForm(EvaluationRequest $evaluationRequest)
     {
-
-
-        // Carrega todos os dados necessários
         $evaluationRequest->load([
             'evaluation.form.groupQuestions.questions',
-            'evaluation.evaluated.organizationalUnit.allParents'
+            'evaluation.evaluated.organizationalUnit.allParents',
+            'evaluation.evaluated.jobFunction', // Carrega função/cargo do subordinado
         ]);
 
         return Inertia::render('Evaluation/AvaliacaoPage', [
             'form' => $evaluationRequest->evaluation->form,
-            // Os dados da pessoa na tela são do SUBORDINADO
             'person' => $evaluationRequest->evaluation->evaluated,
             'evaluationRequest' => $evaluationRequest,
-            // Passa o tipo da avaliação para o título dinâmico na AvaliacaoPage
             'type' => $evaluationRequest->evaluation->type,
         ]);
     }
+
 
     public function pending(Request $request)
     {
@@ -425,18 +413,27 @@ class EvaluationController extends Controller
 
     public function showEvaluationResult(EvaluationRequest $evaluationRequest)
     {
-        $evaluation = $evaluationRequest->evaluation;
-        $answers = $evaluation ? $evaluation->answers : collect();
-        dd($answers);
+        // Carrega todos os relacionamentos necessários para a tela de resultado
+        $evaluationRequest->load([
+            'evaluation.answers',
+            'evaluation.form.groupQuestions.questions',
+            'evaluation.evaluated.jobFunction', // função/cargo do avaliado
+            'evaluation.evaluated.organizationalUnit.allParents'
+        ]);
+
+        // Pode ser necessário ajustar para pegar campos default, caso estejam nulos.
+        $evaluated = $evaluationRequest->evaluation->evaluated;
+
         return Inertia::render('Evaluation/AvaliacaoResultadoPage', [
-            'form' => $evaluation?->form,
-            'person' => $evaluation?->evaluated,
-            'type' => $evaluation?->type,
+            'form' => $evaluationRequest->evaluation->form,
+            'person' => $evaluated,
+            'type' => $evaluationRequest->evaluation->type,
             'evaluation' => [
-                'answers' => $answers,
+                'answers' => $evaluationRequest->evaluation->answers,
                 'evidencias' => $evaluationRequest->evidencias,
                 'assinatura_base64' => $evaluationRequest->assinatura_base64,
-            ]
+                'updated_at' => $evaluationRequest->updated_at,
+            ],
         ]);
     }
 

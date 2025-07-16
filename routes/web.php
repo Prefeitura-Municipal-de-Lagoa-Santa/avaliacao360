@@ -76,7 +76,7 @@ Route::get('/organizational-chart', [OrganizationalChartController::class, 'inde
 Route::post('/releases-generate/{year}', [ReleaseController::class, 'generateRelease'])
     ->name('releases.generate');
 
-Route::get('/evaluations/result/{evaluationRequest}', [EvaluationController::class, 'showEvaluationResult'])
-    ->name('evaluations.result');
+Route::get('/avaliacoes/autoavaliacao/resultado/{evaluationRequest}', [EvaluationController::class, 'showEvaluationResult'])
+    ->name('evaluations.autoavaliacao.result');
 
 require __DIR__ . '/auth.php';
