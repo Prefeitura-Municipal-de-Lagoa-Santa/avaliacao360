@@ -90,7 +90,7 @@ const cargoOuFuncao = computed(() => {
 
     <!-- Tabela de perguntas e respostas -->
     <div class="form-section">
-      <h3 class="section-title">Comportamentos Avaliados</h3>
+      <h3 class="section-title">Competências Avaliados</h3>
       <div v-for="group in form.group_questions" :key="group.id" class="mb-8">
         <h4 class="text-lg font-semibold mb-2">{{ group.name }}</h4>
         <table class="w-full bg-white border border-gray-200 rounded-lg">

@@ -241,7 +241,7 @@ const scoreOptions = [0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100];
                     </div>
                 </div>
                 <div class="form-section">
-                    <h3 class="section-title">3 - COMPORTAMENTOS AVALIADOS</h3>
+                    <h3 class="section-title">3 - COMPETÊNCIAS AVALIADOS</h3>
                     <div id="evaluation-tables-container" class="space-y-8">
                         <div v-for="group in form.group_questions" :key="group.id" class="overflow-x-auto">
                             <h4 class="text-lg font-semibold text-gray-700 mb-3">{{ group.name }} (Peso: {{ group.weight }}%)</h4>
@@ -265,7 +265,7 @@ const scoreOptions = [0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100];
                             <table class="min-w-full bg-white border border-gray-200 rounded-lg">
                                 <thead class="bg-gray-50">
                                     <tr>
-                                        <th class="table-header">Fator de Competência</th>
+                                        <th class="table-header">Fator de Comportamento</th>
                                     </tr>
                                 </thead>
                                 <tbody>
@@ -361,7 +361,7 @@ const scoreOptions = [0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100];
                     </div>
                 </div>
             <div class="form-section">
-                <h3 class="section-title">3 - COMPORTAMENTOS AVALIADOS</h3>
+                <h3 class="section-title">3 - COMPETÊNCIAS AVALIADAS</h3>
                 <div v-for="group in form.group_questions" :key="group.id" class="mb-8">
                     <h4 class="text-lg font-semibold mb-2">{{ group.name }}</h4>
                     <table class="min-w-full bg-white border border-gray-200 rounded-lg">
