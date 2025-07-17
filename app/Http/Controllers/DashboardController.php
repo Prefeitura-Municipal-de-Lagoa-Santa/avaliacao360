@@ -135,6 +135,7 @@ class DashboardController extends Controller
             ->whereHas('evaluation', function ($query) {
                 $query->where('type', [
                     'servidor',
+                    'gestor',
                     'comissionado',
                 ]);
             })
