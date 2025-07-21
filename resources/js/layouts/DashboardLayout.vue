@@ -39,6 +39,7 @@ const navItems = ref<NavItem[]>([
   { label: 'Avaliação', href: '/evaluations', routeName: 'evaluations' },
   { label: 'PDI', href: '/pdi', routeName: 'pdi' },
   { label: 'Relatórios', href: '/reports', routeName: 'reports' },
+  { label: 'Recursos', href: '/recourse', routeName: 'recourse' },
   { label: 'Calendário', href: '/calendar', routeName: 'calendar' },
   { label: 'Configurações', href: '/configs', routeName: 'configs' },
   { label: 'Admin', href: '/admin', routeName: 'admin' },
@@ -113,7 +114,7 @@ watch(isMobileMenuOpen, (isOpen) => {
       </div>
       
       <nav class="nav-bar bg-gray-200 p-3 sm:p-2 border-b border-gray-200 hidden sm:flex justify-center items-center gap-2 relative">
-        <div class="flex items-center justify-center gap-2 mr-50">
+        <div class="flex items-center justify-center gap-2 mr-28">
             <template v-for="(item) in navItems" :key="item.routeName">
               <Link
                 v-if="can(item.routeName)"
@@ -133,7 +134,7 @@ watch(isMobileMenuOpen, (isOpen) => {
            <Dialog>
               <DialogTrigger as-child>
                 <button
-                  class="px-4 py-2 bg-red-500 text-white rounded-lg font-medium text-sm hover:bg-red-700 transition-colors card-icon-logout flex items-center"
+                  class="px-3 py-2 bg-red-500 text-white rounded-lg font-medium text-sm hover:bg-red-700 transition-colors card-icon-logout flex items-center"
                   title="Sair do sistema"
                 >
                   Sair

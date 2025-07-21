@@ -218,6 +218,22 @@ class DashboardController extends Controller
         ]);
     }
 
+    public function recourse()
+    {
+
+        if (!user_can('recourse')) {
+            return redirect()->route('evaluations')->with('error', 'Você não tem permissão para acessar essa área.');
+        }
+
+        // Busca o prazo apenas para o grupo de PDI
+        $recourse = $this->getGroupDeadline('recourse');
+
+        return Inertia::render('Dashboard/Recourse', [
+            'recourse' => $recourse,
+        ]);
+    }
+
+
     public function calendar()
     {
         if (!user_can('calendar')) {
