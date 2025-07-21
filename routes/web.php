@@ -31,6 +31,8 @@ Route::middleware(['auth', 'verified', EnsureCpfIsFilled::class])->group(functio
 
     Route::get('/configs', [DashboardController::class, 'configs'])->name('configs');
 
+    Route::get('/recourse', [DashboardController::class, 'recourse'])->name('recourse');
+
     Route::get('/configs/form/create', [FormController::class, 'create'])->name('configs.create');
     Route::post('/configs/form', [FormController::class, 'store'])->name('configs.store');
     Route::get('/configs/form/{formulario}', [FormController::class, 'show'])->name('configs.show');
@@ -39,6 +41,8 @@ Route::middleware(['auth', 'verified', EnsureCpfIsFilled::class])->group(functio
     Route::delete('/configs/form/{formulario}', [FormController::class, 'destroy'])->name('configs.destroy');
     Route::post('/configs/forms/prazo', [FormController::class, 'setPrazo'])->name('configs.prazo.store');
     Route::post('/configs/forms/liberar', [FormController::class, 'setLiberar'])->name('configs.liberar.store');
+    // Rota para salvar as configurações
+    Route::post('/configs/store', [ConfigController::class, 'store'])->name('configs.store');
     // ROTAS PARA AVALIAÇÃO DA CHEFIA
     Route::get('/evaluations/chefia/status', [EvaluationController::class, 'checkChefiaFormStatus'])->name('evaluations.chefia.status');
     Route::get('/evaluations/chefia', [EvaluationController::class, 'showChefiaForm'])->name('evaluations.chefia.show');
