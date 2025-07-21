@@ -31,6 +31,11 @@ const props = defineProps<{
     term_first: string | null;
     term_end: string | null;
   }>;
+   configs: {
+    gradesPeriod: string;
+    awarePeriod: number;
+    recoursePeriod: number;
+  } | null;
   existingYears: Array<string | number>;
 }>();
 
@@ -85,7 +90,7 @@ const avaliacaoReleaseData = computed(() => {
 
 const canManuallyGenerateEvaluations = computed(() => {
 
-  const avaliacaoForm = formsForSelectedYear.value.find(form => 
+  const avaliacaoForm = formsForSelectedYear.value.find(form =>
     ['servidor', 'gestor', 'chefia', 'comissionado'].includes(form.type)
   );
 
@@ -173,6 +178,25 @@ function confirmAndLiberar() {
   });
 }
 
+function saveSettings() {
+  router.post(route('configs.store'), {
+    gradesPeriod: gradesPeriod.value,
+    awarePeriod: awarePeriod.value,
+    recoursePeriod: recoursePeriod.value,
+  }, {
+    preserveScroll: true,
+    onSuccess: () => {
+      // Usando o seu composable de modal para feedback
+      showFlashModal('success', 'Configurações salvas com sucesso!');
+    },
+    onError: (errors) => {
+      // Pega a primeira mensagem de erro para exibir
+      const firstError = Object.values(errors)[0];
+      showFlashModal('error', `Erro ao salvar: ${firstError}`);
+    }
+  });
+}
+
 function handleCreate(type: string) { router.get(route('configs.create', { year: selectedYear.value, type: type })); }
 function handleEdit(formId: number) { router.get(route('configs.edit', { formulario: formId })); }
 function handleView(formId: number) { router.get(route('configs.show', { formulario: formId })); }
@@ -199,6 +223,9 @@ async function handleFileSelect(event: Event) {
 
   const formData = new FormData();
   formData.append('file', file);
+  const gradesPeriod = ref('');
+  const awarePeriod = ref<number | string>('');
+  const recoursePeriod = ref<number | string>('');
 
   try {
     const response = await axios.post(route('persons.preview'), formData);
@@ -278,6 +305,11 @@ const handleKeydown = (e: KeyboardEvent) => {
 };
 
 onMounted(() => {
+  if (props.configs) {
+    gradesPeriod.value = props.configs.gradesPeriod ? props.configs.gradesPeriod.substring(0, 10) : '';
+    awarePeriod.value = props.configs.awarePeriod;
+    recoursePeriod.value = props.configs.recoursePeriod;
+  }
   window.addEventListener('keydown', handleKeydown);
 });
 
@@ -524,7 +556,7 @@ onUnmounted(() => {
           </div>
         </div>
       </div>
-
+      
       <div class="settings-section">
         <h3>Gestão de Pessoas</h3>
         <div class="setting-item">
@@ -557,7 +589,36 @@ onUnmounted(() => {
           </button>
         </div>
       </div>
+
+      <!-- Configurações -->
+      <div class="settings-section">
+        <h3>Configurações</h3>
+
+        <div class="setting-item">
+          <label for="release-date">Definir data de divulgação das notas:</label>
+          <input type="date" id="release-date" class="input-date" v-model="gradesPeriod">
+        </div>
+
+        <div class="setting-item">
+          <label>Definir período de ciência das notas (quantidade de dias após divulgação):</label>
+          <input type="number" id="aware-period" min="0" class="input-day" placeholder="Nº de dias" v-model="awarePeriod">
+        </div>
+
+        <div class="setting-item">
+          <label for="appeal-days">Definir período de recurso (quantidade de dias após a ciência das notas):</label>
+          <input type="number" id="recourse-period" min="0" class="input-day" placeholder="Nº de dias" v-model="recoursePeriod">
+        </div>
+
+        <div class="setting-item">
+          <label>Salvar alterações:</label>
+          <button @click="saveSettings" class="btn btn-green">
+            <span>Salvar</span>
+            <component :is="icons.SaveIcon" class="size-5" />
+          </button>
+        </div>
+      </div>
     </div>
+
 
     <div v-if="isPrazoModalVisible"
       class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
@@ -704,3 +765,24 @@ onUnmounted(() => {
     </Dialog>
   </DashboardLayout>
 </template>
+
+<style>
+.input-date {
+  border: 1px solid #ccc;
+  padding: 8px;
+  border-radius: 5px;
+}
+
+.input-day {
+  border: 1px solid #ccc;
+  padding: 8px;
+  border-radius: 5px;
+  width: 105px;
+}
+
+.date-range-inputs {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+</style>
