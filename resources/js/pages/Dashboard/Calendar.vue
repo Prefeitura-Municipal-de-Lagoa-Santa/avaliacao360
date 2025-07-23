@@ -23,6 +23,7 @@ interface CalendarDay {
 const props = defineProps<{
   deadlineEvents: Array<DeadlineEvent>
 }>();
+console.log(props);
 
 // --- ESTADO REATIVO ---
 const today = new Date();
@@ -88,22 +89,37 @@ function handleEventClick(dayNumber: number, month: number, year: number, event:
   const clickedDate = new Date(year, month, dayNumber);
   const startDate = new Date(event.start + 'T00:00:00');
   const endDate = new Date(event.end + 'T00:00:00');
-
   // Define um nome mais amigável para o grupo
-  const friendlyGroupName = event.group === 'avaliacao' 
-    ? 'a Avaliação' // Usamos o artigo feminino para concordância
-    : 'o PDI';      // Usamos o artigo masculino para concordância
 
   let message = event.title; // Mensagem padrão para os dias no meio do período
   let title = "Período de Preenchimento"; // Título padrão do modal
 
-  // Compara as datas para definir a mensagem e o título do modal
-  if (clickedDate.getTime() === startDate.getTime()) {
-    title = "Início";
-    message = `Início do período para preencher ${friendlyGroupName}.`;
-  } else if (clickedDate.getTime() === endDate.getTime()) {
-    title = "Último dia do prazo";
-    message = `Último dia para preencher ${friendlyGroupName}.`;
+  // Lógica para os grupos existentes
+  if (event.group === 'avaliacao' || event.group === 'pdi') {
+    const friendlyGroupName = event.group === 'avaliacao' ? 'a Avaliação' : 'o PDI';
+    title = "Período de Preenchimento";
+    if (clickedDate.getTime() === startDate.getTime()) {
+      title = "Início do Prazo";
+      message = `Início do período para preencher ${friendlyGroupName}.`;
+    } else if (clickedDate.getTime() === endDate.getTime()) {
+      title = "Fim do Prazo";
+      message = `Último dia para preencher ${friendlyGroupName}.`;
+    }
+  }
+
+  // NOVA LÓGICA para os novos grupos
+  else if (event.group === 'divulgacao') {
+    title = "Divulgação das Notas";
+    message = "Data oficial para a divulgação das notas das avaliações.";
+  }
+  else if (event.group === 'ciencia') {
+    title = "Ciência da Nota";
+    message = "Período para os servidores tomarem ciência de suas notas.";
+    if (clickedDate.getTime() === startDate.getTime()) {
+      title = "Início do Período de Ciência";
+    } else if (clickedDate.getTime() === endDate.getTime()) {
+      title = "Fim do Período de Ciência";
+    }
   }
 
   showCalendarMessage(message, title);
@@ -178,10 +194,20 @@ const calendarGridDays = computed((): Array<CalendarDay> => {
             {{ day.number }}
 
             <div class="events-container">
-              <div v-for="event in getEventsForDay(day.number!, currentMonth, currentYear)" :key="event.title"
-                :class="['event', { 'highlight': event.group === 'avaliacao', 'pdi-event': event.group === 'pdi' }]"
-                @click="handleEventClick(day.number!, currentMonth, currentYear, event)">
-                <span class="hidden sm:inline">{{ event.group === 'avaliacao' ? 'Avaliação' : 'PDI' }}</span>
+              <div v-for="event in getEventsForDay(day.number!, currentMonth, currentYear)" :key="event.title" :class="['event', {
+                'highlight': event.group === 'avaliacao',
+                'pdi-event': event.group === 'pdi',
+                'divulgacao-event': event.group === 'divulgacao',
+                'ciencia-event': event.group === 'ciencia'
+              }]" @click="handleEventClick(day.number!, currentMonth, currentYear, event)">
+
+                <span class="hidden sm:inline">
+                  {{ event.group === 'avaliacao' ? 'Avaliação' :
+                    event.group === 'pdi' ? 'PDI' :
+                      event.group === 'divulgacao' ? 'Notas' :
+                        event.group === 'ciencia' ? 'Ciência' : ''
+                  }}
+                </span>
               </div>
             </div>
           </template>
@@ -201,3 +227,31 @@ const calendarGridDays = computed((): Array<CalendarDay> => {
     </div>
   </DashboardLayout>
 </template>
+
+<style>
+/* ... (seus estilos existentes) ... */
+
+/* Novo estilo para o evento de Divulgação das Notas */
+.divulgacao-event {
+  background-color: #10B981;
+  /* Verde esmeralda */
+  color: white;
+  border-left: 3px solid #059669;
+}
+
+.divulgacao-event:hover {
+  background-color: #059669;
+}
+
+/* Novo estilo para o evento de Ciência da Nota */
+.ciencia-event {
+  background-color: #e0af59;
+  /* Âmbar */
+  color: white;
+  border-left: 3px solid #D97706;
+}
+
+.ciencia-event:hover {
+  background-color: #D97706;
+}
+</style>

@@ -1,8 +1,7 @@
 <?php
-// File: app/Http/Controllers/DashboardController.php
-// Descrição: Controller Laravel para servir a página do Dashboard via Inertia.
 
 namespace App\Http\Controllers;
+
 use App\Models\Form;
 use App\Models\Person;
 use Illuminate\Http\Request;
@@ -10,14 +9,13 @@ use Illuminate\Support\Facades\Auth;
 use Inertia\Inertia;
 use Inertia\Response;
 use App\Models\EvaluationRequest;
+use App\Models\configs as Config; // Importar o model de configurações
+use Carbon\Carbon; // Importar a classe Carbon
 
 class DashboardController extends Controller
 {
     /**
-     * Função de ajuda para buscar o prazo de um grupo específico (se estiver liberado).
-     *
-     * @param string $groupName 'avaliacao' ou 'pdi'
-     * @return \App\Models\Form|null
+     * Função de ajuda para buscar o prazo de um grupo específico.
      */
     private function getGroupDeadline(string $groupName): ?Form
     {
@@ -27,10 +25,10 @@ class DashboardController extends Controller
         if ($groupName === 'avaliacao') {
             $formTypes = ['servidor', 'gestor', 'chefia', 'comissionado'];
         } elseif ($groupName === 'pdi') {
-            $formTypes = ['pactuacao'];
+            // ***** CORREÇÃO APLICADA AQUI *****
+            $formTypes = ['pactuacao_servidor', 'pactuacao_comissionado', 'pactuacao_gestor'];
         }
 
-        // Busca o primeiro formulário do grupo/ano que esteja liberado (release = true)
         return Form::where('year', $currentYear)
             ->whereIn('type', $formTypes)
             ->where('release', true)
@@ -40,8 +38,6 @@ class DashboardController extends Controller
 
     /**
      * Exibe a página principal do dashboard.
-     *
-     * @return \Inertia\Response
      */
     public function index()
     {
@@ -49,38 +45,29 @@ class DashboardController extends Controller
             return redirect()->route('evaluations');
         }
 
-        // Busca os prazos
         $prazoAvaliacao = $this->getGroupDeadline('avaliacao');
         $prazoPdi = $this->getGroupDeadline('pdi');
 
-        // --- INÍCIO DA ALTERAÇÃO ---
-
-        // 2. Calcule os status da avaliação
         $completedAssessments = EvaluationRequest::where('status', 'completed')->count();
         $pendingAssessments = EvaluationRequest::where('status', 'pending')->count();
         $totalAssessments = $completedAssessments + $pendingAssessments;
 
-        // 3. Calcule o progresso geral, tratando a divisão por zero
-        $overallProgress = 0;
-        if ($totalAssessments > 0) {
-            $overallProgress = round(($completedAssessments / $totalAssessments) * 100);
-        }
+        $overallProgress = ($totalAssessments > 0) ? round(($completedAssessments / $totalAssessments) * 100) : 0;
 
-        // 4. Crie um array com os dados para o dashboard
         $dashboardStats = [
             'completedAssessments' => $completedAssessments,
             'pendingAssessments' => $pendingAssessments,
-            'overallProgress' => $overallProgress . '%', // Formata como string de porcentagem
+            'overallProgress' => $overallProgress . '%',
         ];
-
-        // --- FIM DA ALTERAÇÃO ---
 
         return Inertia::render('Dashboard/Index', [
             'prazoAvaliacao' => $prazoAvaliacao,
             'prazoPdi' => $prazoPdi,
-            'dashboardStats' => $dashboardStats, // 5. Passe os dados para a view
+            'dashboardStats' => $dashboardStats,
         ]);
     }
+    
+    // ... (os outros métodos como evaluation(), pdi(), etc., permanecem os mesmos) ...
     public function evaluation()
     {
         // dd(Auth::user()->cpf);
@@ -238,42 +225,77 @@ class DashboardController extends Controller
         ]);
     }
 
-
+    /**
+     * ***** MÉTODO DO CALENDÁRIO ATUALIZADO *****
+     */
     public function calendar()
     {
         if (!user_can('calendar')) {
             return redirect()->route('evaluations')->with('error', 'Você não tem permissão para acessar essa área.');
         }
-        // Busca todos os formulários que possuem um prazo definido
+
+        // 1. Busca os prazos dos formulários
         $prazos = Form::whereNotNull('term_first')
             ->whereNotNull('term_end')
             ->select('year', 'type', 'term_first', 'term_end')
             ->get()
-            // Agrupa primeiro por ano, depois por 'avaliacao' ou 'pdi'
             ->groupBy([
                 'year',
                 function ($item) {
-                    return in_array($item->type, ['servidor', 'gestor', 'chefia', 'comissionado']) ? 'avaliacao' : 'pdi';
+                    $pdiTypes = ['pactuacao_servidor', 'pactuacao_comissionado', 'pactuacao_gestor'];
+                    return in_array($item->type, $pdiTypes) ? 'pdi' : 'avaliacao';
                 }
             ])
-            // Mapeia os grupos para criar um evento simplificado
             ->map(function ($yearGroup) {
                 return $yearGroup->map(function ($group, $groupName) {
-                    $firstForm = $group->first(); // Pega o primeiro formulário do grupo como representante
+                    $firstForm = $group->first();
                     return [
-                        'start' => $firstForm->term_first->toDateString(), // Formato AAAA-MM-DD
-                        'end' => $firstForm->term_end->toDateString(),     // Formato AAAA-MM-DD
+                        'start' => $firstForm->term_first->toDateString(),
+                        'end' => $firstForm->term_end->toDateString(),
                         'title' => 'Período ' . ucfirst($groupName) . ' ' . $firstForm->year,
-                        'group' => $groupName, // 'avaliacao' ou 'pdi'
+                        'group' => $groupName,
                     ];
                 });
             })
-            ->flatten(1) // Transforma a coleção de grupos em uma lista única
-            ->values(); // Garante que seja um array simples
+            ->flatten(1)
+            ->values()
+            ->toArray();
 
-        // Passa a lista de eventos de prazo para o componente Vue
+        // 2. Busca as configurações de datas
+        $config = Config::first();
+        $newEvents = [];
+
+        if ($config) {
+            // 3. Cria o evento para a "Divulgação das Notas"
+            if ($config->gradesPeriod) {
+                $gradesDate = Carbon::parse($config->gradesPeriod);
+                $newEvents[] = [
+                    'start' => $gradesDate->toDateString(),
+                    'end' => $gradesDate->toDateString(),
+                    'title' => 'Divulgação das Notas',
+                    'group' => 'divulgacao',
+                ];
+            }
+
+            // 4. Cria o evento para o "Período de Ciência"
+            if ($config->gradesPeriod && isset($config->awarePeriod)) {
+                $startDate = Carbon::parse($config->gradesPeriod)->addDay();
+                $endDate = $startDate->copy()->addDays($config->awarePeriod - 1);
+
+                $newEvents[] = [
+                    'start' => $startDate->toDateString(),
+                    'end' => $endDate->toDateString(),
+                    'title' => 'Período de Ciência da Nota',
+                    'group' => 'ciencia',
+                ];
+            }
+        }
+
+        // 5. Junta todos os eventos
+        $allEvents = array_merge($prazos, $newEvents);
+
         return Inertia::render('Dashboard/Calendar', [
-            'deadlineEvents' => $prazos,
+            'deadlineEvents' => $allEvents,
         ]);
     }
 
@@ -296,7 +318,7 @@ class DashboardController extends Controller
             // Outros dados necessários para a página
         ]);
     }
-
+    
     public function configs()
     {
 
@@ -312,7 +334,6 @@ class DashboardController extends Controller
         // Lógica para buscar os anos únicos
         $existingYears = Form::select('year')->distinct()->pluck('year');
 
-        // Passa os dados no formato correto para a view
         return Inertia::render('Dashboard/Configs', [
             'forms' => $forms,
             'existingYears' => $existingYears,
