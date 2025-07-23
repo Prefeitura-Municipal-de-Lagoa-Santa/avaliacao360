@@ -103,6 +103,8 @@ class PersonController extends Controller
             ->orderBy('name')
             ->get(['id', 'name']);
 
+        $subordinates = $person->subordinates()->orderBy('name')->get(['id', 'name', 'registration_number']);
+
         return Inertia::render('People/Edit', [
             'person' => [
                 'id' => $person->id,
@@ -123,6 +125,7 @@ class PersonController extends Controller
             'functionalStatuses' => $functionalStatuses,
             'jobFunctions' => $jobFunctions,
             'managerOptions' => $managerOptions, // ✅ novo
+            'subordinates' => $subordinates,
         ]);
     }
 

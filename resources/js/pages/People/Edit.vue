@@ -25,6 +25,7 @@ const props = defineProps<{
   functionalStatuses: Array<string>;
   managerOptions: Array<{ id: number; name: string }>;
   errors: Object;
+  subordinates: Array<{ id: number; name: string; registration_number: string | null }>;
 }>();
 
 const form = useForm({
@@ -178,6 +179,27 @@ const submit = () => {
           </button>
         </div>
       </form>
+      <div class="mt-12">
+        <h2 class="text-lg font-semibold text-gray-800 mb-4">Subordinados</h2>
+
+        <div v-if="subordinates.length > 0" class="bg-white border rounded shadow-sm divide-y">
+            <div
+            v-for="person in subordinates"
+            :key="person.id"
+            class="px-4 py-3 flex justify-between items-center hover:bg-gray-50"
+            >
+            <div>
+                <p class="text-sm font-medium text-gray-900">{{ person.name }}</p>
+                <p class="text-xs text-gray-500">Matrícula: {{ person.registration_number ?? '---' }}</p>
+            </div>
+            <Link :href="route('people.edit', person.id)" class="text-indigo-600 text-sm hover:underline">Editar</Link>
+            </div>
+        </div>
+
+        <div v-else class="text-gray-500 text-sm">
+            Nenhum subordinado encontrado.
+        </div>
+    </div>
     </div>
   </DashboardLayout>
 </template>
