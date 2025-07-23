@@ -125,7 +125,7 @@ function showEvaluationResult(evaluationRequestId: number | null | undefined) {
 
 
 function showDetailsForDeadline() {
-  alert('Ação de exemplo. (Substitua este alert por um modal ou navegação)');
+  router.get(route('evaluations.history'));
 }
 </script>
 
