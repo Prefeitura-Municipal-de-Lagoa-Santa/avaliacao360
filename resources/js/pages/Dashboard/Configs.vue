@@ -5,7 +5,6 @@ import DashboardLayout from '@/layouts/DashboardLayout.vue';
 import * as icons from 'lucide-vue-next';
 import axios from 'axios';
 import { route } from 'ziggy-js';
-// 1. Importe o useFlashModal
 import { useFlashModal } from '@/composables/useFlashModal';
 
 import {
@@ -39,13 +38,17 @@ const props = defineProps<{
   existingYears: Array<string | number>;
 }>();
 
-// 2. Inicialize o composable para ter acesso à função que exibe o modal
 const { showFlashModal } = useFlashModal();
 
 // --- ESTADO DA PÁGINA ---
 const page = usePage();
 const flash = computed(() => page.props.flash as { success?: string; error?: string });
 const selectedYear = ref(String(new Date().getFullYear()));
+
+// ***** VARIÁVEIS MOVIDAS PARA O ESCOPO CORRETO *****
+const gradesPeriod = ref('');
+const awarePeriod = ref<number | string>('');
+const recoursePeriod = ref<number | string>('');
 
 // --- ESTADO DO MODAL DE PRAZO ---
 const isPrazoModalVisible = ref(false);
@@ -81,7 +84,7 @@ const formsForSelectedYear = computed(() => {
 });
 
 const isAvaliacaoGroupReleased = computed(() => formsForSelectedYear.value.filter(form => ['servidor', 'gestor', 'chefia', 'comissionado'].includes(form.type)).some(form => form.release));
-const isPdiGroupReleased = computed(() => formsForSelectedYear.value.filter(form => ['pactuacao'].includes(form.type)).some(form => form.release));
+const isPdiGroupReleased = computed(() => formsForSelectedYear.value.filter(form => ['pactuacao_servidor','pactuacao_comissionado','pactuacao_gestor'].includes(form.type)).some(form => form.release));
 
 const avaliacaoReleaseData = computed(() => {
   const f = formsForSelectedYear.value.find(form => ['servidor', 'gestor', 'chefia', 'comissionado'].includes(form.type) && form.release_data);
@@ -105,7 +108,7 @@ const canManuallyGenerateEvaluations = computed(() => {
 });
 
 const pdiReleaseData = computed(() => {
-  const f = formsForSelectedYear.value.find(form => ['pactuacao'].includes(form.type) && form.release_data);
+  const f = formsForSelectedYear.value.find(form => ['pactuacao_servidor','pactuacao_comissionado','pactuacao_gestor'].includes(form.type) && form.release_data);
   return f ? new Date(f.release_data!).toLocaleDateString('pt-BR') : 'Data não encontrada';
 });
 
@@ -114,7 +117,7 @@ const getFormForType = (type: string) => props.forms[`${selectedYear.value}_${ty
 
 function openPrazoModal(group: 'avaliacao' | 'pdi') {
   prazoGroup.value = group;
-  const formTypes = group === 'avaliacao' ? ['servidor', 'gestor', 'chefia', 'comissionado'] : ['pactuacao'];
+  const formTypes = group === 'avaliacao' ? ['servidor', 'gestor', 'chefia', 'comissionado'] : ['pactuacao_servidor','pactuacao_comissionado','pactuacao_gestor'];
   const existingForm = formsForSelectedYear.value.find(f => formTypes.includes(f.type) && f.term_first && f.term_end);
 
   if (existingForm) {
@@ -146,7 +149,7 @@ function handleSetPrazo() {
 
 function handleLiberar(group: 'avaliacao' | 'pdi') {
   // 1. Verifica se os prazos estão definidos para o grupo
-  const formTypes = group === 'avaliacao' ? ['servidor', 'gestor', 'chefia', 'comissionado'] : ['pactuacao'];
+  const formTypes = group === 'avaliacao' ? ['servidor', 'gestor', 'chefia', 'comissionado'] : ['pactuacao_servidor','pactuacao_comissionado','pactuacao_gestor'];
   const formComPrazo = formsForSelectedYear.value.find(f => formTypes.includes(f.type) && f.term_first && f.term_end);
 
   if (!formComPrazo) {
@@ -187,11 +190,9 @@ function saveSettings() {
   }, {
     preserveScroll: true,
     onSuccess: () => {
-      // Usando o seu composable de modal para feedback
       showFlashModal('success', 'Configurações salvas com sucesso!');
     },
     onError: (errors) => {
-      // Pega a primeira mensagem de erro para exibir
       const firstError = Object.values(errors)[0];
       showFlashModal('error', `Erro ao salvar: ${firstError}`);
     }
@@ -213,7 +214,6 @@ async function handleFileSelect(event: Event) {
   if (!file) return;
 
   if (!file.name.toLowerCase().endsWith('.csv')) {
-    // Substituído
     showFlashModal('error', 'Por favor, selecione um arquivo .csv');
     return;
   }
@@ -224,10 +224,7 @@ async function handleFileSelect(event: Event) {
 
   const formData = new FormData();
   formData.append('file', file);
-  const gradesPeriod = ref('');
-  const awarePeriod = ref<number | string>('');
-  const recoursePeriod = ref<number | string>('');
-
+  
   try {
     const response = await axios.post(route('persons.preview'), formData);
     const data = response.data;
@@ -238,7 +235,6 @@ async function handleFileSelect(event: Event) {
     tempFilePath.value = data.temp_file_path;
 
   } catch (error: any) {
-    // Substituído
     showFlashModal('error', 'Erro ao gerar a pré-visualização: ' + (error.response?.data?.message || error.message));
     closePreviewModal();
   } finally {
@@ -251,7 +247,6 @@ async function handleFileSelect(event: Event) {
 
 async function handleConfirmUpload() {
   if (!tempFilePath.value) {
-    // Substituído
     showFlashModal('error', "Nenhum arquivo temporário encontrado para confirmar.");
     return;
   }
@@ -260,12 +255,10 @@ async function handleConfirmUpload() {
     const response = await axios.post(route('persons.confirm'), {
       temp_file_path: tempFilePath.value
     });
-    // Substituído
     showFlashModal('success', response.data.message);
     closePreviewModal();
     router.reload({ preserveScroll: true });
   } catch (error: any) {
-    // Substituído
     showFlashModal('error', 'Erro ao confirmar o upload: ' + (error.response?.data?.message || error.message));
   } finally {
     isProcessing.value = false;
@@ -273,17 +266,14 @@ async function handleConfirmUpload() {
 }
 
 function generateRelease() {
-  // A chamada abaixo corresponde perfeitamente à sua rota do backend:
   router.post(route('releases.generate', { year: selectedYear.value }), {
-    preserveScroll: true, // Mantém a posição do scroll da página
+    preserveScroll: true,
     onSuccess: () => {
       showFlashModal('success', 'Avaliações geradas com sucesso!');
       closePreviewModal();
     },
     onError: (errors) => {
       console.error('Erro ao gerar avaliações:', errors);
-      // Aqui você pode usar uma mensagem de erro genérica ou
-      // extrair uma mensagem específica do objeto 'errors', se houver.
       showFlashModal('error', 'Ocorreu um erro ao gerar as avaliações.');
     },
   });
@@ -481,17 +471,17 @@ onUnmounted(() => {
           <div class="setting-item">
             <label>Formulário de Pactuação - Servidor:</label>
             <div class="button-group">
-              <button v-if="getFormForType('pactuacao')" @click="handleView(getFormForType('pactuacao').id)"
+              <button v-if="getFormForType('pactuacao_servidor')" @click="handleView(getFormForType('pactuacao_servidor').id)"
                 class="btn btn-blue">
                 <span>Visualizar</span>
                 <component :is="icons.EyeIcon" class="size-5" />
               </button>
-              <button v-if="getFormForType('pactuacao') && !isPdiGroupReleased"
-                @click="handleEdit(getFormForType('pactuacao').id)" class="btn btn-yellow">
+              <button v-if="getFormForType('pactuacao_servidor') && !isPdiGroupReleased"
+                @click="handleEdit(getFormForType('pactuacao_servidor').id)" class="btn btn-yellow">
                 <span>Editar</span>
                 <component :is="icons.FilePenLineIcon" class="size-5" />
               </button>
-              <button v-else-if="!getFormForType('pactuacao')" @click="handleCreate('pactuacao')"
+              <button v-else-if="!getFormForType('pactuacao_servidor')" @click="handleCreate('pactuacao_servidor')"
                 class="btn btn-create">
                 <span>Criar</span>
                 <component :is="icons.PlusIcon" class="size-5" />
@@ -501,17 +491,17 @@ onUnmounted(() => {
           <div class="setting-item">
             <label>Formulário de Pactuação - Comissionado:</label>
             <div class="button-group">
-              <button v-if="getFormForType('pactuacao')" @click="handleView(getFormForType('pactuacao').id)"
+              <button v-if="getFormForType('pactuacao_comissionado')" @click="handleView(getFormForType('pactuacao_comissionado').id)"
                 class="btn btn-blue">
                 <span>Visualizar</span>
                 <component :is="icons.EyeIcon" class="size-5" />
               </button>
-              <button v-if="getFormForType('pactuacao') && !isPdiGroupReleased"
-                @click="handleEdit(getFormForType('pactuacao').id)" class="btn btn-yellow">
+              <button v-if="getFormForType('pactuacao_comissionado') && !isPdiGroupReleased"
+                @click="handleEdit(getFormForType('pactuacao_comissionado').id)" class="btn btn-yellow">
                 <span>Editar</span>
                 <component :is="icons.FilePenLineIcon" class="size-5" />
               </button>
-              <button v-else-if="!getFormForType('pactuacao')" @click="handleCreate('pactuacao')"
+              <button v-else-if="!getFormForType('pactuacao_comissionado')" @click="handleCreate('pactuacao_comissionado')"
                 class="btn btn-create">
                 <span>Criar</span>
                 <component :is="icons.PlusIcon" class="size-5" />
@@ -521,17 +511,17 @@ onUnmounted(() => {
           <div class="setting-item">
             <label>Formulário de Pactuação - Gestor:</label>
             <div class="button-group">
-              <button v-if="getFormForType('pactuacao')" @click="handleView(getFormForType('pactuacao').id)"
+              <button v-if="getFormForType('pactuacao_gestor')" @click="handleView(getFormForType('pactuacao_gestor').id)"
                 class="btn btn-blue">
                 <span>Visualizar</span>
                 <component :is="icons.EyeIcon" class="size-5" />
               </button>
-              <button v-if="getFormForType('pactuacao') && !isPdiGroupReleased"
-                @click="handleEdit(getFormForType('pactuacao').id)" class="btn btn-yellow">
+              <button v-if="getFormForType('pactuacao_gestor') && !isPdiGroupReleased"
+                @click="handleEdit(getFormForType('pactuacao_gestor').id)" class="btn btn-yellow">
                 <span>Editar</span>
                 <component :is="icons.FilePenLineIcon" class="size-5" />
               </button>
-              <button v-else-if="!getFormForType('pactuacao')" @click="handleCreate('pactuacao')"
+              <button v-else-if="!getFormForType('pactuacao_gestor')" @click="handleCreate('pactuacao_gestor')"
                 class="btn btn-create">
                 <span>Criar</span>
                 <component :is="icons.PlusIcon" class="size-5" />

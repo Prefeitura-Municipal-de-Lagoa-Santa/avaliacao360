@@ -18,7 +18,7 @@ class ConfigController extends Controller
 
         return Inertia::render('Configs', [
             // ... (suas props existentes)
-            'configs' => Config::first(), // Carrega a primeira (e única) linha de configuração
+            'configs' => Config::first(),
         ]);
     }
 

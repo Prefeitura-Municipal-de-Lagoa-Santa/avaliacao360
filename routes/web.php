@@ -3,6 +3,7 @@
 use App\Http\Controllers\AdminController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\FormController;
+use App\Http\Controllers\ConfigController;
 use App\Http\Controllers\JobFunctionController;
 use App\Http\Controllers\OrganizationalChartController;
 use App\Http\Controllers\OrganizationalUnitController;
