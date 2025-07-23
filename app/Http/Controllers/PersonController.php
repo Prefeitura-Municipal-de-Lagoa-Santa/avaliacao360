@@ -85,10 +85,24 @@ class PersonController extends Controller
     public function edit(Person $person)
     {
         $organizationalUnits = OrganizationalUnit::orderBy('name')->get(['id', 'name']);
-        $functionalStatuses = ['ATIVO', 'INATIVO', 'CEDIDO', 'AFASTADO', 'LICENÇA', 'FÉRIAS', 'EXONERADO', 'APOSENTADO', 'TRABALHANDO'];
+        $functionalStatuses = [
+            'ATIVO',
+            'INATIVO',
+            'CEDIDO',
+            'AFASTADO',
+            'LICENÇA',
+            'FÉRIAS',
+            'EXONERADO',
+            'APOSENTADO',
+            'TRABALHANDO'
+        ];
         $jobFunctions = JobFunction::orderBy('name')->get(['id', 'name']);
 
-        // dd($person);
+        // Lista de possíveis chefes (ex: quem tem função de chefia)
+        $managerOptions = Person::whereNotNull('job_function_id')
+            ->orderBy('name')
+            ->get(['id', 'name']);
+
         return Inertia::render('People/Edit', [
             'person' => [
                 'id' => $person->id,
@@ -98,26 +112,45 @@ class PersonController extends Controller
                 'functional_status' => $person->functional_status,
                 'cpf' => $person->cpf,
                 'rg_number' => $person->rg_number,
-                'admission_date' => $person->admission_date ? $person->admission_date->format('Y-m-d') : null,
-                'dismissal_date' => $person->dismissal_date ? $person->dismissal_date->format('Y-m-d') : null,
+                'admission_date' => $person->admission_date?->format('Y-m-d'),
+                'dismissal_date' => $person->dismissal_date?->format('Y-m-d'),
                 'current_position' => $person->current_position,
-                //'current_function' => $jobFunctions->name,
                 'job_function_id' => $person->job_function_id,
                 'organizational_unit_id' => $person->organizational_unit_id,
+                'direct_manager_id' => $person->direct_manager_id, // ✅ novo
             ],
             'organizationalUnits' => $organizationalUnits,
             'functionalStatuses' => $functionalStatuses,
             'jobFunctions' => $jobFunctions,
+            'managerOptions' => $managerOptions, // ✅ novo
         ]);
     }
 
     public function update(Request $request, Person $person)
     {
         $functionalStatuses = ['ATIVO', 'INATIVO', 'CEDIDO', 'AFASTADO', 'LICENÇA', 'FÉRIAS', 'EXONERADO', 'APOSENTADO', 'TRABALHANDO'];
+
+        // Define se é um vínculo manual
+        $isManual = $request->input('bond_type') === 'manual';
+
         $validatedData = $request->validate([
             'name' => 'sometimes|required|string|max:255',
-            'registration_number' => 'sometimes|required|string|max:255|unique:people,registration_number,' . $person->id,
-            'cpf' => 'sometimes|required|string|max:14|unique:people,cpf,' . $person->id,
+
+            'registration_number' => array_filter([
+                $isManual ? 'nullable' : 'required',
+                'string',
+                'max:255',
+                Rule::unique('people', 'registration_number')->ignore($person->id),
+            ]),
+
+            'cpf' => [
+                'sometimes',
+                'required',
+                'string',
+                'max:14',
+                Rule::unique('people', 'cpf')->ignore($person->id),
+            ],
+
             'functional_status' => ['nullable', 'string', Rule::in($functionalStatuses)],
             'organizational_unit_id' => 'nullable|exists:organizational_units,id',
             'bond_type' => 'nullable|string|max:255',
@@ -126,16 +159,13 @@ class PersonController extends Controller
             'dismissal_date' => 'nullable|date',
             'direct_manager_id' => ['nullable', 'exists:people,id'],
             'job_function_id' => 'nullable|exists:job_functions,id',
-
         ]);
 
         $person->update($validatedData);
 
-        if ($request->header('X-Inertia-Partial-Component')) {
-            return back()->with('success', 'Atualizado!');
-        }
         return Redirect::route('people.index')->with('success', 'Pessoa atualizada com sucesso!');
     }
+
 
     public function destroy(Person $person)
     {
