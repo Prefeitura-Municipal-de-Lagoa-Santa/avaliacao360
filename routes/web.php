@@ -86,4 +86,11 @@ Route::post('/releases-generate/{year}', [ReleaseController::class, 'generateRel
 Route::get('/avaliacoes/autoavaliacao/resultado/{evaluationRequest}', [EvaluationController::class, 'showEvaluationResult'])
     ->name('evaluations.autoavaliacao.result');
 
+Route::get('/evaluations/my-evaluations/history', [EvaluationController::class, 'myEvaluationsHistory'])->name('evaluations.history');
+
+Route::get('/evaluations/my-evaluations/{evaluationRequest}', [EvaluationController::class, 'showEvaluationDetail'])
+    ->name('evaluations.details');
+
+
+
 require __DIR__ . '/auth.php';

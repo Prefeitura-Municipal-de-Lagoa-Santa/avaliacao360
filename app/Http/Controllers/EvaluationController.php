@@ -437,4 +437,280 @@ class EvaluationController extends Controller
         ]);
     }
 
+    public function myEvaluationsHistory()
+    {
+        $user = Auth::user();
+        $person = Person::where('cpf', $user->cpf)->first();
+
+        if (!$person) {
+            return inertia('Dashboard/MyEvaluations', [
+                'evaluations' => [],
+            ]);
+        }
+
+        // ATENÇÃO: busca onde você foi o requester (quem avaliou)
+        $requests = EvaluationRequest::with([
+            'evaluation.form.groupQuestions.questions',
+            'evaluation.form',
+            'requestedPerson', // Para pegar o avaliado
+        ])
+            ->where('requester_person_id', $person->id)
+            ->get();
+
+        // Agrupar por ano (ciclo)
+        $anos = $requests->map(function ($req) {
+            $form = $req->evaluation?->form;
+            return $form?->year ?? ($form?->period ? \Carbon\Carbon::parse($form->period)->format('Y') : null);
+        })
+            ->filter()
+            ->unique()
+            ->sortDesc()
+            ->values();
+
+        $evaluations = [];
+        foreach ($anos as $ano) {
+            $requestsAno = $requests->filter(function ($req) use ($ano) {
+                $form = $req->evaluation?->form;
+                $year = $form?->year ?? ($form?->period ? \Carbon\Carbon::parse($form->period)->format('Y') : null);
+                return $year == $ano;
+            });
+
+            // Função nota ponderada
+            $getNotaPonderada = function ($request) {
+                if (!$request)
+                    return 0;
+
+                $form = $request->evaluation?->form;
+                $groups = $form?->groupQuestions ?? [];
+                $answers = \App\Models\Answer::where('evaluation_id', $request->evaluation_id)->get();
+
+                $somaNotas = 0;
+                $somaPesos = 0;
+                foreach ($groups as $group) {
+                    foreach ($group->questions as $question) {
+                        $answer = $answers->firstWhere('question_id', $question->id);
+                        if ($answer && $answer->score !== null) {
+                            $somaNotas += intval($answer->score) * $question->weight;
+                            $somaPesos += $question->weight;
+                        }
+                    }
+                }
+                return $somaPesos > 0 ? round($somaNotas / $somaPesos) : 0;
+            };
+
+            // Avaliação própria (autoavaliação: quem avaliou a si mesmo)
+            $auto = $requestsAno->first(fn($r) => $r->requested_person_id == $person->id && str_contains(strtolower($r->evaluation->type ?? ''), 'auto'));
+
+            // Chefia: quem eu avaliei que era meu chefe imediato naquele ano e o type é um dos tipos
+            $chefia = $requestsAno->first(function ($r) use ($person) {
+                $types = ['servidor', 'gestor', 'comissionado'];
+                $typeMatch = in_array(strtolower($r->evaluation->type ?? ''), $types);
+                // requested é o chefe imediato do requester
+                $isDirectManager = $r->requested_person_id == $person->direct_manager_id;
+                return $typeMatch && $isDirectManager;
+            });
+
+            // Equipe: avaliações que fiz para membros da minha equipe
+            $equipes = $requestsAno->filter(function ($r) use ($person) {
+                // Exemplo: requested é da equipe do requester, crie sua própria lógica se necessário
+                return str_contains(strtolower($r->evaluation->type ?? ''), 'chefia');
+            });
+            $notaAuto = $getNotaPonderada($auto);
+            $notaChefia = $getNotaPonderada($chefia);
+            $notaEquipe = $equipes->count() > 0
+                ? round($equipes->avg(function ($r) use ($getNotaPonderada) {
+                    return $getNotaPonderada($r);
+                }), 2)
+                : null;
+            // Detalhe do cálculo
+            $calcAuto = $auto ? "Autoavaliação: " . $notaAuto : '';
+            $calcChefia = $chefia ? "Chefia: " . $notaChefia : '';
+            $calcEquipe = $equipes->count() ? "Equipe (média): " . $notaEquipe : '';
+
+            $isGestor = $notaEquipe !== null;
+
+            if ($isGestor) {
+                $notaFinal = round(($notaAuto * 0.25) + ($notaChefia * 0.5) + ($notaEquipe * 0.25), 2);
+                $calcFinal = "($notaAuto x 25%) + ($notaChefia x 50%) + ($notaEquipe x 25%) = $notaFinal";
+            } else {
+                $notaFinal = round(($notaAuto * 0.3) + ($notaChefia * 0.7), 2);
+                $calcFinal = "($notaAuto x 30%) + ($notaChefia x 70%) = $notaFinal";
+            }
+
+            $id = $auto?->id ?? $chefia?->id ?? $equipes->first()?->id;
+
+            $evaluations[] = [
+                'year' => $ano,
+                'user' => $person->name,
+                'final_score' => $notaFinal,
+                'calc_final' => $calcFinal,
+                'calc_auto' => $calcAuto,
+                'calc_chefia' => $calcChefia,
+                'calc_equipe' => $calcEquipe,
+                'id' => $id,
+            ];
+        }
+        return inertia('Dashboard/MyEvaluations', [
+            'evaluations' => $evaluations,
+        ]);
+    }
+
+    public function showEvaluationDetail($id)
+    {
+        // Sempre busca a pessoa autenticada
+        $user = Auth::user();
+        $person = Person::where('cpf', $user->cpf)->first();
+
+        // Busca a request selecionada para identificar o ciclo/ano
+        $evaluationRequest = EvaluationRequest::with('evaluation.form')->findOrFail($id);
+
+        $form = $evaluationRequest->evaluation?->form;
+        $year = $form?->year ?? ($form?->period ? \Carbon\Carbon::parse($form->period)->format('Y') : null);
+
+        // Todas as requests deste ciclo para essa pessoa (sempre requester = autenticado)
+        $requestsAno = EvaluationRequest::with([
+            'evaluation.form.groupQuestions.questions',
+            'requested',
+            'requester',
+        ])
+            ->where('requester_person_id', $person->id)
+            ->whereHas('evaluation.form', function ($q) use ($year) {
+                $q->where('year', $year);
+            })
+            ->get();
+
+        $formGroups = $form?->groupQuestions ?? [];
+
+        // AUTOAVALIAÇÃO
+        $autoTypes = [
+            'autoavaliaçãogestor',
+            'autoavaliaçãocomissionado',
+            'autoavaliação',
+        ];
+        $auto = $requestsAno->first(function ($r) use ($autoTypes) {
+            return in_array(strtolower($r->evaluation->type ?? ''), $autoTypes);
+        });
+
+        // CHEFIA (usa sempre $person->direct_manager_id)
+        $typesChefia = ['servidor', 'gestor', 'comissionado'];
+        $chefia = $requestsAno->first(function ($r) use ($typesChefia, $person) {
+            if (!$person)
+                return false;
+            $typeMatch = in_array(strtolower($r->evaluation->type ?? ''), $typesChefia);
+            $isDirectManager = $r->requested_person_id == $person->direct_manager_id;
+            return $typeMatch && $isDirectManager;
+        });
+
+        // EQUIPE
+        $equipes = $requestsAno->filter(function ($r) {
+            return str_contains(strtolower($r->evaluation->type ?? ''), 'equipe');
+        });
+
+        // Função para nota ponderada de uma avaliação individual
+        $getNotaPonderada = function ($request) {
+            if (!$request)
+                return 0;
+
+            $form = $request->evaluation?->form;
+            $groups = $form?->groupQuestions ?? [];
+            $answers = \App\Models\Answer::where('evaluation_id', $request->evaluation_id)->get();
+
+            $somaNotas = 0;
+            $somaPesos = 0;
+            foreach ($groups as $group) {
+                foreach ($group->questions as $question) {
+                    $answer = $answers->firstWhere('question_id', $question->id);
+                    if ($answer && $answer->score !== null) {
+                        $somaNotas += intval($answer->score) * $question->weight;
+                        $somaPesos += $question->weight;
+                    }
+                }
+            }
+            // Para Vue, envie as respostas também
+            $answersArr = $answers->map(fn($a) => [
+                'question_id' => $a->question_id,
+                'score' => $a->score,
+            ]);
+            return [
+                'nota' => $somaPesos > 0 ? round($somaNotas / $somaPesos) : 0,
+                'answers' => $answersArr,
+            ];
+        };
+
+        // NOTAS parciais
+        $autoData = $getNotaPonderada($auto);
+        $notaAuto = $autoData['nota'];
+        $answersAuto = $autoData['answers'];
+
+        $chefiaData = $getNotaPonderada($chefia);
+        $notaChefia = $chefiaData['nota'];
+        $answersChefia = $chefiaData['answers'];
+
+        // EQUIPE (média de cada pergunta + média ponderada)
+        $questionsById = [];
+        foreach ($formGroups as $group) {
+            foreach ($group->questions as $question) {
+                $questionsById[$question->id] = $question;
+            }
+        }
+
+        $allAnswers = [];
+        foreach ($equipes as $reqEquipe) {
+            $answers = \App\Models\Answer::where('evaluation_id', $reqEquipe->evaluation_id)->get();
+            foreach ($answers as $ans) {
+                $allAnswers[$ans->question_id][] = intval($ans->score);
+            }
+        }
+
+        $equipeAnswers = [];
+        foreach ($questionsById as $qId => $qObj) {
+            $scores = $allAnswers[$qId] ?? [];
+            $media = count($scores) ? round(array_sum($scores) / count($scores), 2) : null;
+            $equipeAnswers[] = [
+                'question' => $qObj->text_content,
+                'score_media' => $media,
+                'weight' => $qObj->weight,
+            ];
+        }
+
+        $notaEquipe = count($equipeAnswers)
+            ? round(
+                array_reduce($equipeAnswers, fn($carry, $item) => $carry + ($item['score_media'] * $item['weight']), 0) /
+                array_reduce($equipeAnswers, fn($carry, $item) => $carry + $item['weight'], 0),
+                2
+            )
+            : null;
+
+        // NOTA FINAL consolidada
+        $isGestor = $notaEquipe !== null;
+        if ($isGestor) {
+            $notaFinal = round(($notaAuto * 0.25) + ($notaChefia * 0.5) + ($notaEquipe * 0.25), 2);
+            $calcFinal = "($notaAuto x 25%) + ($notaChefia x 50%) + ($notaEquipe x 25%) = $notaFinal";
+        } else {
+            $notaFinal = round(($notaAuto * 0.3) + ($notaChefia * 0.7), 2);
+            $calcFinal = "($notaAuto x 30%) + ($notaChefia x 70%) = $notaFinal";
+        }
+
+        // Retorna para o Vue
+        return inertia('Dashboard/EvaluationDetail', [
+            'year' => $year,
+            'person' => $person,
+            'form' => $form,
+            'auto' => [
+                'nota' => $notaAuto,
+                'answers' => $answersAuto,
+            ],
+            'chefia' => [
+                'nota' => $notaChefia,
+                'answers' => $answersChefia,
+            ],
+            'equipe' => [
+                'nota' => $notaEquipe,
+                'answers' => $equipeAnswers,
+            ],
+            'final_score' => $notaFinal,
+            'calc_final' => $calcFinal,
+        ]);
+    }
+
 }
