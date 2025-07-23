@@ -13,6 +13,6 @@ class configs extends Model
         'gradesPeriod',
         'awarePeriod',
         'recoursePeriod',
-        
+        'year',
     ];
 }

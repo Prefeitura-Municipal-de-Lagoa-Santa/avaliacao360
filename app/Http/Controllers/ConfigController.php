@@ -28,6 +28,7 @@ class ConfigController extends Controller
     public function store(Request $request)
     {
         $validatedData = $request->validate([
+            'year' => 'required|integer|min:2000|max:2100',
             'gradesPeriod' => 'required|date',
             'awarePeriod' => 'required|integer|min:0',
             'recoursePeriod' => 'required|integer|min:0',
