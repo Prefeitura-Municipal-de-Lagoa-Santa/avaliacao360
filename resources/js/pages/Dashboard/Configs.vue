@@ -566,6 +566,13 @@ onUnmounted(() => {
           </button>
         </div>
         <div class="setting-item">
+          <label>Criar Chefe(Cedidos):</label>
+          <button @click="router.get(route('people.manual.create'))" class="btn btn-yellow">
+            <span>Criar</span>
+            <component :is="icons.UserIcon" class="size-5" />
+          </button>
+        </div>
+        <div class="setting-item">
           <label>Grupo de Funções:</label>
           <button @click="router.get(route('funcoes.index'))" class="btn btn-yellow">
             <span>Editar</span>

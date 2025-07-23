@@ -92,6 +92,9 @@ Route::get('/evaluations/my-evaluations/history', [EvaluationController::class, 
 Route::get('/evaluations/my-evaluations/{evaluationRequest}', [EvaluationController::class, 'showEvaluationDetail'])
     ->name('evaluations.details');
 
+Route::get('/people/manual/create', [PersonController::class, 'createManual'])->name('people.manual.create');
+Route::post('/people/manual', [PersonController::class, 'storeManual'])->name('people.manual.store');
+
 
 
 require __DIR__ . '/auth.php';

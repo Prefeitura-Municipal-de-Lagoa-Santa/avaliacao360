@@ -6,9 +6,11 @@ use App\Jobs\UpdatePersonManagersJob;
 use App\Models\Person;
 use App\Models\OrganizationalUnit;
 use App\Models\Role;
+use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Redirect;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Facades\Storage;
@@ -83,10 +85,26 @@ class PersonController extends Controller
     public function edit(Person $person)
     {
         $organizationalUnits = OrganizationalUnit::orderBy('name')->get(['id', 'name']);
-        $functionalStatuses = ['ATIVO', 'INATIVO', 'CEDIDO', 'AFASTADO', 'LICENÇA', 'FÉRIAS', 'EXONERADO', 'APOSENTADO', 'TRABALHANDO'];
+        $functionalStatuses = [
+            'ATIVO',
+            'INATIVO',
+            'CEDIDO',
+            'AFASTADO',
+            'LICENÇA',
+            'FÉRIAS',
+            'EXONERADO',
+            'APOSENTADO',
+            'TRABALHANDO'
+        ];
         $jobFunctions = JobFunction::orderBy('name')->get(['id', 'name']);
 
-       // dd($person);
+        // Lista de possíveis chefes (ex: quem tem função de chefia)
+        $managerOptions = Person::whereNotNull('job_function_id')
+            ->orderBy('name')
+            ->get(['id', 'name']);
+
+        $subordinates = $person->subordinates()->orderBy('name')->get(['id', 'name', 'registration_number']);
+
         return Inertia::render('People/Edit', [
             'person' => [
                 'id' => $person->id,
@@ -96,26 +114,46 @@ class PersonController extends Controller
                 'functional_status' => $person->functional_status,
                 'cpf' => $person->cpf,
                 'rg_number' => $person->rg_number,
-                'admission_date' => $person->admission_date ? $person->admission_date->format('Y-m-d') : null,
-                'dismissal_date' => $person->dismissal_date ? $person->dismissal_date->format('Y-m-d') : null,
+                'admission_date' => $person->admission_date?->format('Y-m-d'),
+                'dismissal_date' => $person->dismissal_date?->format('Y-m-d'),
                 'current_position' => $person->current_position,
-                //'current_function' => $jobFunctions->name,
                 'job_function_id' => $person->job_function_id,
                 'organizational_unit_id' => $person->organizational_unit_id,
+                'direct_manager_id' => $person->direct_manager_id, // ✅ novo
             ],
             'organizationalUnits' => $organizationalUnits,
             'functionalStatuses' => $functionalStatuses,
             'jobFunctions' => $jobFunctions,
+            'managerOptions' => $managerOptions, // ✅ novo
+            'subordinates' => $subordinates,
         ]);
     }
 
     public function update(Request $request, Person $person)
     {
         $functionalStatuses = ['ATIVO', 'INATIVO', 'CEDIDO', 'AFASTADO', 'LICENÇA', 'FÉRIAS', 'EXONERADO', 'APOSENTADO', 'TRABALHANDO'];
+
+        // Define se é um vínculo manual
+        $isManual = $request->input('bond_type') === 'manual';
+
         $validatedData = $request->validate([
             'name' => 'sometimes|required|string|max:255',
-            'registration_number' => 'sometimes|required|string|max:255|unique:people,registration_number,' . $person->id,
-            'cpf' => 'sometimes|required|string|max:14|unique:people,cpf,' . $person->id,
+
+            'registration_number' => array_filter([
+                $isManual ? 'nullable' : 'required',
+                'string',
+                'max:255',
+                Rule::unique('people', 'registration_number')->ignore($person->id),
+            ]),
+
+            'cpf' => [
+                'sometimes',
+                'required',
+                'string',
+                'max:14',
+                Rule::unique('people', 'cpf')->ignore($person->id),
+            ],
+
             'functional_status' => ['nullable', 'string', Rule::in($functionalStatuses)],
             'organizational_unit_id' => 'nullable|exists:organizational_units,id',
             'bond_type' => 'nullable|string|max:255',
@@ -123,17 +161,14 @@ class PersonController extends Controller
             'admission_date' => 'nullable|date',
             'dismissal_date' => 'nullable|date',
             'direct_manager_id' => ['nullable', 'exists:people,id'],
-            'job_function_id' => 'nullable|exists:job_functions,id', 
-
+            'job_function_id' => 'nullable|exists:job_functions,id',
         ]);
 
         $person->update($validatedData);
 
-        if ($request->header('X-Inertia-Partial-Component')) {
-            return back()->with('success', 'Atualizado!');
-        }
         return Redirect::route('people.index')->with('success', 'Pessoa atualizada com sucesso!');
     }
+
 
     public function destroy(Person $person)
     {
@@ -569,5 +604,56 @@ class PersonController extends Controller
         }
 
         return Redirect::route('dashboard')->with('success', 'CPF atualizado com sucesso!');
+    }
+
+    public function storeManual(Request $request)
+    {
+        $data = $request->validate([
+            'name' => 'required|string',
+            'email' => 'required|email|unique:users,email',
+            'cpf' => 'required|string',
+        ]);
+
+        // Remove máscara do CPF
+        $cpf = preg_replace('/\D/', '', $data['cpf']);
+
+        // Verifica se já existe uma pessoa com esse CPF
+        if (Person::where('cpf', $cpf)->exists()) {
+            throw ValidationException::withMessages([
+                'cpf' => 'Já existe uma pessoa cadastrada com este CPF.',
+            ]);
+        }
+
+        // Verifica se já existe um usuário com esse CPF (segurança extra)
+        if (User::where('cpf', $cpf)->exists()) {
+            throw ValidationException::withMessages([
+                'cpf' => 'Já existe um usuário com este CPF.',
+            ]);
+        }
+
+        // Cria o usuário com senha padrão
+        $user = User::create([
+            'name' => $data['name'],
+            'email' => $data['email'],
+            'username' => explode('@', $data['email'])[0],
+            'cpf' => $cpf,
+            'password' => Hash::make('Abc@1234'),
+            'must_change_password' => true,
+        ]);
+
+        // Cria a pessoa manual e associa com o user
+        $person = Person::create([
+            'name' => $data['name'],
+            'cpf' => $cpf,
+            'bond_type' => 'manual',
+            'user_id' => $user->id,
+        ]);
+
+        return redirect()->route('configs')->with('success', 'Pessoa manual criada com sucesso.');
+    }
+
+    public function createManual()
+    {
+        return Inertia::render('People/CreateManual');
     }
 }
