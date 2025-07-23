@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\Answer;
+use App\Models\configs;
 use App\Models\Form;
 use App\Models\Person;
 use Illuminate\Http\Request;
@@ -13,7 +14,7 @@ use Illuminate\Support\Facades\DB;
 use App\Models\Evaluation;
 use App\Models\EvaluationRequest;
 use App\Models\User;
-
+use App\Models\configs as Config; // Importar o model de configurações
 
 class EvaluationController extends Controller
 {
@@ -449,16 +450,16 @@ class EvaluationController extends Controller
             ]);
         }
 
-        // ATENÇÃO: busca onde você foi o requester (quem avaliou)
+        // Busca todas as requests onde você foi o avaliador
         $requests = EvaluationRequest::with([
             'evaluation.form.groupQuestions.questions',
             'evaluation.form',
-            'requestedPerson', // Para pegar o avaliado
+            'requestedPerson',
         ])
             ->where('requester_person_id', $person->id)
             ->get();
 
-        // Agrupar por ano (ciclo)
+        // Agrupa por ano/ciclo
         $anos = $requests->map(function ($req) {
             $form = $req->evaluation?->form;
             return $form?->year ?? ($form?->period ? \Carbon\Carbon::parse($form->period)->format('Y') : null);
@@ -469,6 +470,7 @@ class EvaluationController extends Controller
             ->values();
 
         $evaluations = [];
+
         foreach ($anos as $ano) {
             $requestsAno = $requests->filter(function ($req) use ($ano) {
                 $form = $req->evaluation?->form;
@@ -476,7 +478,17 @@ class EvaluationController extends Controller
                 return $year == $ano;
             });
 
-            // Função nota ponderada
+            $formGroups = $requestsAno->first()?->evaluation?->form?->groupQuestions ?? [];
+
+            // Tipos para filtrar cada etapa
+            $autoTypes = [
+                'autoavaliaçãogestor',
+                'autoavaliaçãocomissionado',
+                'autoavaliação',
+            ];
+            $chefiaTypes = ['servidor', 'gestor', 'comissionado'];
+
+            // Helpers para respostas detalhadas
             $getNotaPonderada = function ($request) {
                 if (!$request)
                     return 0;
@@ -499,23 +511,22 @@ class EvaluationController extends Controller
                 return $somaPesos > 0 ? round($somaNotas / $somaPesos) : 0;
             };
 
-            // Avaliação própria (autoavaliação: quem avaliou a si mesmo)
-            $auto = $requestsAno->first(fn($r) => $r->requested_person_id == $person->id && str_contains(strtolower($r->evaluation->type ?? ''), 'auto'));
+            // Busca etapas
+            $auto = $requestsAno->first(function ($r) use ($person, $autoTypes) {
+                return $r->requested_person_id == $person->id && in_array(strtolower($r->evaluation->type ?? ''), $autoTypes);
+            });
 
-            // Chefia: quem eu avaliei que era meu chefe imediato naquele ano e o type é um dos tipos
-            $chefia = $requestsAno->first(function ($r) use ($person) {
-                $types = ['servidor', 'gestor', 'comissionado'];
-                $typeMatch = in_array(strtolower($r->evaluation->type ?? ''), $types);
-                // requested é o chefe imediato do requester
+            $chefia = $requestsAno->first(function ($r) use ($person, $chefiaTypes) {
+                $typeMatch = in_array(strtolower($r->evaluation->type ?? ''), $chefiaTypes);
                 $isDirectManager = $r->requested_person_id == $person->direct_manager_id;
                 return $typeMatch && $isDirectManager;
             });
 
-            // Equipe: avaliações que fiz para membros da minha equipe
-            $equipes = $requestsAno->filter(function ($r) use ($person) {
-                // Exemplo: requested é da equipe do requester, crie sua própria lógica se necessário
-                return str_contains(strtolower($r->evaluation->type ?? ''), 'chefia');
+            $equipes = $requestsAno->filter(function ($r) {
+                return str_contains(strtolower($r->evaluation->type ?? ''), 'equipe');
             });
+
+            // Respostas e notas de cada etapa
             $notaAuto = $getNotaPonderada($auto);
             $notaChefia = $getNotaPonderada($chefia);
             $notaEquipe = $equipes->count() > 0
@@ -523,13 +534,13 @@ class EvaluationController extends Controller
                     return $getNotaPonderada($r);
                 }), 2)
                 : null;
+
             // Detalhe do cálculo
             $calcAuto = $auto ? "Autoavaliação: " . $notaAuto : '';
             $calcChefia = $chefia ? "Chefia: " . $notaChefia : '';
             $calcEquipe = $equipes->count() ? "Equipe (média): " . $notaEquipe : '';
 
             $isGestor = $notaEquipe !== null;
-
             if ($isGestor) {
                 $notaFinal = round(($notaAuto * 0.25) + ($notaChefia * 0.5) + ($notaEquipe * 0.25), 2);
                 $calcFinal = "($notaAuto x 25%) + ($notaChefia x 50%) + ($notaEquipe x 25%) = $notaFinal";
@@ -540,6 +551,15 @@ class EvaluationController extends Controller
 
             $id = $auto?->id ?? $chefia?->id ?? $equipes->first()?->id;
 
+            $configAno = Config::where('year', $ano)->first();
+            $isInAwarePeriod = false;
+
+            if ($configAno && $configAno->gradesPeriod) {
+                $startDate = \Carbon\Carbon::parse($configAno->gradesPeriod)->startOfDay();
+                $hoje = \Carbon\Carbon::now()->startOfDay();
+                $isInAwarePeriod = $hoje->greaterThanOrEqualTo($startDate);
+            }
+
             $evaluations[] = [
                 'year' => $ano,
                 'user' => $person->name,
@@ -549,8 +569,10 @@ class EvaluationController extends Controller
                 'calc_chefia' => $calcChefia,
                 'calc_equipe' => $calcEquipe,
                 'id' => $id,
+                'is_in_aware_period' => $isInAwarePeriod, // <---
             ];
         }
+
         return inertia('Dashboard/MyEvaluations', [
             'evaluations' => $evaluations,
         ]);
@@ -566,6 +588,18 @@ class EvaluationController extends Controller
         $form = $evaluationRequest->evaluation?->form;
         $year = $form?->year ?? ($form?->period ? \Carbon\Carbon::parse($form->period)->format('Y') : null);
 
+        // === VERIFICA SE ESTÁ LIBERADO PARA VER DETALHES ===
+        $configAno = Config::where('year', $year)->first();
+        $isLiberado = true;
+        if ($configAno && $configAno->gradesPeriod) {
+            $startDate = \Carbon\Carbon::parse($configAno->gradesPeriod)->startOfDay();
+            $hoje = \Carbon\Carbon::now()->startOfDay();
+            // Se HOJE for maior ou igual ao startDate, não está liberado
+            $isLiberado = $hoje->greaterThanOrEqualTo($startDate);
+        }
+        if (!$isLiberado) {
+            return redirect()->route('evaluations')->with('error', 'Nota final ainda não está liberada para visualização.');
+        }
         $requestsAno = EvaluationRequest::with([
             'evaluation.form.groupQuestions.questions',
             'requested',

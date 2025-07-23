@@ -66,10 +66,16 @@ class DashboardController extends Controller
             'dashboardStats' => $dashboardStats,
         ]);
     }
-    
+
     // ... (os outros métodos como evaluation(), pdi(), etc., permanecem os mesmos) ...
     public function evaluation()
     {
+
+        $year = (in_array(date('n'), [1, 2])) ? date('Y') - 1 : date('Y');
+        $config = Config::where('year', $year)->first();
+
+        $isInAwarePeriod = $config ? $config->estaNoPeriodoDeCiencia() : false;
+
         // dd(Auth::user()->cpf);
         $people = Person::where('cpf', Auth::user()->cpf)->first();
         $prazo = $this->getGroupDeadline('avaliacao');
@@ -95,6 +101,7 @@ class DashboardController extends Controller
                 'selfEvaluationRequestId' => null,
                 'bossEvaluationRequestId' => null,
                 'teamEvaluationRequestId' => null,
+                'isInAwarePeriod' => $isInAwarePeriod,
             ]);
         }
 
@@ -192,6 +199,7 @@ class DashboardController extends Controller
             'selfEvaluationRequestId' => $selfEvaluationRequestId,
             'bossEvaluationRequestId' => $bossEvaluationRequestId,
             'teamEvaluationRequestId' => $teamEvaluationRequestId,
+            'isInAwarePeriod' => $isInAwarePeriod,
         ]);
     }
 
@@ -318,7 +326,7 @@ class DashboardController extends Controller
             // Outros dados necessários para a página
         ]);
     }
-    
+
     public function configs()
     {
 
@@ -339,4 +347,5 @@ class DashboardController extends Controller
             'existingYears' => $existingYears,
         ]);
     }
+
 }
