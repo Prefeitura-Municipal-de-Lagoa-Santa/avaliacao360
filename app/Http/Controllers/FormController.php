@@ -27,39 +27,59 @@ class FormController extends Controller
     }
 
     public function show(Form $formulario)
-{
-    $formulario->load('groupQuestions.questions');
+    {
+        $formulario->load('groupQuestions.questions');
 
-    // Linha correta, sem o prefixo 'pages/'
-    return Inertia::render('Dashboard/FormViewPage', [
-        'form' => $formulario,
-    ]);
-}
+        // Linha correta, sem o prefixo 'pages/'
+        return Inertia::render('Dashboard/FormViewPage', [
+            'form' => $formulario,
+        ]);
+    }
 
     public function create(Request $request)
-    {
-        // Valida se o tipo e ano foram passados na URL
-        $validated = $request->validate([
-            'type' => ['required', Rule::in(['gestor', 'chefia', 'servidor', 'comissionado', 'pactuacao'])],
-            'year' => 'required|digits:4',
-        ]);
+{
+    $validated = $request->validate([
+        'type' => ['required', Rule::in(['gestor', 'chefia', 'servidor', 'comissionado', 'pactuacao'])],
+        'year' => 'required|digits:4',
+    ]);
 
-        return Inertia::render('Dashboard/FormPage', [
+    // *** LÓGICA DE DIRECIONAMENTO ***
+    if ($validated['type'] === 'pactuacao') {
+        // Se for PDI, renderiza a nova página simples
+        return Inertia::render('Dashboard/PdiFormPage', [
             'formType' => $validated['type'],
             'year' => $validated['year'],
         ]);
     }
 
+    // Para outros tipos, renderiza a página complexa original
+    return Inertia::render('Dashboard/FormPage', [
+        'formType' => $validated['type'],
+        'year' => $validated['year'],
+    ]);
+}
+
     public function edit(Form $formulario)
-    {
-        $formulario->load('groupQuestions.questions');
-        // Renderiza a MESMA PÁGINA, mas agora passando o formulário
-        return Inertia::render('Dashboard/FormPage', [
+{
+    $formulario->load('groupQuestions.questions');
+
+    // *** LÓGICA DE DIRECIONAMENTO ***
+    if ($formulario->type === 'pactuacao') {
+         // Se for PDI, renderiza a nova página simples
+        return Inertia::render('Dashboard/PdiFormPage', [
             'form' => $formulario,
-            'formType' => $formulario->type, // Passa os dados existentes
+            'formType' => $formulario->type,
             'year' => $formulario->year,
         ]);
     }
+    
+    // Para outros tipos, renderiza a página complexa original
+    return Inertia::render('Dashboard/FormPage', [
+        'form' => $formulario,
+        'formType' => $formulario->type,
+        'year' => $formulario->year,
+    ]);
+}
     /**
      * Update the specified resource in storage.
      * (Salva as alterações do formulário)
@@ -81,12 +101,12 @@ class FormController extends Controller
         if (abs($totalGroupWeight - 100) > 0.01) {
             return back()->withErrors(['groups' => 'A soma dos pesos de todos os GRUPOS deve ser exatamente 100%.'])->withInput();
         }
-        
+
         // CORREÇÃO: Validação 2 - Soma dos pesos das QUESTÕES dentro de cada grupo
         foreach ($validatedData['groups'] as $groupData) {
             $totalRelativeWeight = collect($groupData['questions'])->sum('weight');
             if (abs($totalRelativeWeight - 100) > 0.01) {
-                 return back()->withErrors(['groups' => "A soma dos pesos das questões no grupo '{$groupData['name']}' deve ser 100%."])->withInput();
+                return back()->withErrors(['groups' => "A soma dos pesos das questões no grupo '{$groupData['name']}' deve ser 100%."])->withInput();
             }
         }
 
@@ -114,52 +134,52 @@ class FormController extends Controller
         return redirect()->route('configs')->with('success', 'Formulário atualizado com sucesso!');
     }
 
- public function setPrazo(Request $request)
-{
-    // 1. Validar as duas datas recebidas do formulário
-    $validated = $request->validate([
-        'year' => 'required|digits:4',
-        'group' => ['required', Rule::in(['avaliacao', 'pdi'])],
-        'term_first' => 'required|date',
-        'term_end' => 'required|date|after_or_equal:term_first',
-    ]);
-
-    // 2. Definir para quais tipos de formulário a regra se aplica
-    $formTypes = $validated['group'] === 'avaliacao'
-        ? ['gestor', 'chefia', 'servidor', 'comissionado'] // Incluído 'servidor'
-        : ['pactuacao', 'metas'];
-
-    // 3. Atualizar todos os formulários do grupo de uma só vez
-    Form::where('year', $validated['year'])
-        ->whereIn('type', $formTypes)
-        ->update([
-            'term_first' => $validated['term_first'],
-            'term_end' => $validated['term_end']
+    public function setPrazo(Request $request)
+    {
+        // 1. Validar as duas datas recebidas do formulário
+        $validated = $request->validate([
+            'year' => 'required|digits:4',
+            'group' => ['required', Rule::in(['avaliacao', 'pdi'])],
+            'term_first' => 'required|date',
+            'term_end' => 'required|date|after_or_equal:term_first',
         ]);
 
-    return back()->with('success', 'Prazo definido com sucesso!');
-}
+        // 2. Definir para quais tipos de formulário a regra se aplica
+        $formTypes = $validated['group'] === 'avaliacao'
+            ? ['gestor', 'chefia', 'servidor', 'comissionado'] // Incluído 'servidor'
+            : ['pactuacao', 'metas'];
 
-public function setLiberar(Request $request)
-{
-    $validated = $request->validate([
-        'year' => 'required|digits:4',
-        'group' => ['required', Rule::in(['avaliacao', 'pdi'])],
-    ]);
+        // 3. Atualizar todos os formulários do grupo de uma só vez
+        Form::where('year', $validated['year'])
+            ->whereIn('type', $formTypes)
+            ->update([
+                'term_first' => $validated['term_first'],
+                'term_end' => $validated['term_end']
+            ]);
 
-    $formTypes = $validated['group'] === 'avaliacao'
-        ? ['gestor', 'chefia', 'servidor', 'comissionado']
-        : ['pactuacao'];
+        return back()->with('success', 'Prazo definido com sucesso!');
+    }
 
-    Form::where('year', $validated['year'])
-        ->whereIn('type', $formTypes)
-        ->update([
-            'release' => true,
-            'release_data' => Carbon::now(),
+    public function setLiberar(Request $request)
+    {
+        $validated = $request->validate([
+            'year' => 'required|digits:4',
+            'group' => ['required', Rule::in(['avaliacao', 'pdi'])],
         ]);
 
-    return back()->with('success', 'Formulários liberados com sucesso!');
-}
+        $formTypes = $validated['group'] === 'avaliacao'
+            ? ['gestor', 'chefia', 'servidor', 'comissionado']
+            : ['pactuacao'];
+
+        Form::where('year', $validated['year'])
+            ->whereIn('type', $formTypes)
+            ->update([
+                'release' => true,
+                'release_data' => Carbon::now(),
+            ]);
+
+        return back()->with('success', 'Formulários liberados com sucesso!');
+    }
 
     public function store(Request $request)
     {
@@ -180,12 +200,12 @@ public function setLiberar(Request $request)
         if (abs($totalGroupWeight - 100) > 0.01) {
             return back()->withErrors(['groups' => 'A soma dos pesos de todos os grupos deve ser exatamente 100.'])->withInput();
         }
-        
+
         // Validação 2: Soma dos pesos relativos em cada grupo
         foreach ($validatedData['groups'] as $groupData) {
             $totalRelativeWeight = collect($groupData['questions'])->sum('weight');
             if (abs($totalRelativeWeight - 100) > 0.01) {
-                 return back()->withErrors(['groups' => "A soma dos pesos das questões no grupo '{$groupData['name']}' deve ser 100."])->withInput();
+                return back()->withErrors(['groups' => "A soma dos pesos das questões no grupo '{$groupData['name']}' deve ser 100."])->withInput();
             }
         }
 
@@ -205,7 +225,7 @@ public function setLiberar(Request $request)
                 foreach ($groupData['questions'] as $questionData) {
                     // Calcula o peso final da questão para salvar no banco
                     $finalWeight = ($groupData['weight'] / 100.0) * ($questionData['weight']);
-                    
+
                     $groupQuestion->questions()->create([
                         'text_content' => $questionData['text'],
                         'weight' => round($finalWeight), // Salva o peso final calculado
@@ -216,4 +236,86 @@ public function setLiberar(Request $request)
 
         return redirect()->route('configs')->with('success', 'Formulário criado com sucesso!');
     }
+
+    /**
+     * Salva um novo formulário de PDI (Pactuação), com lógica simplificada.
+     */
+    public function storePdi(Request $request)
+    {
+        // Validação simples, sem pesos
+        $validatedData = $request->validate([
+            'title' => 'required|string|max:100',
+            'year' => 'required|digits:4',
+            'type' => ['required', Rule::in(['pactuacao'])],
+            'groups' => 'required|array|min:1',
+            'groups.*.name' => 'required|string|max:150',
+            'groups.*.questions' => 'required|array|min:1',
+            'groups.*.questions.*.text' => 'required|string',
+        ]);
+
+        DB::transaction(function () use ($validatedData) {
+            $form = Form::create([
+                'name' => $validatedData['title'],
+                'year' => $validatedData['year'],
+                'type' => $validatedData['type'],
+            ]);
+
+            foreach ($validatedData['groups'] as $groupData) {
+                // Cria o grupo com peso 0 ou null
+                $groupQuestion = $form->groupQuestions()->create([
+                    'name' => $groupData['name'],
+                    'weight' => 0
+                ]);
+
+                foreach ($groupData['questions'] as $questionData) {
+                    // Cria a questão com peso 0 ou null
+                    $groupQuestion->questions()->create([
+                        'text_content' => $questionData['text'],
+                        'weight' => 0,
+                    ]);
+                }
+            }
+        });
+
+        return redirect()->route('configs')->with('success', 'Formulário PDI criado com sucesso!');
+    }
+
+    /**
+     * Atualiza um formulário de PDI (Pactuação) existente.
+     */
+    public function updatePdi(Request $request, Form $formulario)
+    {
+        // Validação simples, sem pesos
+        $validatedData = $request->validate([
+            'title' => 'required|string|max:100',
+            'groups' => 'required|array|min:1',
+            'groups.*.name' => 'required|string|max:150',
+            'groups.*.questions' => 'required|array|min:1',
+            'groups.*.questions.*.text' => 'required|string',
+        ]);
+
+        DB::transaction(function () use ($validatedData, $formulario) {
+            $formulario->update(['name' => $validatedData['title']]);
+
+            // Deleta grupos e questões antigos para recriar
+            $formulario->groupQuestions()->delete();
+
+            foreach ($validatedData['groups'] as $groupData) {
+                $groupQuestion = $formulario->groupQuestions()->create([
+                    'name' => $groupData['name'],
+                    'weight' => 0
+                ]);
+
+                foreach ($groupData['questions'] as $questionData) {
+                    $groupQuestion->questions()->create([
+                        'text_content' => $questionData['text'],
+                        'weight' => 0,
+                    ]);
+                }
+            }
+        });
+
+        return redirect()->route('configs')->with('success', 'Formulário PDI atualizado com sucesso!');
+    }
+
 }

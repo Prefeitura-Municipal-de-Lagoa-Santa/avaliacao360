@@ -41,6 +41,9 @@ Route::middleware(['auth', 'verified', EnsureCpfIsFilled::class])->group(functio
     Route::delete('/configs/form/{formulario}', [FormController::class, 'destroy'])->name('configs.destroy');
     Route::post('/configs/forms/prazo', [FormController::class, 'setPrazo'])->name('configs.prazo.store');
     Route::post('/configs/forms/liberar', [FormController::class, 'setLiberar'])->name('configs.liberar.store');
+    // Rotas para o formulário de PDI
+    Route::post('configs/pdi', [FormController::class, 'storePdi'])->name('configs.pdi.store');
+    Route::put('configs/pdi/{formulario}', [FormController::class, 'updatePdi'])->name('configs.pdi.update');
     // Rota para salvar as configurações
     Route::post('/configs/store', [ConfigController::class, 'store'])->name('configs.store');
     // ROTAS PARA AVALIAÇÃO DA CHEFIA

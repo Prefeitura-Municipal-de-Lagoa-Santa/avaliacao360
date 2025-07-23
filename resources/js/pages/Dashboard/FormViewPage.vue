@@ -14,15 +14,16 @@ const props = defineProps<{
     group_questions: Array<{
       id: number;
       name: string;
-      weight: number; // O peso do grupo que será exibido
+      weight: number | null;
       questions: Array<{
         id: number;
         text_content: string;
-        weight: number; // O peso final da questão
+        weight: number | null;
       }>;
     }>;
   };
 }>();
+console.log(props);
 
 // Função para navegar para a página anterior.
 function goBack() {
@@ -54,7 +55,7 @@ function goBack() {
             <div class="group-header-view">
                 <h3 class="flex-grow font-semibold text-gray-800">{{ group.name }}</h3>
                 <!-- Badge estilizado para exibir o peso do grupo -->
-                <span class="font-bold text-indigo-500 bg-white px-3 py-1 rounded-full text-sm ml-4">
+                <span v-if="props.form.type !== 'pactuacao'" class="font-bold text-indigo-500 bg-white px-3 py-1 rounded-full text-sm ml-4">
                     Peso do Grupo: {{ group.weight }}%
                 </span>
             </div>
@@ -62,12 +63,14 @@ function goBack() {
             <!-- Corpo do grupo, com a lista de questões -->
             <div class="space-y-3 p-4">
                  <div class="flex items-center pb-2 border-b mb-2 text-sm text-gray-500 font-medium">
-                    <div class="w-10/12">Questão</div>
-                    <div class="w-2/12 text-center">Peso Final</div>
+                    <div :class="props.form.type === 'pactuacao' ? 'w-full' : 'w-10/12'">Questão</div>
+                    <div v-if="props.form.type !== 'pactuacao'" class="w-2/12 text-center">Peso Final</div>
                 </div>
                 <div v-for="question in group.questions" :key="question.id" class="question-view-row">
-                    <div class="w-10/12"><p class="text-gray-800">{{ question.text_content }}</p></div>
-                    <div class="w-2/12 text-center"><span class="font-medium text-gray-700">{{ question.weight }}%</span></div>
+                    <div :class="props.form.type === 'pactuacao' ? 'w-full' : 'w-10/12'">
+                      <p class="text-gray-800">{{ question.text_content }}</p></div>
+                    <div v-if="props.form.type !== 'pactuacao'" class="w-2/12 text-center">
+                      <span class="font-medium text-gray-700">{{ question.weight }}%</span></div>
                 </div>
             </div>
         </div>
