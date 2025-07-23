@@ -7,16 +7,18 @@ use App\Http\Controllers\ConfigController;
 use App\Http\Controllers\JobFunctionController;
 use App\Http\Controllers\OrganizationalChartController;
 use App\Http\Controllers\OrganizationalUnitController;
+use App\Http\Controllers\PasswordChangeController;
 use App\Http\Controllers\PersonController;
 use App\Http\Controllers\EvaluationController;
 use App\Http\Controllers\ReleaseController;
 use App\Http\Middleware\EnsureCpfIsFilled;
+use App\Http\Middleware\RedirectIfMustChangePassword;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
 
 Route::redirect("/", "/dashboard");
 
-Route::middleware(['auth', 'verified', EnsureCpfIsFilled::class])->group(function () {
+Route::middleware(['auth', 'verified', EnsureCpfIsFilled::class, RedirectIfMustChangePassword::class])->group(function () {
 
     Route::get('/dashboard', [DashboardController::class, 'index'])->name('dashboard');
 
@@ -96,5 +98,9 @@ Route::get('/people/manual/create', [PersonController::class, 'createManual'])->
 Route::post('/people/manual', [PersonController::class, 'storeManual'])->name('people.manual.store');
 
 
+Route::middleware(['auth', 'verified', EnsureCpfIsFilled::class,])->group(function () {
+    Route::get('/trocar-senha', [PasswordChangeController::class, 'edit'])->name('password.change');
+    Route::post('/trocar-senha', [PasswordChangeController::class, 'update'])->name('password.update');
+});
 
 require __DIR__ . '/auth.php';
