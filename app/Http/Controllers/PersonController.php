@@ -6,9 +6,11 @@ use App\Jobs\UpdatePersonManagersJob;
 use App\Models\Person;
 use App\Models\OrganizationalUnit;
 use App\Models\Role;
+use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Redirect;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Facades\Storage;
@@ -86,7 +88,7 @@ class PersonController extends Controller
         $functionalStatuses = ['ATIVO', 'INATIVO', 'CEDIDO', 'AFASTADO', 'LICENÇA', 'FÉRIAS', 'EXONERADO', 'APOSENTADO', 'TRABALHANDO'];
         $jobFunctions = JobFunction::orderBy('name')->get(['id', 'name']);
 
-       // dd($person);
+        // dd($person);
         return Inertia::render('People/Edit', [
             'person' => [
                 'id' => $person->id,
@@ -123,7 +125,7 @@ class PersonController extends Controller
             'admission_date' => 'nullable|date',
             'dismissal_date' => 'nullable|date',
             'direct_manager_id' => ['nullable', 'exists:people,id'],
-            'job_function_id' => 'nullable|exists:job_functions,id', 
+            'job_function_id' => 'nullable|exists:job_functions,id',
 
         ]);
 
@@ -569,5 +571,56 @@ class PersonController extends Controller
         }
 
         return Redirect::route('dashboard')->with('success', 'CPF atualizado com sucesso!');
+    }
+
+    public function storeManual(Request $request)
+    {
+        $data = $request->validate([
+            'name' => 'required|string',
+            'email' => 'required|email|unique:users,email',
+            'cpf' => 'required|string',
+        ]);
+
+        // Remove máscara do CPF
+        $cpf = preg_replace('/\D/', '', $data['cpf']);
+
+        // Verifica se já existe uma pessoa com esse CPF
+        if (Person::where('cpf', $cpf)->exists()) {
+            throw ValidationException::withMessages([
+                'cpf' => 'Já existe uma pessoa cadastrada com este CPF.',
+            ]);
+        }
+
+        // Verifica se já existe um usuário com esse CPF (segurança extra)
+        if (User::where('cpf', $cpf)->exists()) {
+            throw ValidationException::withMessages([
+                'cpf' => 'Já existe um usuário com este CPF.',
+            ]);
+        }
+
+        // Cria o usuário com senha padrão
+        $user = User::create([
+            'name' => $data['name'],
+            'email' => $data['email'],
+            'username' => explode('@', $data['email'])[0],
+            'cpf' => $cpf,
+            'password' => Hash::make('Abc@1234'),
+            'must_change_password' => true,
+        ]);
+
+        // Cria a pessoa manual e associa com o user
+        $person = Person::create([
+            'name' => $data['name'],
+            'cpf' => $cpf,
+            'bond_type' => 'manual',
+            'user_id' => $user->id,
+        ]);
+
+        return redirect()->route('configs')->with('success', 'Pessoa manual criada com sucesso.');
+    }
+
+    public function createManual()
+    {
+        return Inertia::render('People/CreateManual');
     }
 }
