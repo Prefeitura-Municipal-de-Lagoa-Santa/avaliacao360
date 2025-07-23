@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Answer;
 use App\Models\Form;
 use App\Models\Person;
 use Illuminate\Http\Request;
@@ -482,7 +483,7 @@ class EvaluationController extends Controller
 
                 $form = $request->evaluation?->form;
                 $groups = $form?->groupQuestions ?? [];
-                $answers = \App\Models\Answer::where('evaluation_id', $request->evaluation_id)->get();
+                $answers = Answer::where('evaluation_id', $request->evaluation_id)->get();
 
                 $somaNotas = 0;
                 $somaPesos = 0;
@@ -557,17 +558,14 @@ class EvaluationController extends Controller
 
     public function showEvaluationDetail($id)
     {
-        // Sempre busca a pessoa autenticada
         $user = Auth::user();
         $person = Person::where('cpf', $user->cpf)->first();
 
-        // Busca a request selecionada para identificar o ciclo/ano
         $evaluationRequest = EvaluationRequest::with('evaluation.form')->findOrFail($id);
 
         $form = $evaluationRequest->evaluation?->form;
         $year = $form?->year ?? ($form?->period ? \Carbon\Carbon::parse($form->period)->format('Y') : null);
 
-        // Todas as requests deste ciclo para essa pessoa (sempre requester = autenticado)
         $requestsAno = EvaluationRequest::with([
             'evaluation.form.groupQuestions.questions',
             'requested',
@@ -581,107 +579,92 @@ class EvaluationController extends Controller
 
         $formGroups = $form?->groupQuestions ?? [];
 
-        // AUTOAVALIAÇÃO
-        $autoTypes = [
-            'autoavaliaçãogestor',
-            'autoavaliaçãocomissionado',
-            'autoavaliação',
-        ];
-        $auto = $requestsAno->first(function ($r) use ($autoTypes) {
-            return in_array(strtolower($r->evaluation->type ?? ''), $autoTypes);
-        });
+        // Monta blocos de avaliações por tipo
+        $blocos = [];
+        $equipes = [];
 
-        // CHEFIA (usa sempre $person->direct_manager_id)
-        $typesChefia = ['servidor', 'gestor', 'comissionado'];
-        $chefia = $requestsAno->first(function ($r) use ($typesChefia, $person) {
-            if (!$person)
-                return false;
-            $typeMatch = in_array(strtolower($r->evaluation->type ?? ''), $typesChefia);
-            $isDirectManager = $r->requested_person_id == $person->direct_manager_id;
-            return $typeMatch && $isDirectManager;
-        });
+        foreach ($requestsAno as $r) {
+            $type = strtolower($r->evaluation->type ?? '');
+            // Equipe vai para bloco separado para calcular médias
+            if (str_contains($type, 'equipe')) {
+                $equipes[] = $r;
+                continue;
+            }
 
-        // EQUIPE
-        $equipes = $requestsAno->filter(function ($r) {
-            return str_contains(strtolower($r->evaluation->type ?? ''), 'equipe');
-        });
-
-        // Função para nota ponderada de uma avaliação individual
-        $getNotaPonderada = function ($request) {
-            if (!$request)
-                return 0;
-
-            $form = $request->evaluation?->form;
-            $groups = $form?->groupQuestions ?? [];
-            $answers = \App\Models\Answer::where('evaluation_id', $request->evaluation_id)->get();
-
+            // Outras avaliações: monta respostas por pergunta
+            $answers = Answer::where('evaluation_id', $r->evaluation_id)->get();
+            $byQuestion = [];
             $somaNotas = 0;
             $somaPesos = 0;
-            foreach ($groups as $group) {
+            foreach ($formGroups as $group) {
                 foreach ($group->questions as $question) {
                     $answer = $answers->firstWhere('question_id', $question->id);
-                    if ($answer && $answer->score !== null) {
-                        $somaNotas += intval($answer->score) * $question->weight;
+                    $score = $answer ? intval($answer->score) : null;
+                    $byQuestion[] = [
+                        'question' => $question->text_content,
+                        'score' => $score,
+                        'weight' => $question->weight,
+                    ];
+                    if ($score !== null) {
+                        $somaNotas += $score * $question->weight;
                         $somaPesos += $question->weight;
                     }
                 }
             }
-            // Para Vue, envie as respostas também
-            $answersArr = $answers->map(fn($a) => [
-                'question_id' => $a->question_id,
-                'score' => $a->score,
-            ]);
-            return [
-                'nota' => $somaPesos > 0 ? round($somaNotas / $somaPesos) : 0,
-                'answers' => $answersArr,
-            ];
-        };
-
-        // NOTAS parciais
-        $autoData = $getNotaPonderada($auto);
-        $notaAuto = $autoData['nota'];
-        $answersAuto = $autoData['answers'];
-
-        $chefiaData = $getNotaPonderada($chefia);
-        $notaChefia = $chefiaData['nota'];
-        $answersChefia = $chefiaData['answers'];
-
-        // EQUIPE (média de cada pergunta + média ponderada)
-        $questionsById = [];
-        foreach ($formGroups as $group) {
-            foreach ($group->questions as $question) {
-                $questionsById[$question->id] = $question;
-            }
-        }
-
-        $allAnswers = [];
-        foreach ($equipes as $reqEquipe) {
-            $answers = \App\Models\Answer::where('evaluation_id', $reqEquipe->evaluation_id)->get();
-            foreach ($answers as $ans) {
-                $allAnswers[$ans->question_id][] = intval($ans->score);
-            }
-        }
-
-        $equipeAnswers = [];
-        foreach ($questionsById as $qId => $qObj) {
-            $scores = $allAnswers[$qId] ?? [];
-            $media = count($scores) ? round(array_sum($scores) / count($scores), 2) : null;
-            $equipeAnswers[] = [
-                'question' => $qObj->text_content,
-                'score_media' => $media,
-                'weight' => $qObj->weight,
+            $nota = $somaPesos > 0 ? round($somaNotas / $somaPesos) : null;
+            $blocos[] = [
+                'tipo' => $r->evaluation->type ?? '-',
+                'nota' => $nota,
+                'answers' => $byQuestion,
+                'evidencias' => $r->evidencias ?? null,
             ];
         }
+        // Equipe (calcula médias por pergunta)
+        $blocoEquipe = null;
+        if (count($equipes)) {
+            $questionsById = [];
+            foreach ($formGroups as $group) {
+                foreach ($group->questions as $question) {
+                    $questionsById[$question->id] = $question;
+                }
+            }
+            $allAnswers = [];
+            foreach ($equipes as $reqEquipe) {
+                $answers = Answer::where('evaluation_id', $reqEquipe->evaluation_id)->get();
+                foreach ($answers as $ans) {
+                    $allAnswers[$ans->question_id][] = intval($ans->score);
+                }
+            }
+            $answersEquipe = [];
+            foreach ($questionsById as $qId => $qObj) {
+                $scores = $allAnswers[$qId] ?? [];
+                $media = count($scores) ? round(array_sum($scores) / count($scores), 2) : null;
+                $answersEquipe[] = [
+                    'question' => $qObj->text_content,
+                    'score_media' => $media,
+                    'weight' => $qObj->weight,
+                    'evidencias' => null,
+                ];
+            }
+            $notaEquipe = count($answersEquipe)
+                ? round(
+                    array_reduce($answersEquipe, fn($carry, $item) => $carry + ($item['score_media'] * $item['weight']), 0) /
+                    array_reduce($answersEquipe, fn($carry, $item) => $carry + $item['weight'], 0),
+                    2
+                )
+                : null;
+            $blocoEquipe = [
+                'tipo' => 'Equipe',
+                'nota' => $notaEquipe,
+                'answers' => $answersEquipe,
+            ];
+        }
 
-        $notaEquipe = count($equipeAnswers)
-            ? round(
-                array_reduce($equipeAnswers, fn($carry, $item) => $carry + ($item['score_media'] * $item['weight']), 0) /
-                array_reduce($equipeAnswers, fn($carry, $item) => $carry + $item['weight'], 0),
-                2
-            )
-            : null;
+        // Cálculo final igual antes
+        $notaAuto = optional(collect($blocos)->first(fn($b) => str_contains(strtolower($b['tipo']), 'auto')))['nota'] ?? 0;
+        $notaChefia = optional(collect($blocos)->first(fn($b) => in_array(strtolower($b['tipo']), ['servidor', 'gestor', 'comissionado'])))['nota'] ?? 0;
+        $notaEquipe = $blocoEquipe ? $blocoEquipe['nota'] : null;
 
-        // NOTA FINAL consolidada
         $isGestor = $notaEquipe !== null;
         if ($isGestor) {
             $notaFinal = round(($notaAuto * 0.25) + ($notaChefia * 0.5) + ($notaEquipe * 0.25), 2);
@@ -691,23 +674,12 @@ class EvaluationController extends Controller
             $calcFinal = "($notaAuto x 30%) + ($notaChefia x 70%) = $notaFinal";
         }
 
-        // Retorna para o Vue
         return inertia('Dashboard/EvaluationDetail', [
             'year' => $year,
             'person' => $person,
             'form' => $form,
-            'auto' => [
-                'nota' => $notaAuto,
-                'answers' => $answersAuto,
-            ],
-            'chefia' => [
-                'nota' => $notaChefia,
-                'answers' => $answersChefia,
-            ],
-            'equipe' => [
-                'nota' => $notaEquipe,
-                'answers' => $equipeAnswers,
-            ],
+            'blocos' => $blocos,
+            'blocoEquipe' => $blocoEquipe,
             'final_score' => $notaFinal,
             'calc_final' => $calcFinal,
         ]);
