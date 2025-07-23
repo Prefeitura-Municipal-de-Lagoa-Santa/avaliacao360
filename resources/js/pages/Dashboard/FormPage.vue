@@ -17,7 +17,7 @@ interface GroupPayload {
 
 // --- Props ---
 const props = defineProps<{
-  formType: 'gestor' | 'chefia' | 'servidor' | 'comissionado' | 'pactuacao' ;
+  formType: 'gestor' | 'chefia' | 'servidor' | 'comissionado' | 'pactuacao_servidor' | 'pactuacao_comissionado' | 'pactuacao_gestor' ;
   year: string;
   form?: {
     id: number;

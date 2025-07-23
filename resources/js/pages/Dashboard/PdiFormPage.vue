@@ -4,7 +4,7 @@ import { useForm, Head } from '@inertiajs/vue3';
 import DashboardLayout from '@/layouts/DashboardLayout.vue';
 import { PlusIcon, Trash2Icon, LoaderCircleIcon, PlusCircleIcon } from 'lucide-vue-next';
 
-// --- Interfaces Simplificadas para PDI ---
+// --- Interfaces (sem alteração) ---
 interface PdiQuestion {
   text: string;
 }
@@ -15,7 +15,7 @@ interface PdiGroup {
 
 // --- Props ---
 const props = defineProps<{
-  formType: 'pactuacao';
+  formType: 'pactuacao_servidor' | 'pactuacao_comissionado' | 'pactuacao_gestor';
   year: string;
   form?: {
     id: number;
@@ -31,11 +31,19 @@ const props = defineProps<{
 }>();
 
 const isEditing = computed(() => !!props.form);
-const pageTitle = computed(() => `${isEditing.value ? 'Editar' : 'Criar'} Formulário de Pactuação (PDI)`);
+
+const pdiTitles: Record<string, string> = {
+  pactuacao_servidor: 'Formulário de Pactuação - Servidor',
+  pactuacao_comissionado: 'Formulário de Pactuação - Comissionado',
+  pactuacao_gestor: 'Formulário de Pactuação - Gestor',
+};
+
+const pageTitle = computed(() => `${isEditing.value ? 'Editar' : 'Criar'} ${pdiTitles[props.formType]}`);
 
 // --- Lógica do Formulário com useForm ---
 const pdiForm = useForm({
-    title: props.form?.name || 'Plano de Desenvolvimento Individual (PDI)',
+    // MODIFICADO: Usa o título dinâmico
+    title: props.form?.name || pdiTitles[props.formType],
     year: props.year,
     type: props.formType,
     groups: props.form?.group_questions.map(g => ({
@@ -43,6 +51,7 @@ const pdiForm = useForm({
         questions: g.questions.map(q => ({ text: q.text_content }))
     })) || [{ name: '', questions: [{ text: '' }] }],
 });
+
 
 const validationError = ref<string | null>(null);
 

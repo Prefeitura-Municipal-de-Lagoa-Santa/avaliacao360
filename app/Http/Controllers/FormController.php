@@ -39,20 +39,25 @@ class FormController extends Controller
     public function create(Request $request)
 {
     $validated = $request->validate([
-        'type' => ['required', Rule::in(['gestor', 'chefia', 'servidor', 'comissionado', 'pactuacao'])],
+        'type' => ['required', Rule::in([
+            'gestor', 'chefia', 'servidor', 'comissionado',
+            'pactuacao_servidor', 'pactuacao_comissionado', 'pactuacao_gestor' 
+        ])],
         'year' => 'required|digits:4',
     ]);
 
-    // *** LÓGICA DE DIRECIONAMENTO ***
-    if ($validated['type'] === 'pactuacao') {
-        // Se for PDI, renderiza a nova página simples
+        
+    $pdiTypes = ['pactuacao_servidor', 'pactuacao_comissionado', 'pactuacao_gestor'];
+
+    if (in_array($validated['type'], $pdiTypes)) {
+        
         return Inertia::render('Dashboard/PdiFormPage', [
             'formType' => $validated['type'],
             'year' => $validated['year'],
         ]);
     }
 
-    // Para outros tipos, renderiza a página complexa original
+   
     return Inertia::render('Dashboard/FormPage', [
         'formType' => $validated['type'],
         'year' => $validated['year'],
@@ -63,9 +68,11 @@ class FormController extends Controller
 {
     $formulario->load('groupQuestions.questions');
 
-    // *** LÓGICA DE DIRECIONAMENTO ***
-    if ($formulario->type === 'pactuacao') {
-         // Se for PDI, renderiza a nova página simples
+    
+    $pdiTypes = ['pactuacao_servidor', 'pactuacao_comissionado', 'pactuacao_gestor'];
+    
+    if (in_array($formulario->type, $pdiTypes)) {
+       
         return Inertia::render('Dashboard/PdiFormPage', [
             'form' => $formulario,
             'formType' => $formulario->type,
@@ -73,13 +80,14 @@ class FormController extends Controller
         ]);
     }
     
-    // Para outros tipos, renderiza a página complexa original
+    
     return Inertia::render('Dashboard/FormPage', [
         'form' => $formulario,
         'formType' => $formulario->type,
         'year' => $formulario->year,
     ]);
 }
+
     /**
      * Update the specified resource in storage.
      * (Salva as alterações do formulário)
@@ -136,6 +144,7 @@ class FormController extends Controller
 
     public function setPrazo(Request $request)
     {
+        
         // 1. Validar as duas datas recebidas do formulário
         $validated = $request->validate([
             'year' => 'required|digits:4',
@@ -147,7 +156,7 @@ class FormController extends Controller
         // 2. Definir para quais tipos de formulário a regra se aplica
         $formTypes = $validated['group'] === 'avaliacao'
             ? ['gestor', 'chefia', 'servidor', 'comissionado'] // Incluído 'servidor'
-            : ['pactuacao', 'metas'];
+            : ['pactuacao_servidor', 'pactuacao_comissionado', 'pactuacao_gestor'];
 
         // 3. Atualizar todos os formulários do grupo de uma só vez
         Form::where('year', $validated['year'])
@@ -169,7 +178,7 @@ class FormController extends Controller
 
         $formTypes = $validated['group'] === 'avaliacao'
             ? ['gestor', 'chefia', 'servidor', 'comissionado']
-            : ['pactuacao'];
+            : ['pactuacao_servidor', 'pactuacao_comissionado', 'pactuacao_gestor'];
 
         Form::where('year', $validated['year'])
             ->whereIn('type', $formTypes)
@@ -186,7 +195,7 @@ class FormController extends Controller
         $validatedData = $request->validate([
             'title' => 'required|string|max:100',
             'year' => 'required|digits:4',
-            'type' => ['required', 'string', Rule::in(['gestor', 'chefia', 'comissionado', 'servidor', 'pactuacao'])],
+            'type' => ['required', 'string', Rule::in(['gestor', 'chefia', 'comissionado', 'servidor'])],
             'groups' => 'required|array|min:1',
             'groups.*.name' => 'required|string|max:150',
             'groups.*.weight' => 'required|numeric|min:0', // Peso do grupo
@@ -242,11 +251,12 @@ class FormController extends Controller
      */
     public function storePdi(Request $request)
     {
+        
         // Validação simples, sem pesos
         $validatedData = $request->validate([
             'title' => 'required|string|max:100',
             'year' => 'required|digits:4',
-            'type' => ['required', Rule::in(['pactuacao'])],
+            'type' => ['required', Rule::in(['pactuacao_servidor','pactuacao_comissionado','pactuacao_gestor'])],
             'groups' => 'required|array|min:1',
             'groups.*.name' => 'required|string|max:150',
             'groups.*.questions' => 'required|array|min:1',
