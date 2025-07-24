@@ -127,4 +127,10 @@ class Person extends Model
         return $this->belongsTo(JobFunction::class, 'job_function_id');
     }
 
+    public function acknowledgments()
+    {
+        return $this->hasMany(Acknowledgment::class);
+    }
+
+
 }

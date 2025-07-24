@@ -78,27 +78,31 @@ Route::middleware(['auth', 'verified', EnsureCpfIsFilled::class, RedirectIfMustC
     Route::get('/evaluations/pending', [EvaluationController::class, 'pending'])
         ->name('evaluations.pending');
 
+    Route::get('/organizational-chart', [OrganizationalChartController::class, 'index'])
+        ->name('organizational-chart.index');
+
+    Route::post('/releases-generate/{year}', [ReleaseController::class, 'generateRelease'])
+        ->name('releases.generate');
+
+    Route::get('/avaliacoes/autoavaliacao/resultado/{evaluationRequest}', [EvaluationController::class, 'showEvaluationResult'])
+        ->name('evaluations.autoavaliacao.result');
+
+    Route::get('/evaluations/my-evaluations/history', [EvaluationController::class, 'myEvaluationsHistory'])->name('evaluations.history');
+
+    Route::get('/evaluations/my-evaluations/{evaluationRequest}', [EvaluationController::class, 'showEvaluationDetail'])
+        ->name('evaluations.details');
+
+    Route::get('/people/manual/create', [PersonController::class, 'createManual'])->name('people.manual.create');
+    Route::post('/people/manual', [PersonController::class, 'storeManual'])->name('people.manual.store');
+    Route::post('/evaluations/{year}/acknowledge', [EvaluationController::class, 'acknowledge'])
+        ->middleware(['auth'])
+        ->name('evaluations.acknowledge');
+
 });
-Route::put('/profile/cpf', [PersonController::class, 'cpfUpdate'])->name('profile.cpf.update');
-Route::get('/organizational-chart', [OrganizationalChartController::class, 'index'])
-    ->name('organizational-chart.index');
-
-Route::post('/releases-generate/{year}', [ReleaseController::class, 'generateRelease'])
-    ->name('releases.generate');
-
-Route::get('/avaliacoes/autoavaliacao/resultado/{evaluationRequest}', [EvaluationController::class, 'showEvaluationResult'])
-    ->name('evaluations.autoavaliacao.result');
-
-Route::get('/evaluations/my-evaluations/history', [EvaluationController::class, 'myEvaluationsHistory'])->name('evaluations.history');
-
-Route::get('/evaluations/my-evaluations/{evaluationRequest}', [EvaluationController::class, 'showEvaluationDetail'])
-    ->name('evaluations.details');
-
-Route::get('/people/manual/create', [PersonController::class, 'createManual'])->name('people.manual.create');
-Route::post('/people/manual', [PersonController::class, 'storeManual'])->name('people.manual.store');
 
 
-Route::middleware(['auth', 'verified', EnsureCpfIsFilled::class,])->group(function () {
+Route::middleware(['auth', 'verified'])->group(function () {
+    Route::put('/profile/cpf', [PersonController::class, 'cpfUpdate'])->name('profile.cpf.update');
     Route::get('/trocar-senha', [PasswordChangeController::class, 'edit'])->name('password.change');
     Route::post('/trocar-senha', [PasswordChangeController::class, 'update'])->name('password.update');
 });

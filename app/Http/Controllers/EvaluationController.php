@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Acknowledgment;
 use App\Models\Answer;
 use App\Models\configs;
 use App\Models\Form;
@@ -717,6 +718,33 @@ class EvaluationController extends Controller
             'final_score' => $notaFinal,
             'calc_final' => $calcFinal,
         ]);
+    }
+
+    public function acknowledge(Request $request, string $year)
+    {
+        $request->validate([
+            'signature_base64' => 'required|string',
+        ]);
+
+        $user = Auth::user();
+        $person = Person::where('cpf', $user->cpf)->first();
+
+        if (!$person) {
+            return back()->withErrors(['user' => 'Pessoa vinculada não encontrada.']);
+        }
+
+        Acknowledgment::updateOrCreate(
+            [
+                'person_id' => $person->id,
+                'year' => $year,
+            ],
+            [
+                'signed_at' => now(),
+                'signature_base64' => $request->input('signature_base64'),
+            ]
+        );
+
+        return back()->with('success', 'Assinatura registrada com sucesso!');
     }
 
 }
