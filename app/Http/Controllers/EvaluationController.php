@@ -448,10 +448,11 @@ class EvaluationController extends Controller
         if (!$person) {
             return inertia('Dashboard/MyEvaluations', [
                 'evaluations' => [],
+                'acknowledgments' => [],
             ]);
         }
 
-        // Busca todas as requests onde você foi o avaliador
+        // Todas as solicitações em que a pessoa foi o avaliador
         $requests = EvaluationRequest::with([
             'evaluation.form.groupQuestions.questions',
             'evaluation.form',
@@ -460,7 +461,6 @@ class EvaluationController extends Controller
             ->where('requester_person_id', $person->id)
             ->get();
 
-        // Agrupa por ano/ciclo
         $anos = $requests->map(function ($req) {
             $form = $req->evaluation?->form;
             return $form?->year ?? ($form?->period ? \Carbon\Carbon::parse($form->period)->format('Y') : null);
@@ -481,19 +481,12 @@ class EvaluationController extends Controller
 
             $formGroups = $requestsAno->first()?->evaluation?->form?->groupQuestions ?? [];
 
-            // Tipos para filtrar cada etapa
-            $autoTypes = [
-                'autoavaliaçãogestor',
-                'autoavaliaçãocomissionado',
-                'autoavaliação',
-            ];
+            $autoTypes = ['autoavaliaçãogestor', 'autoavaliaçãocomissionado', 'autoavaliação'];
             $chefiaTypes = ['servidor', 'gestor', 'comissionado'];
 
-            // Helpers para respostas detalhadas
             $getNotaPonderada = function ($request) {
                 if (!$request)
                     return 0;
-
                 $form = $request->evaluation?->form;
                 $groups = $form?->groupQuestions ?? [];
                 $answers = Answer::where('evaluation_id', $request->evaluation_id)->get();
@@ -512,9 +505,9 @@ class EvaluationController extends Controller
                 return $somaPesos > 0 ? round($somaNotas / $somaPesos) : 0;
             };
 
-            // Busca etapas
             $auto = $requestsAno->first(function ($r) use ($person, $autoTypes) {
-                return $r->requested_person_id == $person->id && in_array(strtolower($r->evaluation->type ?? ''), $autoTypes);
+                return $r->requested_person_id == $person->id &&
+                    in_array(strtolower($r->evaluation->type ?? ''), $autoTypes);
             });
 
             $chefia = $requestsAno->first(function ($r) use ($person, $chefiaTypes) {
@@ -527,16 +520,12 @@ class EvaluationController extends Controller
                 return str_contains(strtolower($r->evaluation->type ?? ''), 'equipe');
             });
 
-            // Respostas e notas de cada etapa
             $notaAuto = $getNotaPonderada($auto);
             $notaChefia = $getNotaPonderada($chefia);
             $notaEquipe = $equipes->count() > 0
-                ? round($equipes->avg(function ($r) use ($getNotaPonderada) {
-                    return $getNotaPonderada($r);
-                }), 2)
+                ? round($equipes->avg(fn($r) => $getNotaPonderada($r)), 2)
                 : null;
 
-            // Detalhe do cálculo
             $calcAuto = $auto ? "Autoavaliação: " . $notaAuto : '';
             $calcChefia = $chefia ? "Chefia: " . $notaChefia : '';
             $calcEquipe = $equipes->count() ? "Equipe (média): " . $notaEquipe : '';
@@ -570,14 +559,25 @@ class EvaluationController extends Controller
                 'calc_chefia' => $calcChefia,
                 'calc_equipe' => $calcEquipe,
                 'id' => $id,
-                'is_in_aware_period' => $isInAwarePeriod, // <---
+                'is_in_aware_period' => $isInAwarePeriod,
             ];
         }
 
+        // 🟢 Buscar assinaturas já realizadas por ano
+        $acknowledgments = Acknowledgment::where('person_id', $person->id)
+            ->get(['year', 'signature_base64', 'created_at'])
+            ->map(fn($ack) => [
+                'year' => $ack->year,
+                'signature_base64' => $ack->signature_base64,
+                'signed_at' => $ack->created_at->format('Y-m-d'),
+            ])
+            ->toArray();
         return inertia('Dashboard/MyEvaluations', [
             'evaluations' => $evaluations,
+            'acknowledgments' => $acknowledgments,
         ]);
     }
+
 
     public function showEvaluationDetail($id)
     {
@@ -733,18 +733,22 @@ class EvaluationController extends Controller
             return back()->withErrors(['user' => 'Pessoa vinculada não encontrada.']);
         }
 
-        Acknowledgment::updateOrCreate(
-            [
-                'person_id' => $person->id,
-                'year' => $year,
-            ],
-            [
-                'signed_at' => now(),
-                'signature_base64' => $request->input('signature_base64'),
-            ]
-        );
+        // Verifica se já existe assinatura para o ano
+        $alreadySigned = Acknowledgment::where('person_id', $person->id)
+            ->where('year', $year)
+            ->exists();
+        if ($alreadySigned) {
+            return redirect()->route('evaluations')->with('error', 'Você já assinou a avaliação deste ano.');
+        }
 
-        return back()->with('success', 'Assinatura registrada com sucesso!');
+        Acknowledgment::create([
+            'person_id' => $person->id,
+            'year' => $year,
+            'signed_at' => now(),
+            'signature_base64' => $request->input('signature_base64'),
+        ]);
+
+        return redirect()->route('evaluations')->with('success', 'Assinatura registrada com sucesso!');
     }
 
 }

@@ -18,7 +18,11 @@ const props = defineProps<{
     id: number | null;
     is_in_aware_period?: boolean;
   }>;
-  acknowledgments?: Array<{ year: string }>;
+  acknowledgments?: Array<{
+    year: string;
+    signature_base64: string;
+    signed_at: string;
+  }>;
 }>();
 
 const visibleEvaluations = computed(() =>
@@ -75,13 +79,18 @@ function confirmSignature() {
   router.post(route('evaluations.acknowledge', year), {
     signature_base64: assinatura_base64,
   }, {
-    onSuccess: () => closeModal(),
+    onSuccess: () => {
+      closeModal();
+      router.reload({ only: ['evaluations', 'acknowledgments'] });
+    },
   });
 }
 
-function isSigned(year: string) {
-  return (props.acknowledgments ?? []).some(a => a.year === year);
+function getAcknowledgment(year: string | number) {
+  const result = (props.acknowledgments ?? []).find(a => String(a.year) === String(year));
+  return result;
 }
+
 </script>
 
 <template>
@@ -120,15 +129,28 @@ function isSigned(year: string) {
               <div v-if="eva.calc_equipe">{{ eva.calc_equipe }}</div>
             </td>
             <td class="px-6 py-4">
-              <span v-if="isSigned(eva.year)">✅ Assinada</span>
-              <button
-                v-else
-                @click="openSignatureModal(eva)"
-                class="inline-flex items-center px-3 py-1 text-sm font-medium text-green-700 bg-green-50 rounded hover:bg-green-100"
-              >
-                <icons.PenLineIcon class="size-4 mr-1" />
-                Assinar Ciência
-              </button>
+              <template v-if="getAcknowledgment(eva.year)">
+                <img
+                  class="w-48 border rounded mt-2"
+                  :src="getAcknowledgment(eva.year)!.signature_base64"
+                  alt="Assinatura"
+                />
+                <p class="text-xs text-gray-500 mt-1">
+                  Assinado em:
+                  {{ new Date(new Date(getAcknowledgment(eva.year)!.signed_at).setDate(
+                      new Date(getAcknowledgment(eva.year)!.signed_at).getDate() + 1
+                  )).toLocaleDateString('pt-BR') }}
+                </p>
+              </template>
+              <template v-else>
+                <button
+                  @click="openSignatureModal(eva)"
+                  class="inline-flex items-center px-3 py-1 text-sm font-medium text-green-700 bg-green-50 rounded hover:bg-green-100"
+                >
+                  <icons.PenLineIcon class="size-4 mr-1" />
+                  Assinar Ciência
+                </button>
+              </template>
             </td>
             <td class="px-6 py-4 text-right">
               <Link
