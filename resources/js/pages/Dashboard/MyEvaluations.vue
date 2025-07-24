@@ -18,6 +18,8 @@ const props = defineProps<{
     id: number | null;
     is_in_aware_period?: boolean;
     is_in_recourse_period?: boolean;
+    has_recourse?: boolean;
+    recourse_id?: number;
   }>;
   acknowledgments?: Array<{
     year: string;
@@ -95,7 +97,7 @@ function getAcknowledgment(year: string | number) {
 
 <template>
   <Head title="Minhas Avaliações Anuais" />
-  <DashboardLayout pageTitle="Minhas Avaliações Anuais">
+  <DashboardLayout page-title="Minhas Avaliações Anuais">
     <div class="flex justify-between items-center mb-6">
       <Link :href="route('dashboard')" class="flex items-center px-4 py-2 bg-gray-100 rounded hover:bg-gray-200">
         <icons.ArrowLeftIcon class="size-4 mr-2" />
@@ -155,19 +157,21 @@ function getAcknowledgment(year: string | number) {
             <td class="px-6 py-4 text-right">
               <template v-if="getAcknowledgment(eva.year)">
                 <Link
-                  v-if="eva.is_in_recourse_period"
-                  :href="route('evaluations.details', eva.id)"
+                  v-if="eva.is_in_recourse_period && !eva.has_recourse"
+                  :href="route('recourses.create', eva.id)"
                   class="inline-flex items-center px-3 py-1 text-sm font-medium text-rose-600 bg-rose-50 rounded hover:bg-rose-100 mr-2"
                 >
                   <icons.FileTextIcon class="size-4 mr-1" />
                   Abrir Recurso
                 </Link>
-                <p
-                  v-else
-                  class="text-xs text-gray-400 italic mb-2"
+                <Link
+                  v-else-if="eva.has_recourse"
+                  :href="route('recourses.show', eva.recourse_id)"
+                  class="inline-flex items-center px-3 py-1 text-sm font-medium text-yellow-600 bg-yellow-50 rounded hover:bg-yellow-100 mr-2"
                 >
-                  Recurso fora do período
-                </p>
+                  <icons.MessageSquareIcon class="size-4 mr-1" />
+                  Acompanhar Recurso
+                </Link>
               </template>
               <Link
                 v-if="eva.id"

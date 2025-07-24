@@ -41,5 +41,8 @@ class EvaluationRequest extends Model
         return $this->belongsTo(Person::class, 'requested_person_id');
     }
 
-
+    public function form()
+    {
+        return $this->belongsTo(Form::class);
+    }
 }
