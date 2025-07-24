@@ -184,6 +184,7 @@ function confirmAndLiberar() {
 
 function saveSettings() {
   router.post(route('configs.store'), {
+    year: selectedYear.value,
     gradesPeriod: gradesPeriod.value,
     awarePeriod: awarePeriod.value,
     recoursePeriod: recoursePeriod.value,

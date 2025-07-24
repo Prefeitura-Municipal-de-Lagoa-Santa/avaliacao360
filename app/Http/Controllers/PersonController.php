@@ -635,7 +635,7 @@ class PersonController extends Controller
         $user = User::create([
             'name' => $data['name'],
             'email' => $data['email'],
-            'username' => explode('@', $data['email'])[0],
+            'username' => $cpf,
             'cpf' => $cpf,
             'password' => Hash::make('Abc@1234'),
             'must_change_password' => true,
