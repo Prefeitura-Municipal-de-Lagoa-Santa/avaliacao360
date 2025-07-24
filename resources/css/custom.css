@@ -597,6 +597,24 @@
   border-radius: 6px;
   border: 1px solid #e5e7eb;
 }
+.divulgacao-event {
+  background-color: #9fe0b7;
+
+}
+
+.divulgacao-event:hover {
+  background-color: #059669;
+}
+
+/* Novo estilo para o evento de Ciência da Nota */
+.ciencia-event {
+  background-color: #f0decb;
+
+}
+
+.ciencia-event:hover {
+  background-color: #D97706;
+}
 
 .form-section {
     @apply bg-white p-6 rounded-lg shadow-md;

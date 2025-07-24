@@ -23,7 +23,7 @@ interface CalendarDay {
 const props = defineProps<{
   deadlineEvents: Array<DeadlineEvent>
 }>();
-console.log(props);
+
 
 // --- ESTADO REATIVO ---
 const today = new Date();
@@ -228,30 +228,3 @@ const calendarGridDays = computed((): Array<CalendarDay> => {
   </DashboardLayout>
 </template>
 
-<style>
-/* ... (seus estilos existentes) ... */
-
-/* Novo estilo para o evento de Divulgação das Notas */
-.divulgacao-event {
-  background-color: #10B981;
-  /* Verde esmeralda */
-  color: white;
-  border-left: 3px solid #059669;
-}
-
-.divulgacao-event:hover {
-  background-color: #059669;
-}
-
-/* Novo estilo para o evento de Ciência da Nota */
-.ciencia-event {
-  background-color: #e0af59;
-  /* Âmbar */
-  color: white;
-  border-left: 3px solid #D97706;
-}
-
-.ciencia-event:hover {
-  background-color: #D97706;
-}
-</style>
