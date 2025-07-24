@@ -17,6 +17,7 @@ const props = defineProps<{
     calc_equipe?: string;
     id: number | null;
     is_in_aware_period?: boolean;
+    is_in_recourse_period?: boolean;
   }>;
   acknowledgments?: Array<{
     year: string;
@@ -90,7 +91,6 @@ function getAcknowledgment(year: string | number) {
   const result = (props.acknowledgments ?? []).find(a => String(a.year) === String(year));
   return result;
 }
-
 </script>
 
 <template>
@@ -153,6 +153,22 @@ function getAcknowledgment(year: string | number) {
               </template>
             </td>
             <td class="px-6 py-4 text-right">
+              <template v-if="getAcknowledgment(eva.year)">
+                <Link
+                  v-if="eva.is_in_recourse_period"
+                  :href="route('evaluations.details', eva.id)"
+                  class="inline-flex items-center px-3 py-1 text-sm font-medium text-rose-600 bg-rose-50 rounded hover:bg-rose-100 mr-2"
+                >
+                  <icons.FileTextIcon class="size-4 mr-1" />
+                  Abrir Recurso
+                </Link>
+                <p
+                  v-else
+                  class="text-xs text-gray-400 italic mb-2"
+                >
+                  Recurso fora do período
+                </p>
+              </template>
               <Link
                 v-if="eva.id"
                 :href="route('evaluations.details', eva.id)"

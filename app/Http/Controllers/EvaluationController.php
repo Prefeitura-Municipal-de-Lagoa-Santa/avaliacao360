@@ -470,6 +470,17 @@ class EvaluationController extends Controller
             ->sortDesc()
             ->values();
 
+        // Buscar assinaturas realizadas
+        $acknowledgments = Acknowledgment::where('person_id', $person->id)
+            ->get(['year', 'signature_base64', 'created_at', 'signed_at'])
+            ->map(fn($ack) => [
+                'year' => $ack->year,
+                'signature_base64' => $ack->signature_base64,
+                'signed_at' => \Carbon\Carbon::parse($ack->signed_at ?? $ack->created_at)->format('Y-m-d'),
+            ])
+            ->toArray();
+
+
         $evaluations = [];
 
         foreach ($anos as $ano) {
@@ -550,6 +561,21 @@ class EvaluationController extends Controller
                 $isInAwarePeriod = $hoje->greaterThanOrEqualTo($startDate);
             }
 
+            // 🔶 Cálculo do período de recurso
+            $signedAt = null;
+
+            $ack = collect($acknowledgments)->firstWhere('year', $ano);
+            if ($ack && isset($ack['signed_at'])) {
+                $signedAt = \Carbon\Carbon::parse($ack['signed_at']);
+            }
+            $recourseDays = $configAno->recoursePeriod; // Padrão de 15 dias se não definido
+            $isInRecoursePeriod = false;
+
+            if ($signedAt) {
+                $endRecourseDate = $signedAt->copy()->addDays($recourseDays)->endOfDay();
+                $today = \Carbon\Carbon::now();
+                $isInRecoursePeriod = $today->between($signedAt, $endRecourseDate);
+            }
             $evaluations[] = [
                 'year' => $ano,
                 'user' => $person->name,
@@ -560,23 +586,16 @@ class EvaluationController extends Controller
                 'calc_equipe' => $calcEquipe,
                 'id' => $id,
                 'is_in_aware_period' => $isInAwarePeriod,
+                'is_in_recourse_period' => $isInRecoursePeriod,
             ];
         }
 
-        // 🟢 Buscar assinaturas já realizadas por ano
-        $acknowledgments = Acknowledgment::where('person_id', $person->id)
-            ->get(['year', 'signature_base64', 'created_at'])
-            ->map(fn($ack) => [
-                'year' => $ack->year,
-                'signature_base64' => $ack->signature_base64,
-                'signed_at' => $ack->created_at->format('Y-m-d'),
-            ])
-            ->toArray();
         return inertia('Dashboard/MyEvaluations', [
             'evaluations' => $evaluations,
             'acknowledgments' => $acknowledgments,
         ]);
     }
+
 
 
     public function showEvaluationDetail($id)
