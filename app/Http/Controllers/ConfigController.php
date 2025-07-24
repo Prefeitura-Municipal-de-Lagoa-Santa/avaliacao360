@@ -37,7 +37,7 @@ class ConfigController extends Controller
         // Usa updateOrCreate para criar a configuração se não existir, ou atualizá-la se já existir.
         // O primeiro array é para encontrar o registro (aqui, um array vazio, pois sempre atualizaremos o primeiro).
         // O segundo array são os dados a serem atualizados ou criados.
-        Config::updateOrCreate(['id' => 1], $validatedData);
+        Config::updateOrCreate(['year' => $validatedData['year']], $validatedData);
 
         return back()->with('success', 'Configurações salvas com sucesso!');
     }

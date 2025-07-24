@@ -342,9 +342,12 @@ class DashboardController extends Controller
         // Lógica para buscar os anos únicos
         $existingYears = Form::select('year')->distinct()->pluck('year');
 
+        $configs = Config::all()->keyBy('year');
+
         return Inertia::render('Dashboard/Configs', [
             'forms' => $forms,
             'existingYears' => $existingYears,
+            'configs' => $configs
         ]);
     }
 

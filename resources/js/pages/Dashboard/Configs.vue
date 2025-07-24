@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted } from 'vue';
+import { ref, computed, onMounted, onUnmounted, watch } from 'vue'; // 1. Importar 'watch'
 import { Head, usePage, router } from '@inertiajs/vue3';
 import DashboardLayout from '@/layouts/DashboardLayout.vue';
 import * as icons from 'lucide-vue-next';
@@ -19,6 +19,7 @@ import {
 } from '@/components/ui/dialog';
 
 // --- DEFINIÇÃO DAS PROPS ---
+// 2. Corrigir a tipagem da prop 'configs'
 const props = defineProps<{
   forms: Record<string, {
     id: number;
@@ -30,11 +31,13 @@ const props = defineProps<{
     term_first: string | null;
     term_end: string | null;
   }>;
-   configs: {
+   // Agora `configs` é um objeto onde a chave é o ano (string)
+   // e o valor é o objeto de configuração para aquele ano.
+   configs: Record<string, {
     gradesPeriod: string;
     awarePeriod: number;
     recoursePeriod: number;
-  } | null;
+  }>;
   existingYears: Array<string | number>;
 }>();
 
@@ -45,10 +48,37 @@ const page = usePage();
 const flash = computed(() => page.props.flash as { success?: string; error?: string });
 const selectedYear = ref(String(new Date().getFullYear()));
 
-// ***** VARIÁVEIS MOVIDAS PARA O ESCOPO CORRETO *****
 const gradesPeriod = ref('');
 const awarePeriod = ref<number | string>('');
 const recoursePeriod = ref<number | string>('');
+
+// 3. (NOVO) Propriedade computada para obter a configuração do ano selecionado
+const currentYearConfig = computed(() => {
+  return props.configs[selectedYear.value] || null;
+});
+
+// 4. (NOVO) Observador para atualizar o formulário quando o ano ou as configs mudarem
+watch(currentYearConfig, (newConfig) => {
+  if (newConfig) {
+    // Se existe configuração para o ano, preenche os campos
+    gradesPeriod.value = newConfig.gradesPeriod ? newConfig.gradesPeriod.substring(0, 10) : '';
+    awarePeriod.value = newConfig.awarePeriod;
+    recoursePeriod.value = newConfig.recoursePeriod;
+  } else {
+    // Se não existe, limpa os campos
+    gradesPeriod.value = '';
+    awarePeriod.value = '';
+    recoursePeriod.value = '';
+  }
+}, { immediate: true }); // `immediate: true` faz com que seja executado na montagem inicial
+
+
+// --- Restante do seu código <script setup> permanece o mesmo ---
+// ... (isPrazoModalVisible, isPreviewModalVisible, yearOptions, etc.)
+// ... (NÃO PRECISA MAIS DO onMounted para setar os valores de config)
+
+// O método saveSettings() já envia o `selectedYear.value`, então ele funcionará corretamente
+// com as mudanças do backend sem precisar de alterações.
 
 // --- ESTADO DO MODAL DE PRAZO ---
 const isPrazoModalVisible = ref(false);
@@ -132,7 +162,6 @@ function openPrazoModal(group: 'avaliacao' | 'pdi') {
 
 function handleSetPrazo() {
   if (!prazoGroup.value || !prazoDateInicio.value || !prazoDateFim.value) {
-    // Substituído
     showFlashModal('error', 'Por favor, preencha as datas de início e encerramento.');
     return;
   }
@@ -148,19 +177,16 @@ function handleSetPrazo() {
 }
 
 function handleLiberar(group: 'avaliacao' | 'pdi') {
-  // 1. Verifica se os prazos estão definidos para o grupo
   const formTypes = group === 'avaliacao' ? ['servidor', 'gestor', 'chefia', 'comissionado'] : ['pactuacao_servidor','pactuacao_comissionado','pactuacao_gestor'];
   const formComPrazo = formsForSelectedYear.value.find(f => formTypes.includes(f.type) && f.term_first && f.term_end);
 
   if (!formComPrazo) {
-    // 2. Se os prazos NÃO estiverem definidos, configura o dialog como um AVISO
     isConfirmationDialog.value = false;
     liberarModalTitle.value = 'Prazos Não Definidos';
     liberarModalDescription.value = 'É necessário definir os prazos de início e encerramento antes de poder liberar este grupo de formulários.';
   } else {
-    // 3. Se os prazos ESTIVEREM definidos, configura o dialog como uma CONFIRMAÇÃO
     isConfirmationDialog.value = true;
-    groupToLiberar.value = group; // Armazena o grupo para usar na confirmação
+    groupToLiberar.value = group;
     liberarModalTitle.value = 'Confirmar Liberação';
     liberarModalDescription.value = `Tem certeza que deseja LIBERAR os formulários de ${group.toUpperCase()} para o ano de ${selectedYear.value}? Esta ação não pode ser desfeita.`;
   }
@@ -176,7 +202,7 @@ function confirmAndLiberar() {
   }, {
     preserveScroll: true,
     onSuccess: () => {
-      isLiberarModalVisible.value = false; // Fecha o dialog em caso de sucesso
+      isLiberarModalVisible.value = false;
       generateRelease();
     }
   });
@@ -296,12 +322,8 @@ const handleKeydown = (e: KeyboardEvent) => {
   }
 };
 
+// Remova o onMounted que definia os valores de configuração. O 'watch' já faz isso.
 onMounted(() => {
-  if (props.configs) {
-    gradesPeriod.value = props.configs.gradesPeriod ? props.configs.gradesPeriod.substring(0, 10) : '';
-    awarePeriod.value = props.configs.awarePeriod;
-    recoursePeriod.value = props.configs.recoursePeriod;
-  }
   window.addEventListener('keydown', handleKeydown);
 });
 
