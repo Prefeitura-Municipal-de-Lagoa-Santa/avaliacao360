@@ -90,8 +90,8 @@ Route::middleware(['auth', 'verified', EnsureCpfIsFilled::class, RedirectIfMustC
     Route::post('/releases-generate/{year}', [ReleaseController::class, 'generateRelease'])
         ->name('releases.generate');
 
-     Route::post('/pdi-generate/{year}', [ReleaseController::class, 'generatePdi'])
-    ->name('pdi.generate');   
+    Route::post('/pdi-generate/{year}', [ReleaseController::class, 'generatePdi'])
+        ->name('pdi.generate');
 
     Route::get('/avaliacoes/autoavaliacao/resultado/{evaluationRequest}', [EvaluationController::class, 'showEvaluationResult'])
         ->name('evaluations.autoavaliacao.result');
@@ -115,6 +115,9 @@ Route::middleware(['auth', 'verified', EnsureCpfIsFilled::class, RedirectIfMustC
 
     Route::get('/recourses/{recourse}', [EvaluationRecourseController::class, 'show'])
         ->name('recourses.show');
+
+    Route::get('/recourse/open', [EvaluationRecourseController::class, 'index'])
+        ->name('recourses.index');
 
 });
 

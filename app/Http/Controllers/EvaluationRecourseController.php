@@ -13,6 +13,25 @@ use Illuminate\Support\Facades\Storage;
 class EvaluationRecourseController extends Controller
 {
 
+    public function index(Request $request)
+    {
+        if (!user_can('recourse')) {
+            return redirect()->route('dashboard')->with('error', 'Você não tem permissão.');
+        }
+
+        $status = $request->get('status', 'aberto'); // padrão: aberto
+
+        $recourses = EvaluationRecourse::with(['person', 'evaluation.form'])
+            ->when($status, fn($q) => $q->where('status', $status))
+            ->latest()
+            ->paginate(10);
+
+        return inertia('Recourses/Index', [
+            'recourses' => $recourses,
+            'status' => $status,
+        ]);
+    }
+
     public function create($evaluationId)
     {
         $evaluation = EvaluationRequest::with('requestedPerson')->findOrFail($evaluationId);
@@ -59,7 +78,13 @@ class EvaluationRecourseController extends Controller
 
     public function show(EvaluationRecourse $recourse)
     {
-        $recourse->load(['evaluation.form', 'attachments', 'person', 'user']);
+        $recourse->load([
+            'evaluation.evaluation.form', // 👈 observe os 2 níveis!
+            'attachments',
+            'person',
+            'user',
+            'logs' => fn($q) => $q->orderBy('created_at'),
+        ]);
 
         return inertia('Recourses/Show', [
             'recourse' => [
@@ -73,9 +98,17 @@ class EvaluationRecourseController extends Controller
                     'url' => Storage::disk('public')->url($a->file_path),
                 ]),
                 'evaluation' => [
-                    'year' => $recourse->evaluation->form->year ?? null,
+                    'year' => optional($recourse->evaluation->evaluation->form)->year_formatted ?? '—',
                     'id' => $recourse->evaluation->id,
                 ],
+                'person' => [
+                    'name' => $recourse->person->name,
+                ],
+                'logs' => $recourse->logs->map(fn($log) => [
+                    'status' => $log->status,
+                    'message' => $log->message,
+                    'created_at' => $log->created_at->format('d/m/Y H:i'),
+                ]),
             ],
         ]);
     }

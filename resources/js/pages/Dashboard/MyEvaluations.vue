@@ -93,17 +93,26 @@ function getAcknowledgment(year: string | number) {
   const result = (props.acknowledgments ?? []).find(a => String(a.year) === String(year));
   return result;
 }
+
+function goBack() {
+  if (window.history.length > 1) {
+    window.history.back();
+  } else {
+    router.get(route('recourses.dashboard'));
+  }
+}
 </script>
 
 <template>
   <Head title="Minhas Avaliações Anuais" />
   <DashboardLayout page-title="Minhas Avaliações Anuais">
-    <div class="flex justify-between items-center mb-6">
-      <Link :href="route('dashboard')" class="flex items-center px-4 py-2 bg-gray-100 rounded hover:bg-gray-200">
-        <icons.ArrowLeftIcon class="size-4 mr-2" />
-        Voltar
-      </Link>
-    </div>
+      <div class="detail-page-header">
+        <h2 class="text-2xl font-bold text-gray-800">Minhas Avaliações</h2>
+        <button @click="goBack" class="back-btn">
+          <icons.ArrowLeftIcon class="size-4 mr-2" />
+          Voltar
+        </button>
+      </div>
 
     <div class="bg-white rounded-lg shadow-md overflow-hidden">
       <table class="w-full text-sm text-left text-gray-600">

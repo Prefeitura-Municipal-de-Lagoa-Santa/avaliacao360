@@ -220,18 +220,24 @@ class DashboardController extends Controller
 
     public function recourse()
     {
-
         if (!user_can('recourse')) {
             return redirect()->route('evaluations')->with('error', 'Você não tem permissão para acessar essa área.');
         }
 
-        // Busca o prazo apenas para o grupo de PDI
-        $recourse = $this->getGroupDeadline('recourse');
+        $recourse = $this->getGroupDeadline('recourse'); // deve retornar ['term_first' => ..., 'term_end' => ...]
 
-        return Inertia::render('Dashboard/Recourse', [
+        return Inertia::render('Dashboard/Recourse', [ // <== nome da view correto!
             'recourse' => $recourse,
+            'totals' => [
+                'opened' => \App\Models\EvaluationRecourse::where('status', 'aberto')->count(),
+                'under_analysis' => \App\Models\EvaluationRecourse::where('status', 'em_analise')->count(),
+                'analyzed_percent' => \App\Models\EvaluationRecourse::count() > 0
+                    ? round(\App\Models\EvaluationRecourse::where('status', 'respondido')->count() / \App\Models\EvaluationRecourse::count() * 100) . '%'
+                    : '0%',
+            ],
         ]);
     }
+
 
     /**
      * ***** MÉTODO DO CALENDÁRIO ATUALIZADO *****
