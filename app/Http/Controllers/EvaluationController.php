@@ -642,51 +642,62 @@ class EvaluationController extends Controller
 
         $evaluationRequest = EvaluationRequest::with('evaluation.form')->findOrFail($id);
 
-        $form = $evaluationRequest->evaluation?->form;
-        $year = $form?->year ?? ($form?->period ? \Carbon\Carbon::parse($form->period)->format('Y') : null);
+        // ✅ Se não for comissão, só pode ver se foi o avaliador
+        if (!user_can('recourse')) {
+            if (!$person || $evaluationRequest->requester_person_id !== $person->id) {
+                abort(403, 'Você não pode acessar esta avaliação.');
+            }
+        }
 
-        // === VERIFICA SE ESTÁ LIBERADO PARA VER DETALHES ===
+        $evaluation = $evaluationRequest->evaluation;
+        if (!$evaluation || !$evaluation->form) {
+            abort(404, 'Formulário de avaliação não encontrado.');
+        }
+
+        $form = $evaluation->form;
+        $year = $form->year ?? ($form->period ? \Carbon\Carbon::parse($form->period)->format('Y') : null);
+
+        // === VERIFICA SE ESTÁ LIBERADO PARA VER DETALHES (exceto para comissão) ===
         $configAno = Config::where('year', $year)->first();
         $isLiberado = true;
-        if ($configAno && $configAno->gradesPeriod) {
-            $startDate = \Carbon\Carbon::parse($configAno->gradesPeriod)->startOfDay();
-            $hoje = \Carbon\Carbon::now()->startOfDay();
-            // Se HOJE for maior ou igual ao startDate, não está liberado
-            $isLiberado = $hoje->greaterThanOrEqualTo($startDate);
+        if (!user_can('recourse')) {
+            if ($configAno && $configAno->gradesPeriod) {
+                $startDate = \Carbon\Carbon::parse($configAno->gradesPeriod)->startOfDay();
+                $hoje = \Carbon\Carbon::now()->startOfDay();
+                $isLiberado = $hoje->greaterThanOrEqualTo($startDate);
+            }
+
+            if (!$isLiberado) {
+                return redirect()->route('evaluations')->with('error', 'Nota final ainda não está liberada para visualização.');
+            }
         }
-        if (!$isLiberado) {
-            return redirect()->route('evaluations')->with('error', 'Nota final ainda não está liberada para visualização.');
-        }
+
+        // Filtra todas as requisições no mesmo ano feitas pelo avaliador
         $requestsAno = EvaluationRequest::with([
             'evaluation.form.groupQuestions.questions',
             'requested',
             'requester',
         ])
-            ->where('requester_person_id', $person->id)
-            ->whereHas('evaluation.form', function ($q) use ($year) {
-                $q->where('year', $year);
-            })
+            ->where('evaluation_id', $evaluation->id)
             ->get();
 
-        $formGroups = $form?->groupQuestions ?? [];
+        $formGroups = $form->groupQuestions ?? [];
 
-        // Monta blocos de avaliações por tipo
         $blocos = [];
         $equipes = [];
 
         foreach ($requestsAno as $r) {
             $type = strtolower($r->evaluation->type ?? '');
-            // Equipe vai para bloco separado para calcular médias
             if (str_contains($type, 'equipe')) {
                 $equipes[] = $r;
                 continue;
             }
 
-            // Outras avaliações: monta respostas por pergunta
             $answers = Answer::where('evaluation_id', $r->evaluation_id)->get();
             $byQuestion = [];
             $somaNotas = 0;
             $somaPesos = 0;
+
             foreach ($formGroups as $group) {
                 foreach ($group->questions as $question) {
                     $answer = $answers->firstWhere('question_id', $question->id);
@@ -702,7 +713,9 @@ class EvaluationController extends Controller
                     }
                 }
             }
-            $nota = $somaPesos > 0 ? round($somaNotas / $somaPesos) : null;
+
+            $nota = $somaPesos > 0 ? round($somaNotas / $somaPesos, 2) : null;
+
             $blocos[] = [
                 'tipo' => $r->evaluation->type ?? '-',
                 'nota' => $nota,
@@ -710,7 +723,8 @@ class EvaluationController extends Controller
                 'evidencias' => $r->evidencias ?? null,
             ];
         }
-        // Equipe (calcula médias por pergunta)
+
+        // Bloco Equipe
         $blocoEquipe = null;
         if (count($equipes)) {
             $questionsById = [];
@@ -719,6 +733,7 @@ class EvaluationController extends Controller
                     $questionsById[$question->id] = $question;
                 }
             }
+
             $allAnswers = [];
             foreach ($equipes as $reqEquipe) {
                 $answers = Answer::where('evaluation_id', $reqEquipe->evaluation_id)->get();
@@ -726,6 +741,7 @@ class EvaluationController extends Controller
                     $allAnswers[$ans->question_id][] = intval($ans->score);
                 }
             }
+
             $answersEquipe = [];
             foreach ($questionsById as $qId => $qObj) {
                 $scores = $allAnswers[$qId] ?? [];
@@ -734,9 +750,9 @@ class EvaluationController extends Controller
                     'question' => $qObj->text_content,
                     'score_media' => $media,
                     'weight' => $qObj->weight,
-                    'evidencias' => null,
                 ];
             }
+
             $notaEquipe = count($answersEquipe)
                 ? round(
                     array_reduce($answersEquipe, fn($carry, $item) => $carry + ($item['score_media'] * $item['weight']), 0) /
@@ -744,6 +760,7 @@ class EvaluationController extends Controller
                     2
                 )
                 : null;
+
             $blocoEquipe = [
                 'tipo' => 'Equipe',
                 'nota' => $notaEquipe,
@@ -751,19 +768,19 @@ class EvaluationController extends Controller
             ];
         }
 
-        // Cálculo final igual antes
+        // Cálculo final
         $notaAuto = optional(collect($blocos)->first(fn($b) => str_contains(strtolower($b['tipo']), 'auto')))['nota'] ?? 0;
         $notaChefia = optional(collect($blocos)->first(fn($b) => in_array(strtolower($b['tipo']), ['servidor', 'gestor', 'comissionado'])))['nota'] ?? 0;
         $notaEquipe = $blocoEquipe ? $blocoEquipe['nota'] : null;
 
         $isGestor = $notaEquipe !== null;
-        if ($isGestor) {
-            $notaFinal = round(($notaAuto * 0.25) + ($notaChefia * 0.5) + ($notaEquipe * 0.25), 2);
-            $calcFinal = "($notaAuto x 25%) + ($notaChefia x 50%) + ($notaEquipe x 25%) = $notaFinal";
-        } else {
-            $notaFinal = round(($notaAuto * 0.3) + ($notaChefia * 0.7), 2);
-            $calcFinal = "($notaAuto x 30%) + ($notaChefia x 70%) = $notaFinal";
-        }
+        $notaFinal = $isGestor
+            ? round(($notaAuto * 0.25) + ($notaChefia * 0.5) + ($notaEquipe * 0.25), 2)
+            : round(($notaAuto * 0.3) + ($notaChefia * 0.7), 2);
+
+        $calcFinal = $isGestor
+            ? "($notaAuto x 25%) + ($notaChefia x 50%) + ($notaEquipe x 25%) = $notaFinal"
+            : "($notaAuto x 30%) + ($notaChefia x 70%) = $notaFinal";
 
         return inertia('Dashboard/EvaluationDetail', [
             'year' => $year,
@@ -773,8 +790,10 @@ class EvaluationController extends Controller
             'blocoEquipe' => $blocoEquipe,
             'final_score' => $notaFinal,
             'calc_final' => $calcFinal,
+            'is_commission' => user_can('recourse'), // útil no Vue para renderizar ações extra
         ]);
     }
+
 
     public function acknowledge(Request $request, string $year)
     {

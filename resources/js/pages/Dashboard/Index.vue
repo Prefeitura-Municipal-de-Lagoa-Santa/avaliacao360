@@ -76,8 +76,6 @@ function showDetailsForCompleted() {
         :value="props.dashboardStats.overallProgress"
         label="Progresso Geral"
         iconBgColor="#6366f1"
-        :buttonAction="showDetailsForDeadline"
-        buttonText="Ver Progresso"
       >
         <template #icon>
           <icons.ChartNoAxesCombined />

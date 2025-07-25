@@ -122,6 +122,10 @@ Route::middleware(['auth', 'verified', EnsureCpfIsFilled::class, RedirectIfMustC
     Route::get('/recourse/open', [EvaluationRecourseController::class, 'index'])
         ->name('recourses.index');
 
+    Route::get('/recourses/{recourse}/review', [EvaluationRecourseController::class, 'review'])
+        ->name('recourses.review');
+
+
 });
 
 
