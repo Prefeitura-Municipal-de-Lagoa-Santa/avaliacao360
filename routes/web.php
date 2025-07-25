@@ -11,6 +11,7 @@ use App\Http\Controllers\PdiController;
 use App\Http\Controllers\PasswordChangeController;
 use App\Http\Controllers\PersonController;
 use App\Http\Controllers\EvaluationController;
+use App\Http\Controllers\EvaluationRecourseController;
 use App\Http\Controllers\ReleaseController;
 use App\Http\Middleware\EnsureCpfIsFilled;
 use App\Http\Middleware\RedirectIfMustChangePassword;
@@ -105,6 +106,15 @@ Route::middleware(['auth', 'verified', EnsureCpfIsFilled::class, RedirectIfMustC
     Route::post('/evaluations/{year}/acknowledge', [EvaluationController::class, 'acknowledge'])
         ->middleware(['auth'])
         ->name('evaluations.acknowledge');
+
+    Route::post('/evaluations/{evaluation}/recourse', [EvaluationRecourseController::class, 'store'])
+        ->name('recourses.store');
+
+    Route::get('/evaluations/{evaluation}/recourse/create', [EvaluationRecourseController::class, 'create'])
+        ->name('recourses.create');
+
+    Route::get('/recourses/{recourse}', [EvaluationRecourseController::class, 'show'])
+        ->name('recourses.show');
 
 });
 

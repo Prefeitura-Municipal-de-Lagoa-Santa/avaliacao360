@@ -452,7 +452,6 @@ class EvaluationController extends Controller
             ]);
         }
 
-        // Todas as solicitações em que a pessoa foi o avaliador
         $requests = EvaluationRequest::with([
             'evaluation.form.groupQuestions.questions',
             'evaluation.form',
@@ -469,6 +468,20 @@ class EvaluationController extends Controller
             ->unique()
             ->sortDesc()
             ->values();
+
+        $acknowledgments = Acknowledgment::where('person_id', $person->id)
+            ->get(['year', 'signature_base64', 'created_at', 'signed_at'])
+            ->map(fn($ack) => [
+                'year' => $ack->year,
+                'signature_base64' => $ack->signature_base64,
+                'signed_at' => \Carbon\Carbon::parse($ack->signed_at ?? $ack->created_at)->format('Y-m-d'),
+            ])
+            ->toArray();
+
+        // Requisições de recursos já existentes
+        $existingRecourses = \App\Models\EvaluationRecourse::where('person_id', $person->id)
+            ->get()
+            ->keyBy('evaluation_id');
 
         $evaluations = [];
 
@@ -505,39 +518,26 @@ class EvaluationController extends Controller
                 return $somaPesos > 0 ? round($somaNotas / $somaPesos) : 0;
             };
 
-            $auto = $requestsAno->first(function ($r) use ($person, $autoTypes) {
-                return $r->requested_person_id == $person->id &&
-                    in_array(strtolower($r->evaluation->type ?? ''), $autoTypes);
-            });
-
-            $chefia = $requestsAno->first(function ($r) use ($person, $chefiaTypes) {
-                $typeMatch = in_array(strtolower($r->evaluation->type ?? ''), $chefiaTypes);
-                $isDirectManager = $r->requested_person_id == $person->direct_manager_id;
-                return $typeMatch && $isDirectManager;
-            });
-
-            $equipes = $requestsAno->filter(function ($r) {
-                return str_contains(strtolower($r->evaluation->type ?? ''), 'equipe');
-            });
+            $auto = $requestsAno->first(fn($r) => $r->requested_person_id == $person->id && in_array(strtolower($r->evaluation->type ?? ''), $autoTypes));
+            $chefia = $requestsAno->first(fn($r) => in_array(strtolower($r->evaluation->type ?? ''), $chefiaTypes) && $r->requested_person_id == $person->direct_manager_id);
+            $equipes = $requestsAno->filter(fn($r) => str_contains(strtolower($r->evaluation->type ?? ''), 'equipe'));
 
             $notaAuto = $getNotaPonderada($auto);
             $notaChefia = $getNotaPonderada($chefia);
-            $notaEquipe = $equipes->count() > 0
-                ? round($equipes->avg(fn($r) => $getNotaPonderada($r)), 2)
-                : null;
+            $notaEquipe = $equipes->count() > 0 ? round($equipes->avg(fn($r) => $getNotaPonderada($r)), 2) : null;
 
-            $calcAuto = $auto ? "Autoavaliação: " . $notaAuto : '';
-            $calcChefia = $chefia ? "Chefia: " . $notaChefia : '';
-            $calcEquipe = $equipes->count() ? "Equipe (média): " . $notaEquipe : '';
+            $calcAuto = $auto ? "Autoavaliação: $notaAuto" : '';
+            $calcChefia = $chefia ? "Chefia: $notaChefia" : '';
+            $calcEquipe = $equipes->count() ? "Equipe (média): $notaEquipe" : '';
 
             $isGestor = $notaEquipe !== null;
-            if ($isGestor) {
-                $notaFinal = round(($notaAuto * 0.25) + ($notaChefia * 0.5) + ($notaEquipe * 0.25), 2);
-                $calcFinal = "($notaAuto x 25%) + ($notaChefia x 50%) + ($notaEquipe x 25%) = $notaFinal";
-            } else {
-                $notaFinal = round(($notaAuto * 0.3) + ($notaChefia * 0.7), 2);
-                $calcFinal = "($notaAuto x 30%) + ($notaChefia x 70%) = $notaFinal";
-            }
+            $notaFinal = $isGestor
+                ? round(($notaAuto * 0.25) + ($notaChefia * 0.5) + ($notaEquipe * 0.25), 2)
+                : round(($notaAuto * 0.3) + ($notaChefia * 0.7), 2);
+
+            $calcFinal = $isGestor
+                ? "($notaAuto x 25%) + ($notaChefia x 50%) + ($notaEquipe x 25%) = $notaFinal"
+                : "($notaAuto x 30%) + ($notaChefia x 70%) = $notaFinal";
 
             $id = $auto?->id ?? $chefia?->id ?? $equipes->first()?->id;
 
@@ -550,6 +550,24 @@ class EvaluationController extends Controller
                 $isInAwarePeriod = $hoje->greaterThanOrEqualTo($startDate);
             }
 
+            // Período de recurso
+            $signedAt = null;
+            $ack = collect($acknowledgments)->firstWhere('year', $ano);
+            if ($ack && isset($ack['signed_at'])) {
+                $signedAt = \Carbon\Carbon::parse($ack['signed_at']);
+            }
+
+            $recourseDays = $configAno?->recoursePeriod ?? 15;
+            $isInRecoursePeriod = false;
+
+            if ($signedAt) {
+                $endRecourseDate = $signedAt->copy()->addDays($recourseDays)->endOfDay();
+                $today = \Carbon\Carbon::now();
+                $isInRecoursePeriod = $today->between($signedAt, $endRecourseDate);
+            }
+
+            $recourse = $existingRecourses->get($id);
+
             $evaluations[] = [
                 'year' => $ano,
                 'user' => $person->name,
@@ -560,18 +578,12 @@ class EvaluationController extends Controller
                 'calc_equipe' => $calcEquipe,
                 'id' => $id,
                 'is_in_aware_period' => $isInAwarePeriod,
+                'is_in_recourse_period' => $isInRecoursePeriod,
+                'has_recourse' => $recourse !== null,
+                'recourse_id' => $recourse?->id,
             ];
         }
 
-        // 🟢 Buscar assinaturas já realizadas por ano
-        $acknowledgments = Acknowledgment::where('person_id', $person->id)
-            ->get(['year', 'signature_base64', 'created_at'])
-            ->map(fn($ack) => [
-                'year' => $ack->year,
-                'signature_base64' => $ack->signature_base64,
-                'signed_at' => $ack->created_at->format('Y-m-d'),
-            ])
-            ->toArray();
         return inertia('Dashboard/MyEvaluations', [
             'evaluations' => $evaluations,
             'acknowledgments' => $acknowledgments,
