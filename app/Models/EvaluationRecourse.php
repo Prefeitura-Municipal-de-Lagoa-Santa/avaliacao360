@@ -40,5 +40,9 @@ class EvaluationRecourse extends Model
         return $this->hasMany(EvaluationRecourseAttachment::class, 'recourse_id');
     }
 
-    
+    public function logs()
+    {
+        return $this->hasMany(EvaluationRecourseLog::class, 'recourse_id');
+    }
+
 }

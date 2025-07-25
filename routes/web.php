@@ -84,14 +84,17 @@ Route::middleware(['auth', 'verified', EnsureCpfIsFilled::class, RedirectIfMustC
     Route::get('/evaluations/pending', [EvaluationController::class, 'pending'])
         ->name('evaluations.pending');
 
+    Route::get('/evaluations/completed', [EvaluationController::class, 'completed'])
+        ->name('evaluations.completed');
+
     Route::get('/organizational-chart', [OrganizationalChartController::class, 'index'])
         ->name('organizational-chart.index');
 
     Route::post('/releases-generate/{year}', [ReleaseController::class, 'generateRelease'])
         ->name('releases.generate');
 
-     Route::post('/pdi-generate/{year}', [ReleaseController::class, 'generatePdi'])
-    ->name('pdi.generate');   
+    Route::post('/pdi-generate/{year}', [ReleaseController::class, 'generatePdi'])
+        ->name('pdi.generate');
 
     Route::get('/avaliacoes/autoavaliacao/resultado/{evaluationRequest}', [EvaluationController::class, 'showEvaluationResult'])
         ->name('evaluations.autoavaliacao.result');
@@ -115,6 +118,13 @@ Route::middleware(['auth', 'verified', EnsureCpfIsFilled::class, RedirectIfMustC
 
     Route::get('/recourses/{recourse}', [EvaluationRecourseController::class, 'show'])
         ->name('recourses.show');
+
+    Route::get('/recourse/open', [EvaluationRecourseController::class, 'index'])
+        ->name('recourses.index');
+
+    Route::get('/recourses/{recourse}/review', [EvaluationRecourseController::class, 'review'])
+        ->name('recourses.review');
+
 
 });
 

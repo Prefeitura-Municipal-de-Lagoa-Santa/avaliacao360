@@ -5,16 +5,12 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Carbon\Carbon;
 
 class Form extends Model
 {
     use HasFactory;
 
-    /**
-     * The attributes that are mass assignable.
-     *
-     * @var array<int, string>
-     */
     protected $fillable = [
         'name',
         'year',
@@ -26,22 +22,28 @@ class Form extends Model
     ];
 
     protected $casts = [
-    'release' => 'boolean',
-    'release_data' => 'datetime',
-    'term_first' => 'datetime',
-    'term_end' => 'datetime',
-];
+        'year' => 'string',
+        'release' => 'boolean',
+        'release_data' => 'datetime',
+        'term_first' => 'datetime',
+        'term_end' => 'datetime',
+    ];
 
-    /**
-     * Get all of the questions for the Form.
-     *
-     * @return \Illuminate\Database\Eloquent\Relations\HasMany
-     */
     public function groupQuestions(): HasMany
     {
         return $this->hasMany(GroupQuestion::class);
     }
 
+    public function getYearFormattedAttribute(): string
+    {
+        if (is_numeric($this->year)) {
+            return (string) $this->year;
+        }
 
-    
+        try {
+            return Carbon::parse($this->year)->format('Y');
+        } catch (\Exception $e) {
+            return '—';
+        }
+    }
 }

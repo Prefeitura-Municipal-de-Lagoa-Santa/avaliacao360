@@ -37,6 +37,10 @@ const CheckCircleIcon = `<svg class="w-8 h-8" fill="none" stroke="currentColor" 
 function showDetailsForDeadline() {
   router.get(route('evaluations.pending'));
 }
+
+function showDetailsForCompleted() {
+  router.get(route('evaluations.completed'));
+}
 </script>
 
 <template>
@@ -48,7 +52,7 @@ function showDetailsForDeadline() {
         :value="props.dashboardStats.completedAssessments"
         label="Avaliações Concluídas"
         iconBgColor="#10b981"
-        :buttonAction="showDetailsForDeadline"
+        :buttonAction="showDetailsForCompleted"
         buttonText="Visualizar"
       >
         <template #icon>
@@ -72,8 +76,6 @@ function showDetailsForDeadline() {
         :value="props.dashboardStats.overallProgress"
         label="Progresso Geral"
         iconBgColor="#6366f1"
-        :buttonAction="showDetailsForDeadline"
-        buttonText="Ver Progresso"
       >
         <template #icon>
           <icons.ChartNoAxesCombined />

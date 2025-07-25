@@ -31,11 +31,26 @@ watch(search, debounce((value: string | null) => {
         replace: true,
     })
 }, 300))
+
+function goBack() {
+  if (window.history.length > 1) {
+    window.history.back();
+  } else {
+    router.get(route('recourses.dashboard'));
+  }
+}
 </script>
 
 <template>
   <Head title="Avaliações Pendentes" />
   <DashboardLayout pageTitle="Avaliações Pendentes (Todos)">
+    <div class="detail-page-header">
+      <h2 class="text-2xl font-bold text-gray-800">Avaliações Pendentes</h2>
+      <button @click="goBack" class="back-btn">
+        <icons.ArrowLeftIcon class="size-4 mr-2" />
+        Voltar
+      </button>
+    </div>
     <div class="flex flex-col sm:flex-row justify-between items-center mb-6 gap-4">
       <div class="relative w-full sm:w-72">
         <input v-model="search" type="text" placeholder="Pesquisar avaliado ou avaliador..."
