@@ -51,13 +51,18 @@ class DashboardController extends Controller
         $completedAssessments = EvaluationRequest::where('status', 'completed')->count();
         $pendingAssessments = EvaluationRequest::where('status', 'pending')->count();
         $totalAssessments = $completedAssessments + $pendingAssessments;
+        $overallProgress = ($totalAssessments > 0)
+            ? ($completedAssessments / $totalAssessments) * 100
+            : 0;
 
-        $overallProgress = ($totalAssessments > 0) ? round(($completedAssessments / $totalAssessments) * 100) : 0;
+        $formattedProgress = $overallProgress == 0
+            ? 0
+            : rtrim(rtrim(number_format($overallProgress, 3, '.', ''), '0'), '.');
 
         $dashboardStats = [
             'completedAssessments' => $completedAssessments,
             'pendingAssessments' => $pendingAssessments,
-            'overallProgress' => $overallProgress . '%',
+            'overallProgress' => $formattedProgress . '%',
         ];
 
         return Inertia::render('Dashboard/Index', [

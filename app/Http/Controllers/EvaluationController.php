@@ -414,6 +414,50 @@ class EvaluationController extends Controller
         ]);
     }
 
+    public function completed(Request $request)
+    {
+        $search = $request->input('search');
+
+        $query = EvaluationRequest::with([
+            'evaluation.form',
+            'evaluation.evaluatedPerson',
+            'requestedPerson'
+        ])->where('status', 'completed');
+
+        if ($search) {
+            $query->where(function ($q) use ($search) {
+                $q->whereHas('evaluation.evaluatedPerson', function ($q) use ($search) {
+                    $q->where('name', 'like', "%{$search}%");
+                })
+                    ->orWhereHas('requestedPerson', function ($q) use ($search) {
+                        $q->where('name', 'like', "%{$search}%");
+                    });
+            });
+        }
+
+        $completedRequests = $query
+            ->orderByDesc('created_at')
+            ->paginate(20)
+            ->through(function ($request) {
+                return [
+                    'id' => $request->id,
+                    'type' => $request->evaluation->type ?? '-',
+                    'form_name' => $request->evaluation->form->name ?? '-',
+                    'avaliado' => $request->evaluation->evaluatedPerson->name ?? '-',
+                    'avaliador' => $request->requestedPerson->name ?? '-',
+                    'created_at' => $request->created_at?->format('d/m/Y H:i') ?? '',
+                ];
+            })
+            ->withQueryString();
+
+        return inertia('Evaluations/Completed', [
+            'completedRequests' => $completedRequests,
+            'filters' => [
+                'search' => $search,
+            ],
+        ]);
+    }
+
     public function showEvaluationResult(EvaluationRequest $evaluationRequest)
     {
         // Carrega todos os relacionamentos necessários para a tela de resultado

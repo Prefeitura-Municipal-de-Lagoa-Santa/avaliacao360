@@ -84,6 +84,9 @@ Route::middleware(['auth', 'verified', EnsureCpfIsFilled::class, RedirectIfMustC
     Route::get('/evaluations/pending', [EvaluationController::class, 'pending'])
         ->name('evaluations.pending');
 
+    Route::get('/evaluations/completed', [EvaluationController::class, 'completed'])
+        ->name('evaluations.completed');
+
     Route::get('/organizational-chart', [OrganizationalChartController::class, 'index'])
         ->name('organizational-chart.index');
 
