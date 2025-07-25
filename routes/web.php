@@ -7,6 +7,7 @@ use App\Http\Controllers\ConfigController;
 use App\Http\Controllers\JobFunctionController;
 use App\Http\Controllers\OrganizationalChartController;
 use App\Http\Controllers\OrganizationalUnitController;
+use App\Http\Controllers\PdiController;
 use App\Http\Controllers\PasswordChangeController;
 use App\Http\Controllers\PersonController;
 use App\Http\Controllers\EvaluationController;
@@ -57,6 +58,10 @@ Route::middleware(['auth', 'verified', EnsureCpfIsFilled::class, RedirectIfMustC
     Route::get('/evaluations/autoavaliacao', [EvaluationController::class, 'showAutoavaliacaoForm'])->name('evaluations.autoavaliacao.show');
     // Rotas para salvar avaliação
     Route::post('/evaluations/{form}', [EvaluationController::class, 'store'])->name('evaluations.store');
+    // Rotas para o PDI 
+    Route::get('/pdi/list', [PdiController::class, 'index'])->name('pdi.index');
+    Route::get('/pdi/{pdiRequest}', [PdiController::class, 'show'])->name('pdi.show');
+    Route::put('/pdi/{pdiRequest}', [PdiController::class, 'update'])->name('pdi.update');
     // Em routes.php
     Route::get('/evaluations/status', [EvaluationController::class, 'checkManagerEvaluationStatus'])->name('evaluations.status');
     Route::get('/evaluations/subordinates', [EvaluationController::class, 'showSubordinatesList'])->name('evaluations.subordinates.list');
@@ -83,6 +88,9 @@ Route::middleware(['auth', 'verified', EnsureCpfIsFilled::class, RedirectIfMustC
 
     Route::post('/releases-generate/{year}', [ReleaseController::class, 'generateRelease'])
         ->name('releases.generate');
+
+     Route::post('/pdi-generate/{year}', [ReleaseController::class, 'generatePdi'])
+    ->name('pdi.generate');   
 
     Route::get('/avaliacoes/autoavaliacao/resultado/{evaluationRequest}', [EvaluationController::class, 'showEvaluationResult'])
         ->name('evaluations.autoavaliacao.result');

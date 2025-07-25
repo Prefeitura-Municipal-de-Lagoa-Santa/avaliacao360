@@ -306,6 +306,20 @@ function generateRelease() {
   });
 }
 
+function generatePdiRelease() {
+  router.post(route('pdi.generate', { year: selectedYear.value }), {
+    preserveScroll: true,
+    onSuccess: () => {
+      showFlashModal('success', 'A geração dos PDIs foi iniciada com sucesso!');
+      // Você pode fechar um modal aqui se estiver usando um
+    },
+    onError: (errors) => {
+      console.error('Erro ao gerar PDIs:', errors);
+      showFlashModal('error', 'Ocorreu um erro ao gerar os PDIs.');
+    },
+  });
+}
+
 function closePreviewModal() {
   isPreviewModalVisible.value = false;
   fileName.value = '';
@@ -566,6 +580,33 @@ onUnmounted(() => {
             <div v-else class="text-green-600 font-semibold flex items-center gap-2">
               <component :is="icons.CheckCircle2Icon" class="size-5" />
               Liberado em: {{ pdiReleaseData }}
+              <Dialog>
+          <DialogTrigger as-child>
+            <button class="ml-4 btn btn-blue"> <component :is="icons.SquarePenIcon" class="size-5 mr-2" />
+              Gerar PDIs
+            </button>
+          </DialogTrigger>
+          <DialogContent class="sm:max-w-md bg-white">
+            <DialogHeader>
+              <DialogTitle class="text-lg font-semibold text-gray-900">Gerar PDIs</DialogTitle>
+              <DialogDescription class="mt-2 text-sm text-gray-600">
+                Tem certeza que deseja gerar os Planos de Desenvolvimento Individual (PDI) para o ano de {{ selectedYear }}?
+              </DialogDescription>
+            </DialogHeader>
+            <DialogFooter class="mt-6 flex flex-col-reverse sm:flex-row sm:justify-end sm:space-x-2">
+              <DialogClose as-child>
+                <button type="button" class="w-full sm:w-auto inline-flex justify-center rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50">
+                  Cancelar
+                </button>
+              </DialogClose>
+              <DialogClose as-child>
+                <button @click="generatePdiRelease" type="button" class="w-full sm:w-auto inline-flex justify-center rounded-md border border-transparent bg-green-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-green-700">
+                  Sim, Gerar
+                </button>
+              </DialogClose>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
             </div>
           </div>
         </div>

@@ -3,18 +3,32 @@
 namespace App\Http\Controllers;
 
 use App\Jobs\GenerateEvaluationsJob;
+use App\Jobs\GeneratePdiJob;
 use Illuminate\Http\RedirectResponse;
 use Redirect;
 
 
 class ReleaseController extends Controller
 {
-    public function generateRelease(string $year): RedirectResponse
+    
+    /**
+     * Dispara o job para gerar as avaliações do ano especificado.
+     */
+    public function generateRelease(string $year)
     {
-        // Dispara o job, passando o ano como parâmetro.
         GenerateEvaluationsJob::dispatch($year);
 
-        // Retorna imediatamente para o usuário com uma mensagem de sucesso.
-        return Redirect::route('configs')->with('success', 'A geração das avaliações foi iniciada! O processo será executado em segundo plano.');
+        return back()->with('success', 'A geração das avaliações foi iniciada em segundo plano!');
+    }
+
+    /**
+     * Dispara o job para gerar os PDIs do ano especificado.
+     * ESTE É O NOVO MÉTODO
+     */
+    public function generatePdi(string $year)
+    {
+        GeneratePdiJob::dispatch($year);
+
+        return back()->with('success', 'A geração dos PDIs foi iniciada em segundo plano!');
     }
 }

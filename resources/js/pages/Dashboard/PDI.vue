@@ -20,6 +20,10 @@ function formatPrazo(prazo: { term_first: string; term_end: string; } | null): s
   return `${inicio} - ${fim}`;
 }
 
+function goToPdiList() {
+  router.get(route('pdi.index'));
+}
+
 function goToCalendar() {
   router.get(route('calendar'));
 }
@@ -39,7 +43,11 @@ function showDetailsForDeadline() {
   <DashboardLayout pageTitle="Dashboard de PDI">
     <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
       
-      <DashboardCard label="Pactuação" buttonText="Acessar" iconBgColor="#1d82c4">
+      <DashboardCard 
+        label="Pactuação" 
+        buttonText="Acessar" 
+        :buttonAction="goToPdiList" iconBgColor="#1d82c4"
+      >
         <template #icon><icons.FileSignature /></template>
       </DashboardCard>
 
