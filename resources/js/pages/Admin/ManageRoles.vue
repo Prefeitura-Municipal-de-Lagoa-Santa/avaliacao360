@@ -3,6 +3,7 @@ import { ref } from 'vue';
 import { Head, router } from '@inertiajs/vue3';
 import DashboardLayout from '@/layouts/DashboardLayout.vue';
 import { route } from 'ziggy-js';
+import { ArrowLeftIcon } from 'lucide-vue-next';
 
 const props = defineProps<{
   users: Array<{
@@ -36,12 +37,29 @@ function assignRole(userId: number) {
     }
   );
 }
+
+function goBack() {
+  if (window.history.length > 1) {
+    window.history.back();
+  } else {
+    router.get(route('recourses.dashboard'));
+  }
+}
 </script>
 
 <template>
-  <Head title="Gerenciar Papéis" />
   <DashboardLayout page-title="Gerenciar Papéis de Usuário">
+    <Head title="Gerenciar Papéis" />
     <div class="overflow-x-auto bg-white shadow rounded p-4">
+        <div class="detail-page-header flex justify-between items-center">
+        <h2 class="text-2xl font-bold text-gray-800">
+          Editar Pápeis
+        </h2>
+        <button @click="goBack" class="back-btn">
+          <ArrowLeftIcon class="size-4 mr-2" />
+          Voltar
+        </button>
+      </div>
       <table class="w-full text-sm table-auto">
         <thead>
           <tr class="bg-gray-100 text-left uppercase text-xs text-gray-600">
