@@ -143,7 +143,7 @@ function showDetailsForDeadline() {
           ? () => showEvaluationResult(props.selfEvaluationRequestId)
           : handleAutoavaliacaoClick"
         :buttonText="props.selfEvaluationCompleted ? 'Ver respostas' : 'Começar agora'"
-        v-if="dentroDoPrazo && (props.selfEvaluationVisible || props.selfEvaluationCompleted)"
+        v-if="(props.selfEvaluationVisible || props.selfEvaluationCompleted)"
       >
         <template #icon>
           <icons.ListTodo />
@@ -158,7 +158,7 @@ function showDetailsForDeadline() {
           ? () => showEvaluationResult(props.bossEvaluationRequestId)
           : handleChefiaEvaluationClick"
         :buttonText="props.bossEvaluationCompleted ? 'Ver respostas' : 'Começar agora'"
-        v-if="dentroDoPrazo && (props.bossEvaluationVisible || props.bossEvaluationCompleted)"
+        v-if="(props.bossEvaluationVisible || props.bossEvaluationCompleted)"
       >
         <template #icon>
           <icons.ListTodo />
@@ -173,7 +173,7 @@ function showDetailsForDeadline() {
           ? () => showEvaluationResult(props.teamEvaluationRequestId)
           : handleManagerEvaluationClick"
         :buttonText="props.teamEvaluationCompleted ? 'Ver respostas' : 'Começar agora'"
-        v-if="dentroDoPrazo && (props.teamEvaluationVisible || props.teamEvaluationCompleted)"
+        v-if="(props.teamEvaluationVisible || props.teamEvaluationCompleted)"
       >
         <template #icon>
           <icons.Users />

@@ -89,10 +89,9 @@ class DashboardController extends Controller
         if ($prazo && $prazo->term_first && $prazo->term_end) {
             $hoje = now();
             $inicio = $prazo->term_first;
-            $fim = $prazo->term_end;
+            $fim = Carbon::parse($prazo->term_end)->endOfDay();
             $estaNoPrazo = $hoje->between($inicio, $fim);
         }
-
         if (!$people) {
             return Inertia::render('Dashboard/Evaluation', [
                 'prazo' => $prazo,
