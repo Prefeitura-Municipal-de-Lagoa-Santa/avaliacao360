@@ -12,6 +12,7 @@ use App\Http\Controllers\PersonController;
 use App\Http\Controllers\EvaluationController;
 use App\Http\Controllers\EvaluationRecourseController;
 use App\Http\Controllers\ReleaseController;
+use App\Http\Controllers\UserRoleController;
 use App\Http\Middleware\EnsureCpfIsFilled;
 use App\Http\Middleware\RedirectIfMustChangePassword;
 use Illuminate\Support\Facades\Route;
@@ -121,13 +122,16 @@ Route::middleware(['auth', 'verified', EnsureCpfIsFilled::class, RedirectIfMustC
         ->name('recourses.review');
 
     Route::post('/recourses/{recourse}/mark-analyzing', [EvaluationRecourseController::class, 'markAnalyzing'])
-    ->name('recourses.markAnalyzing');
+        ->name('recourses.markAnalyzing');
 
     Route::post('/recourses/{recourse}/respond', [EvaluationRecourseController::class, 'respond'])
-    ->name('recourses.respond');
-
+        ->name('recourses.respond');
 });
 
+Route::middleware(['auth', 'verified'])->group(function () {
+    Route::get('/users/manage-roles', [UserRoleController::class, 'manageRoles'])->name('users.manage-roles');
+    Route::post('/users/{user}/assign-role', [UserRoleController::class, 'assign'])->name('users.assign-role');
+});
 
 Route::middleware(['auth', 'verified'])->group(function () {
     Route::put('/profile/cpf', [PersonController::class, 'cpfUpdate'])->name('profile.cpf.update');
