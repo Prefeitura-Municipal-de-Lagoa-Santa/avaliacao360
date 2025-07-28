@@ -18,7 +18,7 @@ class AdminController extends Controller
         }
 
         $roles = Role::with('permissions')->get();
-        $permissions = Permission::all();
+        $permissions = Permission::orderBy('name')->get();
         return inertia('Admin/Index', [
             'roles' => $roles,
             'permissions' => $permissions,

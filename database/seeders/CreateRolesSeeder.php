@@ -10,27 +10,86 @@ class CreateRolesSeeder extends Seeder
 {
     public function run(): void
     {
-        // Cria as roles com o campo level
-        $admin     = Role::updateOrCreate(['name' => 'Admin'], ['level' => 10]);
-        $rh        = Role::updateOrCreate(['name' => 'RH'], ['level' => 5]);
-        $comissao  = Role::updateOrCreate(['name' => 'Comissão'], ['level' => 3]);
-        $servidor  = Role::updateOrCreate(['name' => 'Servidor'], ['level' => 1]);
+        $admin    = Role::updateOrCreate(['name' => 'Admin'], ['level' => 10]);
+        $rh       = Role::updateOrCreate(['name' => 'RH'], ['level' => 5]);
+        $comissao = Role::updateOrCreate(['name' => 'Comissão'], ['level' => 3]);
+        $servidor = Role::updateOrCreate(['name' => 'Servidor'], ['level' => 1]);
 
-        // Busca todas as permissões
-        $allPermissions = Permission::all()->pluck('id')->toArray();
+        $permissions = Permission::all()->pluck('id', 'name');
 
-        // Admin recebe todas
-        $admin->permissions()->sync($allPermissions);
+        // Admin: tudo
+        $admin->permissions()->sync($permissions->values());
 
-        // Servidor recebe apenas algumas permissões específicas
-        $servidorPermissions = Permission::whereIn('name', [
-            'evaluations',
-            'pdi',
+        // RH
+        $rh->permissions()->sync($permissions->only([
+            'configs',
+            'configs.create',
+            'configs.destroy',
+            'configs.edit',
+            'configs.liberar.store',
+            'configs.pdi.store',
+            'configs.pdi.update',
+            'configs.prazo.store',
+            'configs.show',
+            'configs.store',
+            'configs.update',
+            'dashboard',
+            'evaluations.completed',
+            'evaluations.pending',
+            'funcoes.index',
+            'funcoes.updateType',
+            'organizational-char.index',
+            'people.edit',
+            'people.index',
+            'people.manual.create',
+            'people.manual.store',
+            'people.update',
+            'persons.confirm',
+            'persons.preview',
+            'recourses',
+            'releases.generate',
+            'reports',
+            'storage.local',
+        ])->values());
+
+        // Comissão
+        $comissao->permissions()->sync($permissions->only([
+            'recourse',
+            'recourses.index',
+            'recourses.markAnalyzing',
+            'recourses.respond',
+            'recourses.review',
+            'storage.local',
+        ])->values());
+
+        // Servidor
+        $servidor->permissions()->sync($permissions->only([
             'calendar',
-        ])->pluck('id')->toArray();
+            'evaluations',
+            'evaluations.acknowledge',
+            'evaluations.autoavaliacao.result',
+            'evaluations.autoavaliacao.show',
+            'evaluations.autoavaliacao.status',
+            'evaluations.chefia.show',
+            'evaluations.chefia.status',
+            'evaluations.details',
+            'evaluations.history',
+            'evaluations.status',
+            'evaluations.store',
+            'evaluations.subordinate.show',
+            'evaluations.subordinates.list',
+            'login',
+            'logout',
+            'password.change',
+            'password.update',
+            'profile.cpf',
+            'profile.cpf.update',
+            'recourses.create',
+            'recourses.show',
+            'recourses.store',
+            'storage.local',
+        ])->values());
 
-        $servidor->permissions()->sync($servidorPermissions);
-
-        $this->command->info("Roles criadas e permissões atribuídas!");
+        $this->command->info("Roles criadas e permissões atribuídas com sucesso.");
     }
 }

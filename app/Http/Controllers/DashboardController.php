@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\EvaluationRecourse;
 use App\Models\Form;
 use App\Models\Person;
 use Illuminate\Http\Request;
@@ -84,7 +85,6 @@ class DashboardController extends Controller
         // dd(Auth::user()->cpf);
         $people = Person::where('cpf', Auth::user()->cpf)->first();
         $prazo = $this->getGroupDeadline('avaliacao');
-
         $estaNoPrazo = false;
         if ($prazo && $prazo->term_first && $prazo->term_end) {
             $hoje = now();
@@ -109,6 +109,12 @@ class DashboardController extends Controller
                 'isInAwarePeriod' => $isInAwarePeriod,
             ]);
         }
+
+
+        $recourse = EvaluationRecourse::with('evaluation.form')
+            ->where('person_id', $people->id)
+            ->latest()
+            ->first();
 
         // Busca pendentes normalmente (prazo + pending)
         $selfEvaluationVisible = $estaNoPrazo && EvaluationRequest::where('requested_person_id', $people->id)
@@ -205,6 +211,7 @@ class DashboardController extends Controller
             'bossEvaluationRequestId' => $bossEvaluationRequestId,
             'teamEvaluationRequestId' => $teamEvaluationRequestId,
             'isInAwarePeriod' => $isInAwarePeriod,
+            'recourseLink' => $recourse ? route('recourses.show', $recourse->id) : null,
         ]);
     }
 
@@ -229,16 +236,20 @@ class DashboardController extends Controller
             return redirect()->route('evaluations')->with('error', 'Você não tem permissão para acessar essa área.');
         }
 
-        $recourse = $this->getGroupDeadline('recourse'); // deve retornar ['term_first' => ..., 'term_end' => ...]
+        $recourse = $this->getGroupDeadline('recourse');
 
-        return Inertia::render('Dashboard/Recourse', [ // <== nome da view correto!
+        $total = EvaluationRecourse::count();
+        $responded = EvaluationRecourse::where('status', 'respondido')->count();
+        $denied = EvaluationRecourse::where('status', 'indeferido')->count();
+
+        return Inertia::render('Dashboard/Recourse', [
             'recourse' => $recourse,
             'totals' => [
-                'opened' => \App\Models\EvaluationRecourse::where('status', 'aberto')->count(),
-                'under_analysis' => \App\Models\EvaluationRecourse::where('status', 'em_analise')->count(),
-                'analyzed_percent' => \App\Models\EvaluationRecourse::count() > 0
-                    ? round(\App\Models\EvaluationRecourse::where('status', 'respondido')->count() / \App\Models\EvaluationRecourse::count() * 100) . '%'
-                    : '0%',
+                'opened' => EvaluationRecourse::where('status', 'aberto')->count(),
+                'under_analysis' => EvaluationRecourse::where('status', 'em_analise')->count(),
+                'responded' => $responded,
+                'denied' => $denied,
+                'analyzed_percent' => $total > 0 ? round($responded / $total * 100) . '%' : '0%',
             ],
         ]);
     }

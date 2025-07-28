@@ -10,6 +10,7 @@ const props = defineProps<{
     id: number;
     text: string;
     status: string;
+    response: string | null;
     attachments: Array<{ name: string; url: string }>;
     person: { name: string };
     evaluation: {
@@ -26,6 +27,26 @@ const props = defineProps<{
 
 const response = ref('');
 const decision = ref<'respondido' | 'indeferido' | null>(null);
+const isAnalyzing = ref(props.recourse.status === 'em_analise');
+
+function markAsAnalyzing() {
+  router.post(route('recourses.markAnalyzing', props.recourse.id), {}, {
+    preserveScroll: true,
+    onSuccess: () => {
+      isAnalyzing.value = true;
+    },
+  });
+}
+
+function openFile(file: { name: string; url: string }) {
+  if (!isAnalyzing.value) markAsAnalyzing();
+
+  const link = document.createElement('a');
+  link.href = file.url;
+  link.download = file.name;
+  link.target = '_blank';
+  link.click();
+}
 
 function submitAnalysis() {
   if (!decision.value || !response.value.trim()) {
@@ -38,96 +59,151 @@ function submitAnalysis() {
     response: response.value,
   });
 }
+
+function goBack() {
+  if (window.history.length > 1) {
+    window.history.back();
+  } else {
+    router.get(route('recourses.dashboard'));
+  }
+}
 </script>
 
 <template>
   <Head title="Revisar Recurso" />
   <DashboardLayout page-title="Revisar Recurso">
     <div class="max-w-4xl mx-auto bg-white p-6 rounded shadow space-y-6">
-
-      <div class="flex justify-between items-center">
+      <!-- Cabeçalho -->
+      <div class="detail-page-header flex justify-between items-center">
         <h2 class="text-xl font-semibold text-gray-800">
           Análise do Recurso – {{ recourse.person.name }} ({{ recourse.evaluation.year }})
         </h2>
-        <span class="text-sm text-gray-600 capitalize bg-gray-100 px-3 py-1 rounded">
-          {{ recourse.status }}
+        <button @click="goBack" class="back-btn inline-flex items-center text-sm text-gray-600 hover:text-gray-800">
+          <icons.ArrowLeftIcon class="size-4 mr-2" />
+          Voltar
+        </button>
+      </div>
+
+      <!-- Status -->
+      <div class="flex items-center">
+        <span
+          class="text-sm text-white px-3 py-1 rounded"
+          :class="{
+            'bg-gray-500': recourse.status === 'aberto',
+            'bg-yellow-500': recourse.status === 'em_analise',
+            'bg-green-600': recourse.status === 'respondido',
+            'bg-red-600': recourse.status === 'indeferido',
+          }"
+        >
+          {{ recourse.status.replace('_', ' ').toUpperCase() }}
         </span>
       </div>
 
-      <!-- Dados da avaliação -->
-      <div class="bg-gray-50 p-4 rounded border">
-        <p><strong>Avaliado:</strong> {{ recourse.evaluation.avaliado }}</p>
-        <p><strong>Tipo:</strong> {{ recourse.evaluation.type }}</p>
-        <p><strong>Formulário:</strong> {{ recourse.evaluation.form_name }}</p>
-        <p>
-          <strong>Notas atribuídas:</strong>
-        </p>
-        <ul class="list-disc list-inside text-sm text-gray-700">
-          <li v-for="(answer, index) in recourse.evaluation.answers" :key="index">
-            {{ answer.question }} — <strong>{{ answer.score ?? '—' }}</strong>
-          </li>
-        </ul>
-        <a
-          :href="route('evaluations.details', recourse.evaluation.id)"
-          class="inline-flex items-center text-indigo-600 hover:underline text-sm mt-2"
-        >
-          <icons.FileSearch class="w-4 h-4 mr-1" /> Ver respostas completas
-        </a>
-      </div>
-
-      <!-- Texto do recurso -->
+      <!-- ETAPA 1: Informações da Avaliação -->
       <div>
-        <h3 class="font-semibold text-sm text-gray-700">Texto enviado:</h3>
-        <p class="whitespace-pre-wrap mt-1 bg-gray-100 p-3 rounded text-gray-800">
-          {{ recourse.text }}
-        </p>
+        <h2 class="text-lg font-semibold text-gray-800 mb-2 flex items-center gap-2">
+          <icons.FileSearch class="w-5 h-5" /> Etapa 1: Informações da Avaliação
+        </h2>
+        <div class="bg-gray-50 p-4 rounded border space-y-1">
+          <p><strong>Avaliado:</strong> {{ recourse.evaluation.avaliado }}</p>
+          <p><strong>Tipo:</strong> {{ recourse.evaluation.type }}</p>
+          <p><strong>Formulário:</strong> {{ recourse.evaluation.form_name }}</p>
+          <p><strong>Notas atribuídas:</strong></p>
+          <ul class="list-disc list-inside text-sm text-gray-700">
+            <li v-for="(answer, index) in recourse.evaluation.answers" :key="index">
+              {{ answer.question }} — <strong>{{ answer.score ?? '—' }}</strong>
+            </li>
+          </ul>
+          <a
+            :href="route('evaluations.details', recourse.evaluation.id)"
+            class="inline-flex items-center text-indigo-600 hover:underline text-sm mt-2"
+          >
+            <icons.FileSearch class="w-4 h-4 mr-1" /> Ver respostas completas
+          </a>
+        </div>
       </div>
 
-      <!-- Anexos -->
-      <div v-if="recourse.attachments.length">
-        <h3 class="font-semibold text-sm text-gray-700">Anexos:</h3>
-        <ul class="list-disc list-inside">
-          <li v-for="(file, index) in recourse.attachments" :key="index">
-            <a
-              :href="file.url"
-              :download="file.name"
-              target="_blank"
-              class="text-blue-600 hover:underline flex items-center gap-1"
-            >
-              <icons.PaperclipIcon class="w-4 h-4" /> {{ file.name }}
-            </a>
-          </li>
-        </ul>
-      </div>
+      <!-- ETAPA 2: Leitura do Recurso -->
+      <div>
+        <h2 class="text-lg font-semibold text-gray-800 mt-6 mb-2 flex items-center gap-2">
+          <icons.BookOpen class="w-5 h-5" /> Etapa 2: Leitura do Recurso
+        </h2>
 
-      <!-- Formulário de decisão -->
-      <div class="space-y-3 border-t pt-6 mt-6">
-        <h3 class="font-semibold text-sm text-gray-700">Parecer da Comissão</h3>
-
-        <textarea
-          v-model="response"
-          class="w-full border rounded p-2 text-sm"
-          rows="5"
-          placeholder="Digite o parecer detalhado aqui..."
-        ></textarea>
-
-        <div class="flex gap-4 items-center">
-          <label class="flex items-center gap-2 text-sm">
-            <input type="radio" v-model="decision" value="respondido" />
-            Deferir
-          </label>
-          <label class="flex items-center gap-2 text-sm">
-            <input type="radio" v-model="decision" value="indeferido" />
-            Indeferir
-          </label>
+        <div class="bg-gray-100 p-4 rounded text-gray-800">
+          <h3 class="font-semibold text-sm text-gray-700 mb-1">Texto enviado:</h3>
+          <p class="whitespace-pre-wrap">{{ recourse.text }}</p>
         </div>
 
-        <button
-          @click="submitAnalysis"
-          class="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 text-sm"
-        >
-          Salvar Parecer
-        </button>
+        <div v-if="recourse.attachments.length" class="mt-4">
+          <h3 class="font-semibold text-sm text-gray-700 mb-1">Anexos:</h3>
+          <ul class="list-disc list-inside">
+            <li v-for="(file, index) in recourse.attachments" :key="index">
+              <a
+                @click.prevent="openFile(file)"
+                href="#"
+                class="text-blue-600 hover:underline flex items-center gap-1"
+              >
+                <icons.PaperclipIcon class="w-4 h-4" /> {{ file.name }}
+              </a>
+            </li>
+          </ul>
+        </div>
+      </div>
+
+      <!-- ETAPA 3: Parecer -->
+      <div class="border-t pt-6 mt-6">
+        <h2 class="text-lg font-semibold text-gray-800 mb-2 flex items-center gap-2">
+          <icons.Edit class="w-5 h-5" /> Etapa 3: Parecer da Comissão
+        </h2>
+
+        <!-- Mostrar parecer final -->
+        <template v-if="recourse.status === 'respondido' || recourse.status === 'indeferido'">
+          <div class="bg-gray-100 p-4 rounded text-gray-800">
+            <p class="text-sm text-gray-700 font-semibold mb-2">Parecer Final:</p>
+            <p class="whitespace-pre-wrap text-sm">{{ recourse.response }}</p>
+          </div>
+        </template>
+
+        <!-- Formulário de análise -->
+        <template v-else-if="isAnalyzing">
+          <textarea
+            v-model="response"
+            class="w-full border rounded p-2 text-sm"
+            rows="5"
+            placeholder="Digite o parecer detalhado aqui..."
+          ></textarea>
+
+          <div class="flex gap-4 items-center mt-3">
+            <label class="flex items-center gap-2 text-sm">
+              <input type="radio" v-model="decision" value="respondido" />
+              Deferir
+            </label>
+            <label class="flex items-center gap-2 text-sm">
+              <input type="radio" v-model="decision" value="indeferido" />
+              Indeferir
+            </label>
+          </div>
+
+          <button
+            @click="submitAnalysis"
+            class="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 text-sm mt-3"
+          >
+            Salvar Parecer
+          </button>
+        </template>
+
+        <!-- Botão para iniciar análise -->
+        <template v-else>
+          <button
+            @click="markAsAnalyzing"
+            class="px-4 py-2 bg-yellow-600 text-white rounded hover:bg-yellow-700 text-sm"
+          >
+            Iniciar Análise
+          </button>
+          <p class="text-sm text-gray-600 mt-2">
+            Clique acima para iniciar a análise e habilitar o parecer.
+          </p>
+        </template>
       </div>
 
       <!-- Histórico -->
@@ -144,7 +220,6 @@ function submitAnalysis() {
           </li>
         </ul>
       </div>
-
     </div>
   </DashboardLayout>
 </template>

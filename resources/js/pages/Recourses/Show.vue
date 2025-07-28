@@ -42,6 +42,7 @@ function goBack() {
   <Head :title="`Recurso de ${recourse.person.name}`" />
   <DashboardLayout :page-title="`Recurso de ${recourse.person.name}`">
     <div class="max-w-3xl mx-auto bg-white p-6 rounded shadow space-y-6">
+      <!-- Cabeçalho -->
       <div class="detail-page-header flex justify-between items-center">
         <h2 class="text-2xl font-bold text-gray-800">
           Recurso da Avaliação de {{ recourse.person.name }} - {{ recourse.evaluation.year }}
@@ -109,19 +110,36 @@ function goBack() {
         </p>
       </div>
 
-      <!-- Cronograma -->
-      <div v-if="recourse.logs?.length" class="mt-8">
-        <h3 class="font-semibold text-sm text-gray-700 mb-2">Cronograma do Recurso:</h3>
-        <ul class="border-l-2 border-gray-300 pl-4 space-y-3">
-          <li v-for="(log, index) in recourse.logs" :key="index" class="relative">
-            <div class="absolute -left-2 top-1 w-3 h-3 bg-gray-400 rounded-full"></div>
-            <div class="text-sm text-gray-800">
-              <strong>{{ log.status.replace('_', ' ').toUpperCase() }}</strong> —
+      <!-- Linha do tempo -->
+      <div v-if="recourse.logs?.length" class="mt-10">
+        <h3 class="font-semibold text-sm text-gray-700 mb-4">Linha do Tempo do Recurso:</h3>
+        <ol class="relative border-l border-gray-300 ml-2">
+          <li
+            v-for="(log, index) in recourse.logs"
+            :key="index"
+            class="mb-6 ml-4"
+          >
+            <div
+              class="absolute w-3 h-3 rounded-full -left-1.5 border border-white"
+              :class="{
+                'bg-yellow-500': log.status === 'aberto',
+                'bg-blue-500': log.status === 'em_analise',
+                'bg-green-600': log.status === 'respondido',
+                'bg-red-600': log.status === 'indeferido',
+                'bg-gray-400': !['aberto', 'em_analise', 'respondido', 'indeferido'].includes(log.status),
+              }"
+            ></div>
+            <h4 class="text-sm font-semibold text-gray-800">
+              {{ log.status.replace('_', ' ').toUpperCase() }}
+            </h4>
+            <p class="text-sm text-gray-600 whitespace-pre-line">
               {{ log.message || 'Atualização de status' }}
-              <span class="block text-xs text-gray-500">{{ log.created_at }}</span>
-            </div>
+            </p>
+            <span class="text-xs text-gray-500 block mt-1">
+              {{ log.created_at }}
+            </span>
           </li>
-        </ul>
+        </ol>
       </div>
 
       <!-- Aviso se ainda não respondeu -->

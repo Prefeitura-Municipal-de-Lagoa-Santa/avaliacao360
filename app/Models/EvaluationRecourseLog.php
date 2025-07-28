@@ -6,9 +6,9 @@ use Illuminate\Database\Eloquent\Model;
 
 class EvaluationRecourseLog extends Model
 {
-    public $timestamps = false;
+    const UPDATED_AT = null; // ✅ desativa só updated_at
 
-    protected $fillable = ['recourse_id', 'status', 'message', 'created_at'];
+    protected $fillable = ['recourse_id', 'status', 'message'];
 
     public function recourse()
     {

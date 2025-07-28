@@ -13,6 +13,7 @@ const props = defineProps<{
 }>();
 
 const fileInput = ref<HTMLInputElement | null>(null);
+const isSubmitting = ref(false); // 🔒 bloqueio contra envios múltiplos
 
 const form = useForm({
   text: '',
@@ -20,6 +21,9 @@ const form = useForm({
 });
 
 function submit() {
+  if (isSubmitting.value) return;
+  isSubmitting.value = true;
+
   const data = new FormData();
   data.append('text', form.text);
   form.attachments.forEach((file, i) => {
@@ -27,9 +31,8 @@ function submit() {
   });
 
   form.post(route('recourses.store', props.evaluation.id), {
-    onSuccess: () => {
-      form.reset();
-      alert('Recurso enviado com sucesso!');
+    onFinish: () => {
+      isSubmitting.value = false;
     },
   });
 }
@@ -80,7 +83,11 @@ function removeFile(index: number) {
         </div>
 
         <div>
-          <button type="submit" class="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700">
+          <button
+            type="submit"
+            :disabled="isSubmitting"
+            class="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50"
+          >
             Enviar Recurso
           </button>
         </div>

@@ -6,7 +6,6 @@ use App\Http\Controllers\FormController;
 use App\Http\Controllers\ConfigController;
 use App\Http\Controllers\JobFunctionController;
 use App\Http\Controllers\OrganizationalChartController;
-use App\Http\Controllers\OrganizationalUnitController;
 use App\Http\Controllers\PdiController;
 use App\Http\Controllers\PasswordChangeController;
 use App\Http\Controllers\PersonController;
@@ -16,7 +15,6 @@ use App\Http\Controllers\ReleaseController;
 use App\Http\Middleware\EnsureCpfIsFilled;
 use App\Http\Middleware\RedirectIfMustChangePassword;
 use Illuminate\Support\Facades\Route;
-use Inertia\Inertia;
 
 Route::redirect("/", "/dashboard");
 
@@ -71,8 +69,6 @@ Route::middleware(['auth', 'verified', EnsureCpfIsFilled::class, RedirectIfMustC
     Route::post('/persons/confirm', [PersonController::class, 'confirmUpload'])->name('persons.confirm');
     Route::resource('people', PersonController::class)->except(['create', 'store', 'show', 'destroy']);
 
-    require __DIR__ . '/settings.php';
-
     Route::get('/profile/cpf', [PersonController::class, 'cpf'])->name('profile.cpf');
 
     Route::put('/admin/roles/{role}/permissions', [AdminController::class, 'updatePermissions'])
@@ -107,7 +103,6 @@ Route::middleware(['auth', 'verified', EnsureCpfIsFilled::class, RedirectIfMustC
     Route::get('/people/manual/create', [PersonController::class, 'createManual'])->name('people.manual.create');
     Route::post('/people/manual', [PersonController::class, 'storeManual'])->name('people.manual.store');
     Route::post('/evaluations/{year}/acknowledge', [EvaluationController::class, 'acknowledge'])
-        ->middleware(['auth'])
         ->name('evaluations.acknowledge');
 
     Route::post('/evaluations/{evaluation}/recourse', [EvaluationRecourseController::class, 'store'])
@@ -125,6 +120,11 @@ Route::middleware(['auth', 'verified', EnsureCpfIsFilled::class, RedirectIfMustC
     Route::get('/recourses/{recourse}/review', [EvaluationRecourseController::class, 'review'])
         ->name('recourses.review');
 
+    Route::post('/recourses/{recourse}/mark-analyzing', [EvaluationRecourseController::class, 'markAnalyzing'])
+    ->name('recourses.markAnalyzing');
+
+    Route::post('/recourses/{recourse}/respond', [EvaluationRecourseController::class, 'respond'])
+    ->name('recourses.respond');
 
 });
 
