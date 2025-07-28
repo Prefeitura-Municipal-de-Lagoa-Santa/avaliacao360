@@ -7,6 +7,7 @@ use App\Models\Answer;
 use App\Models\configs;
 use App\Models\Form;
 use App\Models\Person;
+use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Inertia\Inertia;
@@ -113,7 +114,13 @@ class EvaluationController extends Controller
         }
 
         // 3. Verifica se a data atual está dentro do prazo
-        if (!$now->between($chefiaForm->term_first, $chefiaForm->term_end)) {
+        if (
+            !$now->between(
+                Carbon::parse($chefiaForm->term_first),
+                Carbon::parse($chefiaForm->term_end)->endOfDay()
+            )
+        ) {
+
             $startDate = $chefiaForm->term_first->format('d/m/Y');
             $endDate = $chefiaForm->term_end->format('d/m/Y');
             return response()->json([
@@ -213,7 +220,13 @@ class EvaluationController extends Controller
         }
 
         // 3. Verifica se a data atual está dentro do prazo
-        if (!$now->between($autoavaliacaoForm->term_first, $autoavaliacaoForm->term_end)) {
+        if (
+            !$now->between(
+                Carbon::parse($autoavaliacaoForm->term_first),
+                Carbon::parse($autoavaliacaoForm->term_end)->endOfDay()
+            )
+        ) {
+
             $startDate = $autoavaliacaoForm->term_first->format('d/m/Y');
             $endDate = $autoavaliacaoForm->term_end->format('d/m/Y');
             return response()->json([
