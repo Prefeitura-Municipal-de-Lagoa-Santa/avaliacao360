@@ -1,13 +1,13 @@
 <script setup lang="ts">
-import { ref, watch } from 'vue'
-import { Head, Link, router } from '@inertiajs/vue3'
-import DashboardLayout from '@/layouts/DashboardLayout.vue'
-import * as icons from 'lucide-vue-next'
-import { debounce } from 'lodash'
-import { route } from 'ziggy-js'
+import { ref, watch } from 'vue';
+import { Head, Link, router } from '@inertiajs/vue3';
+import DashboardLayout from '@/layouts/DashboardLayout.vue';
+import * as icons from 'lucide-vue-next';
+import { debounce } from 'lodash';
+import { route } from 'ziggy-js';
 
 const props = defineProps<{
-  completedRequests: {
+  pendingRequests: {
     data: Array<{
       id: number,
       type: string,
@@ -21,31 +21,31 @@ const props = defineProps<{
   filters: {
     search: string | null
   }
-}>()
+}>();
 
-const search = ref(props.filters.search ?? '')
+const search = ref(props.filters.search ?? '');
 
 watch(search, debounce((value: string | null) => {
-  router.get(route('evaluations.completed'), { search: value }, {
+  router.get(route('evaluations.unanswered'), { search: value }, {
     preserveState: true,
     replace: true,
-  })
-}, 300))
+  });
+}, 300));
 
 function goBack() {
   if (window.history.length > 1) {
-    window.history.back()
+    window.history.back();
   } else {
-    router.get(route('dashboard'))
+    router.get(route('recourses.dashboard'));
   }
 }
 </script>
 
 <template>
-  <Head title="Avaliações Concluídas" />
-  <DashboardLayout pageTitle="Avaliações Concluídas (Todos)">
+  <Head title="Sem Resposta" />
+  <DashboardLayout pageTitle="Avaliações Sem Resposta (Fora do Prazo)">
     <div class="detail-page-header">
-      <h2 class="text-2xl font-bold text-gray-800">Avaliações Concluídas</h2>
+      <h2 class="text-2xl font-bold text-gray-800">Avaliações Sem Resposta</h2>
       <button @click="goBack" class="back-btn">
         <icons.ArrowLeftIcon class="size-4 mr-2" />
         Voltar
@@ -66,21 +66,22 @@ function goBack() {
       </div>
     </div>
 
-    <div v-if="props.completedRequests.data.length === 0" class="text-gray-500">
-      Nenhuma avaliação concluída encontrada.
+    <div v-if="props.pendingRequests.data.length === 0" class="text-gray-500">
+      Nenhuma avaliação sem resposta encontrada.
     </div>
+
     <div v-else class="overflow-x-auto">
       <table class="min-w-full bg-white shadow rounded-lg">
         <thead>
-          <tr class="bg-gray-50 text-left text-xs uppercase text-gray-500">
-            <th class="px-4 py-2">Avaliado</th>
-            <th class="px-4 py-2">Avaliador</th>
-            <th class="px-4 py-2">Tipo</th>
-            <th class="px-4 py-2">Formulário</th>
+          <tr>
+            <th class="px-4 py-2 text-left">Avaliado</th>
+            <th class="px-4 py-2 text-left">Avaliador</th>
+            <th class="px-4 py-2 text-left">Tipo</th>
+            <th class="px-4 py-2 text-left">Formulário</th>
           </tr>
         </thead>
         <tbody>
-          <tr v-for="req in props.completedRequests.data" :key="req.id" class="border-t hover:bg-gray-50">
+          <tr v-for="req in props.pendingRequests.data" :key="req.id" class="border-t">
             <td class="px-4 py-2">{{ req.avaliado }}</td>
             <td class="px-4 py-2">{{ req.avaliador }}</td>
             <td class="px-4 py-2 capitalize">{{ req.type }}</td>
@@ -90,13 +91,18 @@ function goBack() {
       </table>
     </div>
 
-    <div v-if="props.completedRequests.links.length > 3" class="mt-6 flex justify-center">
+    <!-- Paginação -->
+    <div v-if="props.pendingRequests.links.length > 3" class="mt-6 flex justify-center">
       <div class="flex flex-wrap -mb-1">
-        <template v-for="(link, key) in props.completedRequests.links" :key="key">
-          <div v-if="link.url === null" class="mr-1 mb-1 px-4 py-3 text-sm text-gray-400 border rounded" v-html="link.label" />
+        <template v-for="(link, key) in props.pendingRequests.links" :key="key">
+          <div
+            v-if="link.url === null"
+            class="mr-1 mb-1 px-4 py-3 text-sm leading-4 text-gray-400 border rounded"
+            v-html="link.label"
+          />
           <Link
             v-else
-            class="mr-1 mb-1 px-4 py-3 text-sm border rounded hover:bg-white focus:border-indigo-500 focus:text-indigo-500"
+            class="mr-1 mb-1 px-4 py-3 text-sm leading-4 border rounded hover:bg-white focus:border-indigo-500 focus:text-indigo-500"
             :class="{ 'bg-indigo-500 text-white': link.active }"
             :href="link.url"
             v-html="link.label"

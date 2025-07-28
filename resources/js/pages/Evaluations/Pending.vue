@@ -72,7 +72,6 @@ function goBack() {
             <th class="px-4 py-2 text-left">Avaliador</th>
             <th class="px-4 py-2 text-left">Tipo</th>
             <th class="px-4 py-2 text-left">Formulário</th>
-            <th class="px-4 py-2 text-left">Data</th>
           </tr>
         </thead>
         <tbody>
@@ -81,7 +80,6 @@ function goBack() {
             <td class="px-4 py-2">{{ req.avaliador }}</td>
             <td class="px-4 py-2 capitalize">{{ req.type }}</td>
             <td class="px-4 py-2">{{ req.form_name }}</td>
-            <td class="px-4 py-2">{{ req.created_at }}</td>
           </tr>
         </tbody>
       </table>

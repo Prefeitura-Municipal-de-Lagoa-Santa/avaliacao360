@@ -32,16 +32,23 @@ const grandTotal = computed(() => {
 
     let somaNotas = 0;
     let somaPesos = 0;
+    let hasRespostas = false;
+
     props.form.group_questions.forEach(group => {
         group.questions.forEach(question => {
             const answer = props.evaluation.answers.find(ans => ans.question_id === question.id);
             if (answer && answer.score !== null && answer.score !== undefined) {
+                hasRespostas = true;
                 somaNotas += parseInt(answer.score) * question.weight;
                 somaPesos += question.weight;
             }
         });
     });
-    return somaPesos > 0 ? Math.round(somaNotas / somaPesos) : 0;
+
+    // Se não houver respostas válidas, retorna 0 (nota zerada)
+    if (!hasRespostas || somaPesos === 0) return 0;
+
+    return Math.round(somaNotas / somaPesos);
 });
 
 // Cargo/função dinâmica

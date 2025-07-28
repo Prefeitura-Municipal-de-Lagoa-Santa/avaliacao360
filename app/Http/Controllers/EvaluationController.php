@@ -4,7 +4,6 @@ namespace App\Http\Controllers;
 
 use App\Models\Acknowledgment;
 use App\Models\Answer;
-use App\Models\configs;
 use App\Models\Form;
 use App\Models\Person;
 use Carbon\Carbon;
@@ -13,7 +12,6 @@ use Illuminate\Support\Facades\Auth;
 use Inertia\Inertia;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\DB;
-use App\Models\Evaluation;
 use App\Models\EvaluationRequest;
 use App\Models\User;
 use App\Models\configs as Config; // Importar o model de configurações
@@ -588,9 +586,22 @@ class EvaluationController extends Controller
             $calcEquipe = $equipes->count() ? "Equipe (média): $notaEquipe" : '';
 
             $isGestor = $notaEquipe !== null;
-            $notaFinal = $isGestor
-                ? round(($notaAuto * 0.25) + ($notaChefia * 0.5) + ($notaEquipe * 0.25), 2)
-                : round(($notaAuto * 0.3) + ($notaChefia * 0.7), 2);
+            if (
+                ($isGestor && ($notaAuto === 0 || $notaChefia === 0 || $notaEquipe === null)) ||
+                (!$isGestor && ($notaAuto === 0 || $notaChefia === 0))
+            ) {
+                $notaFinal = 0;
+                $calcFinal = 'Nota zerada por ausência de preenchimento de uma ou mais partes.';
+            } else {
+                $notaFinal = $isGestor
+                    ? round(($notaAuto * 0.25) + ($notaChefia * 0.5) + ($notaEquipe * 0.25), 2)
+                    : round(($notaAuto * 0.3) + ($notaChefia * 0.7), 2);
+
+                $calcFinal = $isGestor
+                    ? "($notaAuto x 25%) + ($notaChefia x 50%) + ($notaEquipe x 25%) = $notaFinal"
+                    : "($notaAuto x 30%) + ($notaChefia x 70%) = $notaFinal";
+            }
+
 
             $calcFinal = $isGestor
                 ? "($notaAuto x 25%) + ($notaChefia x 50%) + ($notaEquipe x 25%) = $notaFinal"
@@ -646,7 +657,6 @@ class EvaluationController extends Controller
             'acknowledgments' => $acknowledgments,
         ]);
     }
-
 
     public function showEvaluationDetail($id)
     {
@@ -781,19 +791,27 @@ class EvaluationController extends Controller
             ];
         }
 
-        // Cálculo final
-        $notaAuto = optional(collect($blocos)->first(fn($b) => str_contains(strtolower($b['tipo']), 'auto')))['nota'] ?? 0;
-        $notaChefia = optional(collect($blocos)->first(fn($b) => in_array(strtolower($b['tipo']), ['servidor', 'gestor', 'comissionado'])))['nota'] ?? 0;
+        // Cálculo final com lógica de nota zerada
+        $notaAuto = optional(collect($blocos)->first(fn($b) => str_contains(strtolower($b['tipo']), 'auto')))['nota'] ?? null;
+        $notaChefia = optional(collect($blocos)->first(fn($b) => in_array(strtolower($b['tipo']), ['servidor', 'gestor', 'comissionado'])))['nota'] ?? null;
         $notaEquipe = $blocoEquipe ? $blocoEquipe['nota'] : null;
 
         $isGestor = $notaEquipe !== null;
-        $notaFinal = $isGestor
-            ? round(($notaAuto * 0.25) + ($notaChefia * 0.5) + ($notaEquipe * 0.25), 2)
-            : round(($notaAuto * 0.3) + ($notaChefia * 0.7), 2);
+        if (
+            ($isGestor && ($notaAuto === null || $notaChefia === null || $notaEquipe === null)) ||
+            (!$isGestor && ($notaAuto === null || $notaChefia === null))
+        ) {
+            $notaFinal = 0;
+            $calcFinal = 'Nota zerada por ausência de preenchimento de uma ou mais partes.';
+        } else {
+            $notaFinal = $isGestor
+                ? round(($notaAuto * 0.25) + ($notaChefia * 0.5) + ($notaEquipe * 0.25), 2)
+                : round(($notaAuto * 0.3) + ($notaChefia * 0.7), 2);
 
-        $calcFinal = $isGestor
-            ? "($notaAuto x 25%) + ($notaChefia x 50%) + ($notaEquipe x 25%) = $notaFinal"
-            : "($notaAuto x 30%) + ($notaChefia x 70%) = $notaFinal";
+            $calcFinal = $isGestor
+                ? "($notaAuto x 25%) + ($notaChefia x 50%) + ($notaEquipe x 25%) = $notaFinal"
+                : "($notaAuto x 30%) + ($notaChefia x 70%) = $notaFinal";
+        }
 
         return inertia('Dashboard/EvaluationDetail', [
             'year' => $year,
@@ -803,10 +821,9 @@ class EvaluationController extends Controller
             'blocoEquipe' => $blocoEquipe,
             'final_score' => $notaFinal,
             'calc_final' => $calcFinal,
-            'is_commission' => user_can('recourse'), // útil no Vue para renderizar ações extra
+            'is_commission' => user_can('recourse'),
         ]);
     }
-
 
     public function acknowledge(Request $request, string $year)
     {
@@ -837,6 +854,69 @@ class EvaluationController extends Controller
         ]);
 
         return redirect()->route('evaluations')->with('success', 'Assinatura registrada com sucesso!');
+    }
+
+
+    public function unanswered(Request $request)
+    {
+        $search = $request->input('search');
+
+        // 1. Define o ano com regra de janeiro/fevereiro
+        $currentYear = in_array(date('n'), [1, 2]) ? date('Y') - 1 : date('Y');
+
+        // 2. Tipos de formulários válidos
+        $formTypes = ['servidor', 'gestor', 'comissionado']; // adapte se necessário
+
+        // 3. Busca o prazo final via tabela forms
+        $form = Form::where('year', $currentYear)
+            ->whereIn('type', $formTypes)
+            ->where('release', true)
+            ->select('term_first', 'term_end')
+            ->first();
+
+        // 4. Verifica se o prazo já encerrou
+        $prazoFinal = $form?->term_end ? Carbon::parse($form->term_end)->endOfDay() : null;
+
+        if (!$prazoFinal || now()->lessThanOrEqualTo($prazoFinal)) {
+            return redirect()->route('evaluations.pending')
+                ->with('error', 'As avaliações ainda estão dentro do prazo.');
+        }
+
+        // 5. Consulta apenas avaliações pendentes
+        $query = EvaluationRequest::with([
+            'evaluation.form',
+            'evaluation.evaluatedPerson',
+            'requestedPerson'
+        ])->where('status', 'pending');
+
+        if ($search) {
+            $query->where(function ($q) use ($search) {
+                $q->whereHas('evaluation.evaluatedPerson', fn($q) => $q->where('name', 'like', "%{$search}%"))
+                    ->orWhereHas('requestedPerson', fn($q) => $q->where('name', 'like', "%{$search}%"));
+            });
+        }
+
+        $pendingExpired = $query
+            ->orderByDesc('created_at')
+            ->paginate(20)
+            ->through(function ($request) {
+                return [
+                    'id' => $request->id,
+                    'type' => $request->evaluation->type ?? '-',
+                    'form_name' => $request->evaluation->form->name ?? '-',
+                    'avaliado' => $request->evaluation->evaluatedPerson->name ?? '-',
+                    'avaliador' => $request->requestedPerson->name ?? '-',
+                    'created_at' => $request->created_at ? $request->created_at->format('d/m/Y H:i') : '',
+                ];
+            })
+            ->withQueryString();
+
+        return inertia('Evaluations/PendingExpired', [
+            'pendingRequests' => $pendingExpired,
+            'filters' => [
+                'search' => $search,
+            ],
+        ]);
     }
 
 }
