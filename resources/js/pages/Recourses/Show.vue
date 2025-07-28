@@ -29,6 +29,15 @@ const props = defineProps<{
   };
 }>();
 
+function openFile(file: { name: string; url: string }) {
+  const link = document.createElement('a');
+  link.href = file.url;
+  link.setAttribute('download', file.name);
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+}
+
 function goBack() {
   if (window.history.length > 1) {
     window.history.back();
@@ -91,7 +100,11 @@ function goBack() {
         <h3 class="font-semibold text-sm text-gray-700 mb-1">Anexos enviados:</h3>
         <ul class="list-disc list-inside space-y-1">
           <li v-for="(file, index) in recourse.attachments" :key="index">
-            <a :href="file.url" target="_blank" class="text-blue-600 hover:underline flex items-center gap-1">
+            <a
+              href="#"
+              @click.prevent="openFile(file)"
+              class="text-blue-600 hover:underline flex items-center gap-1"
+            >
               <icons.PaperclipIcon class="w-4 h-4" />
               {{ file.name }}
             </a>
