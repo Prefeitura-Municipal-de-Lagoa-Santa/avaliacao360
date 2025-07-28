@@ -2,6 +2,7 @@
 import { Head } from '@inertiajs/vue3';
 import DashboardLayout from '@/layouts/DashboardLayout.vue';
 import { ArrowLeftIcon } from 'lucide-vue-next';
+import { computed } from 'vue';
 
 const props = defineProps({
   year: String,
@@ -28,6 +29,11 @@ function nomeBloco(tipo) {
 function goBack() {
   window.history.back();
 }
+
+// Verifica se a nota foi zerada por falta de preenchimento
+const notaZerada = computed(() => {
+  return props.final_score === 0 && props.calc_final?.toLowerCase().includes('zerada');
+});
 </script>
 
 <template>
@@ -48,7 +54,12 @@ function goBack() {
       <div class="text-xl font-bold mb-1">
         Nota Final do Ciclo: <span class="text-blue-600">{{ final_score }}</span>
       </div>
-      <!-- <div class="text-gray-500">Cálculo: {{ calc_final }}</div> -->
+      <div v-if="notaZerada" class="text-red-600 mt-1">
+        A nota foi zerada devido à ausência de preenchimento por uma ou mais partes envolvidas.
+      </div>
+      <div v-else class="text-gray-500 mt-1">
+        {{ calc_final }}
+      </div>
     </div>
 
     <!-- Blocos: auto, chefia, gestor, etc -->

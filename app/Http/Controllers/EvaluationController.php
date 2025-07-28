@@ -588,9 +588,22 @@ class EvaluationController extends Controller
             $calcEquipe = $equipes->count() ? "Equipe (média): $notaEquipe" : '';
 
             $isGestor = $notaEquipe !== null;
-            $notaFinal = $isGestor
-                ? round(($notaAuto * 0.25) + ($notaChefia * 0.5) + ($notaEquipe * 0.25), 2)
-                : round(($notaAuto * 0.3) + ($notaChefia * 0.7), 2);
+            if (
+                ($isGestor && ($notaAuto === 0 || $notaChefia === 0 || $notaEquipe === null)) ||
+                (!$isGestor && ($notaAuto === 0 || $notaChefia === 0))
+            ) {
+                $notaFinal = 0;
+                $calcFinal = 'Nota zerada por ausência de preenchimento de uma ou mais partes.';
+            } else {
+                $notaFinal = $isGestor
+                    ? round(($notaAuto * 0.25) + ($notaChefia * 0.5) + ($notaEquipe * 0.25), 2)
+                    : round(($notaAuto * 0.3) + ($notaChefia * 0.7), 2);
+
+                $calcFinal = $isGestor
+                    ? "($notaAuto x 25%) + ($notaChefia x 50%) + ($notaEquipe x 25%) = $notaFinal"
+                    : "($notaAuto x 30%) + ($notaChefia x 70%) = $notaFinal";
+            }
+
 
             $calcFinal = $isGestor
                 ? "($notaAuto x 25%) + ($notaChefia x 50%) + ($notaEquipe x 25%) = $notaFinal"
@@ -646,7 +659,6 @@ class EvaluationController extends Controller
             'acknowledgments' => $acknowledgments,
         ]);
     }
-
 
     public function showEvaluationDetail($id)
     {
@@ -781,19 +793,27 @@ class EvaluationController extends Controller
             ];
         }
 
-        // Cálculo final
-        $notaAuto = optional(collect($blocos)->first(fn($b) => str_contains(strtolower($b['tipo']), 'auto')))['nota'] ?? 0;
-        $notaChefia = optional(collect($blocos)->first(fn($b) => in_array(strtolower($b['tipo']), ['servidor', 'gestor', 'comissionado'])))['nota'] ?? 0;
+        // Cálculo final com lógica de nota zerada
+        $notaAuto = optional(collect($blocos)->first(fn($b) => str_contains(strtolower($b['tipo']), 'auto')))['nota'] ?? null;
+        $notaChefia = optional(collect($blocos)->first(fn($b) => in_array(strtolower($b['tipo']), ['servidor', 'gestor', 'comissionado'])))['nota'] ?? null;
         $notaEquipe = $blocoEquipe ? $blocoEquipe['nota'] : null;
 
         $isGestor = $notaEquipe !== null;
-        $notaFinal = $isGestor
-            ? round(($notaAuto * 0.25) + ($notaChefia * 0.5) + ($notaEquipe * 0.25), 2)
-            : round(($notaAuto * 0.3) + ($notaChefia * 0.7), 2);
+        if (
+            ($isGestor && ($notaAuto === null || $notaChefia === null || $notaEquipe === null)) ||
+            (!$isGestor && ($notaAuto === null || $notaChefia === null))
+        ) {
+            $notaFinal = 0;
+            $calcFinal = 'Nota zerada por ausência de preenchimento de uma ou mais partes.';
+        } else {
+            $notaFinal = $isGestor
+                ? round(($notaAuto * 0.25) + ($notaChefia * 0.5) + ($notaEquipe * 0.25), 2)
+                : round(($notaAuto * 0.3) + ($notaChefia * 0.7), 2);
 
-        $calcFinal = $isGestor
-            ? "($notaAuto x 25%) + ($notaChefia x 50%) + ($notaEquipe x 25%) = $notaFinal"
-            : "($notaAuto x 30%) + ($notaChefia x 70%) = $notaFinal";
+            $calcFinal = $isGestor
+                ? "($notaAuto x 25%) + ($notaChefia x 50%) + ($notaEquipe x 25%) = $notaFinal"
+                : "($notaAuto x 30%) + ($notaChefia x 70%) = $notaFinal";
+        }
 
         return inertia('Dashboard/EvaluationDetail', [
             'year' => $year,
@@ -803,10 +823,9 @@ class EvaluationController extends Controller
             'blocoEquipe' => $blocoEquipe,
             'final_score' => $notaFinal,
             'calc_final' => $calcFinal,
-            'is_commission' => user_can('recourse'), // útil no Vue para renderizar ações extra
+            'is_commission' => user_can('recourse'),
         ]);
     }
-
 
     public function acknowledge(Request $request, string $year)
     {
