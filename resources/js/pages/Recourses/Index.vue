@@ -17,6 +17,16 @@ const props = defineProps<{
   status: string;
 }>();
 
+// Mapeamento para rótulos legíveis
+const statusLabels: Record<string, string> = {
+  aberto: 'Abertos',
+  em_analise: 'Em Análise',
+  respondido: 'Deferidos',
+  indeferido: 'Indeferidos',
+};
+
+const statusLabel = statusLabels[props.status] ?? '—';
+
 function goBack() {
   if (window.history.length > 1) {
     window.history.back();
@@ -27,12 +37,12 @@ function goBack() {
 </script>
 
 <template>
-  <Head :title="`Recursos - ${status}`" />
-  <DashboardLayout :page-title="`Recursos - ${status}`">
+  <Head :title="`Recursos ${statusLabel}`" />
+  <DashboardLayout :page-title="`Recursos ${statusLabel}`">
     <div class="space-y-4">
       <div class="detail-page-header flex justify-between items-center">
-        <h2 class="text-2xl font-bold text-gray-800">Recursos {{ status }}</h2>
-        <button @click="goBack" class="back-btn">
+        <h2 class="text-2xl font-bold text-gray-800">Recursos {{ statusLabel }}</h2>
+        <button @click="goBack" class="back-btn inline-flex items-center text-sm text-gray-600 hover:text-gray-800">
           <icons.ArrowLeftIcon class="size-4 mr-2" />
           Voltar
         </button>
@@ -51,9 +61,10 @@ function goBack() {
           <tr v-for="r in recourses.data" :key="r.id" class="border-b hover:bg-gray-50">
             <td class="px-4 py-2">{{ r.person.name }}</td>
             <td class="px-4 py-2">{{ r.evaluation.year }}</td>
-            <td class="px-4 py-2 capitalize">{{ r.status }}</td>
+            <td class="px-4 py-2 capitalize">{{ r.status.replace('_', ' ') }}</td>
             <td class="px-4 py-2">
-              <Link :href="route('recourses.review', r.id)"
+              <Link
+                :href="route('recourses.review', r.id)"
                 class="inline-flex items-center text-sm text-blue-600 hover:underline"
               >
                 <icons.Eye class="w-4 h-4 mr-1" /> Ver

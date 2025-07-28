@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\EvaluationRecourse;
 use App\Models\Form;
 use App\Models\Person;
 use Illuminate\Http\Request;
@@ -229,16 +230,20 @@ class DashboardController extends Controller
             return redirect()->route('evaluations')->with('error', 'Você não tem permissão para acessar essa área.');
         }
 
-        $recourse = $this->getGroupDeadline('recourse'); // deve retornar ['term_first' => ..., 'term_end' => ...]
+        $recourse = $this->getGroupDeadline('recourse');
 
-        return Inertia::render('Dashboard/Recourse', [ // <== nome da view correto!
+        $total = EvaluationRecourse::count();
+        $responded = EvaluationRecourse::where('status', 'respondido')->count();
+        $denied = EvaluationRecourse::where('status', 'indeferido')->count();
+
+        return Inertia::render('Dashboard/Recourse', [
             'recourse' => $recourse,
             'totals' => [
-                'opened' => \App\Models\EvaluationRecourse::where('status', 'aberto')->count(),
-                'under_analysis' => \App\Models\EvaluationRecourse::where('status', 'em_analise')->count(),
-                'analyzed_percent' => \App\Models\EvaluationRecourse::count() > 0
-                    ? round(\App\Models\EvaluationRecourse::where('status', 'respondido')->count() / \App\Models\EvaluationRecourse::count() * 100) . '%'
-                    : '0%',
+                'opened' => EvaluationRecourse::where('status', 'aberto')->count(),
+                'under_analysis' => EvaluationRecourse::where('status', 'em_analise')->count(),
+                'responded' => $responded,
+                'denied' => $denied,
+                'analyzed_percent' => $total > 0 ? round($responded / $total * 100) . '%' : '0%',
             ],
         ]);
     }

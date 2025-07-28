@@ -12,7 +12,6 @@ use Illuminate\Support\Facades\Storage;
 
 class EvaluationRecourseController extends Controller
 {
-
     public function index(Request $request)
     {
         if (!user_can('recourse')) {
@@ -67,17 +66,23 @@ class EvaluationRecourseController extends Controller
     {
         $request->validate([
             'text' => 'required|string',
-            'attachments.*' => 'file|max:10240', // 10MB por arquivo
+            'attachments.*' => 'file|max:10240',
         ]);
+
         $user = Auth::user();
         $person = Person::where('cpf', $user->cpf)->first();
-        $personId = $person->id;
 
         $recourse = EvaluationRecourse::create([
             'evaluation_id' => $evaluationId,
-            'person_id' => $personId,
+            'person_id' => $person->id,
             'text' => $request->text,
             'status' => 'aberto',
+        ]);
+
+        $recourse->logs()->create([
+            'status' => 'aberto',
+            'message' => 'Recurso enviado pelo servidor.',
+            'created_at' => now(), // ✅ necessário se $timestamps = false
         ]);
 
         if ($request->hasFile('attachments')) {
@@ -91,13 +96,13 @@ class EvaluationRecourseController extends Controller
             }
         }
 
-        return back()->with('success', 'Recurso enviado com sucesso!');
+        return redirect()->route('evaluations.history')->with('success', 'Recurso salvo com sucesso!');
     }
 
     public function show(EvaluationRecourse $recourse)
     {
         $recourse->load([
-            'evaluation.evaluation.form', // 👈 observe os 2 níveis!
+            'evaluation.evaluation.form',
             'attachments',
             'person',
             'user',
@@ -147,6 +152,7 @@ class EvaluationRecourseController extends Controller
                 'id' => $recourse->id,
                 'status' => $recourse->status,
                 'text' => $recourse->text,
+                'response' => $recourse->response,
                 'attachments' => $recourse->attachments->map(fn($a) => [
                     'name' => $a->original_name,
                     'url' => Storage::disk('public')->url($a->file_path),
@@ -172,5 +178,42 @@ class EvaluationRecourseController extends Controller
                 ]),
             ],
         ]);
+    }
+
+    public function markAnalyzing(EvaluationRecourse $recourse)
+    {
+        if ($recourse->status !== 'em_analise') {
+            $recourse->update(['status' => 'em_analise']);
+
+            $recourse->logs()->create([
+                'status' => 'em_analise',
+                'message' => 'Comissão iniciou a análise ao acessar um anexo',
+            ]);
+        }
+
+        return redirect()
+            ->back();
+    }
+
+    public function respond(Request $request, EvaluationRecourse $recourse)
+    {
+        $validated = $request->validate([
+            'status' => ['required', 'in:respondido,indeferido'],
+            'response' => ['required', 'string', 'min:5'],
+        ]);
+
+        $recourse->update([
+            'status' => $validated['status'],
+            'response' => $validated['response'],
+        ]);
+
+        $recourse->logs()->create([
+            'status' => $validated['status'],
+            'message' => 'Parecer da comissão registrado.',
+        ]);
+
+        return redirect()
+            ->back()
+            ->with('success', 'Parecer salvo com sucesso!');
     }
 }

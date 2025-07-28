@@ -9,7 +9,8 @@ const props = defineProps<{
   totals?: {
     opened: number;
     under_analysis: number;
-    analyzed_percent: string;
+    responded: number;
+    denied: number;
   };
 }>();
 
@@ -29,12 +30,12 @@ function goToUnderAnalysisRecourses() {
   router.get(route('recourses.index', { status: 'em_analise' }));
 }
 
-function goToAnalysisProgress() {
-  router.get(route('recourses.analysis'));
+function goToRespondedRecourses() {
+  router.get(route('recourses.index', { status: 'respondido' }));
 }
 
-function goToCalendar() {
-  router.get(route('calendar'));
+function goToDeniedRecourses() {
+  router.get(route('recourses.index', { status: 'indeferido' }));
 }
 </script>
 
@@ -42,6 +43,7 @@ function goToCalendar() {
   <Head title="Recursos" />
   <DashboardLayout pageTitle="Dashboard de Recursos">
     <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+
       <DashboardCard
         :value="props.totals?.opened ?? 0"
         label="Recursos Abertos"
@@ -63,24 +65,25 @@ function goToCalendar() {
       </DashboardCard>
 
       <DashboardCard
-        :value="props.totals?.analyzed_percent ?? '0%'"
-        label="Recursos Analisados"
-        buttonText="Ver Progresso"
-        iconBgColor="#6366f1"
-        :buttonAction="goToAnalysisProgress"
+        :value="props.totals?.responded ?? 0"
+        label="Recursos Deferidos"
+        buttonText="Ver Deferidos"
+        iconBgColor="#10b981"
+        :buttonAction="goToRespondedRecourses"
       >
-        <template #icon><icons.BarChart2 /></template>
+        <template #icon><icons.CheckCircle /></template>
       </DashboardCard>
 
       <DashboardCard
-        :value="formatPrazo(props.recourse)"
-        label="Prazo PDI"
-        buttonText="Ver Calendário"
-        iconBgColor="#f97316"
-        :buttonAction="goToCalendar"
+        :value="props.totals?.denied ?? 0"
+        label="Recursos Indeferidos"
+        buttonText="Ver Indeferidos"
+        iconBgColor="#ef4444"
+        :buttonAction="goToDeniedRecourses"
       >
-        <template #icon><icons.CalendarClock /></template>
+        <template #icon><icons.XCircle /></template>
       </DashboardCard>
+
     </div>
   </DashboardLayout>
 </template>
