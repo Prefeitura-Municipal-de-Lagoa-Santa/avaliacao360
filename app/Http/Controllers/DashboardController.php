@@ -49,9 +49,29 @@ class DashboardController extends Controller
         $prazoAvaliacao = $this->getGroupDeadline('avaliacao');
         $prazoPdi = $this->getGroupDeadline('pdi');
 
+        $prazoTerminou = false;
+        if (
+            $prazoAvaliacao &&
+            $prazoAvaliacao->term_first &&
+            $prazoAvaliacao->term_end
+        ) {
+            $hoje = now();
+            $inicio = Carbon::parse($prazoAvaliacao->term_first)->startOfDay();
+            $fim = Carbon::parse($prazoAvaliacao->term_end)->endOfDay();
+            $prazoTerminou = $hoje->greaterThan($fim);
+        }
+
         $completedAssessments = EvaluationRequest::where('status', 'completed')->count();
+
         $pendingAssessments = EvaluationRequest::where('status', 'pending')->count();
-        $totalAssessments = $completedAssessments + $pendingAssessments;
+        $unansweredAssessments = 0;
+
+        if ($prazoTerminou) {
+            $unansweredAssessments = EvaluationRequest::where('status', 'pending')->count();
+            $pendingAssessments = 0; // mostra zero pendente se o prazo já acabou
+        }
+
+        $totalAssessments = $completedAssessments + $pendingAssessments + $unansweredAssessments;
         $overallProgress = ($totalAssessments > 0)
             ? ($completedAssessments / $totalAssessments) * 100
             : 0;
@@ -63,6 +83,7 @@ class DashboardController extends Controller
         $dashboardStats = [
             'completedAssessments' => $completedAssessments,
             'pendingAssessments' => $pendingAssessments,
+            'unansweredAssessments' => $unansweredAssessments,
             'overallProgress' => $formattedProgress . '%',
         ];
 

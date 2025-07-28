@@ -4,35 +4,30 @@ import DashboardCard from '@/components/DashboardCard.vue';
 import { Head, router } from '@inertiajs/vue3';
 import * as icons from 'lucide-vue-next';
 
-// 1. Defina a nova prop 'dashboardStats' que virá do controller
 const props = defineProps<{
-  prazoAvaliacao: { term_first: string; term_end: string; } | null;
-  prazoPdi: { term_first: string; term_end: string; } | null;
+  prazoAvaliacao: { term_first: string; term_end: string } | null;
+  prazoPdi: { term_first: string; term_end: string } | null;
   dashboardStats: {
     completedAssessments: number;
     pendingAssessments: number;
+    unansweredAssessments: number;
     overallProgress: string;
   };
 }>();
-console.log(props);
 
-function formatPrazo(prazo: { term_first: string; term_end: string; } | null): string {
+function formatPrazo(prazo: { term_first: string; term_end: string } | null): string {
   if (!prazo) return 'Não definido';
- 
+
   const options: Intl.DateTimeFormatOptions = { day: '2-digit', month: '2-digit' };
-  
   const inicio = new Date(prazo.term_first).toLocaleDateString('pt-BR', options);
   const fim = new Date(prazo.term_end).toLocaleDateString('pt-BR', options);
-  
+
   return `${inicio} - ${fim}`;
 }
 
 function goToCalendar() {
   router.get(route('calendar'));
 }
-
-const CheckCircleIcon = `<svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>`;
-
 
 function showDetailsForDeadline() {
   router.get(route('evaluations.pending'));
@@ -41,13 +36,18 @@ function showDetailsForDeadline() {
 function showDetailsForCompleted() {
   router.get(route('evaluations.completed'));
 }
+
+function showDetailsForUnanswered() {
+  router.get(route('evaluations.unanswered'));
+}
 </script>
 
 <template>
   <Head title="Dashboard" />
   <DashboardLayout pageTitle="Dashboard de Avaliação">
     <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-      
+
+      <!-- Avaliações Concluídas -->
       <DashboardCard
         :value="props.dashboardStats.completedAssessments"
         label="Avaliações Concluídas"
@@ -56,11 +56,13 @@ function showDetailsForCompleted() {
         buttonText="Visualizar"
       >
         <template #icon>
-          <div v-html="CheckCircleIcon"></div>
+          <icons.CheckCircle class="w-8 h-8" />
         </template>
       </DashboardCard>
 
+      <!-- Avaliações Pendentes (durante o prazo) -->
       <DashboardCard
+        v-if="props.dashboardStats.pendingAssessments > 0"
         :value="props.dashboardStats.pendingAssessments"
         label="Avaliações Pendentes"
         iconBgColor="#f97316"
@@ -72,6 +74,21 @@ function showDetailsForCompleted() {
         </template>
       </DashboardCard>
 
+      <!-- Avaliações Sem Resposta (prazo encerrado) -->
+      <DashboardCard
+        v-if="props.dashboardStats.unansweredAssessments > 0"
+        :value="props.dashboardStats.unansweredAssessments"
+        label="Sem Resposta (fora do prazo)"
+        iconBgColor="#dc2626"
+        :buttonAction="showDetailsForUnanswered"
+        buttonText="Ver Detalhes"
+      >
+        <template #icon>
+          <icons.AlertTriangle />
+        </template>
+      </DashboardCard>
+
+      <!-- Progresso Geral -->
       <DashboardCard
         :value="props.dashboardStats.overallProgress"
         label="Progresso Geral"
@@ -81,11 +98,11 @@ function showDetailsForCompleted() {
           <icons.ChartNoAxesCombined />
         </template>
       </DashboardCard>
-      
+
+      <!-- Prazo Avaliação -->
       <DashboardCard
-        props.prazoAvaliacao
-        label="Data Avaliação"
         :value="formatPrazo(props.prazoAvaliacao)"
+        label="Data Avaliação"
         iconBgColor="#ef4444"
         :buttonAction="goToCalendar"
         buttonText="Ver Calendário"
@@ -94,9 +111,9 @@ function showDetailsForCompleted() {
           <icons.CalendarDays />
         </template>
       </DashboardCard>
-      
+
+      <!-- Prazo PDI -->
       <DashboardCard
-        props.prazoPdi
         :value="formatPrazo(props.prazoPdi)"
         label="Data PDI"
         iconBgColor="#f97316"
@@ -107,6 +124,7 @@ function showDetailsForCompleted() {
           <icons.CalendarClock />
         </template>
       </DashboardCard>
+
     </div>
   </DashboardLayout>
 </template>

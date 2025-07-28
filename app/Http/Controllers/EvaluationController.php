@@ -4,7 +4,6 @@ namespace App\Http\Controllers;
 
 use App\Models\Acknowledgment;
 use App\Models\Answer;
-use App\Models\configs;
 use App\Models\Form;
 use App\Models\Person;
 use Carbon\Carbon;
@@ -13,7 +12,6 @@ use Illuminate\Support\Facades\Auth;
 use Inertia\Inertia;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\DB;
-use App\Models\Evaluation;
 use App\Models\EvaluationRequest;
 use App\Models\User;
 use App\Models\configs as Config; // Importar o model de configurações
@@ -856,6 +854,69 @@ class EvaluationController extends Controller
         ]);
 
         return redirect()->route('evaluations')->with('success', 'Assinatura registrada com sucesso!');
+    }
+
+
+    public function unanswered(Request $request)
+    {
+        $search = $request->input('search');
+
+        // 1. Define o ano com regra de janeiro/fevereiro
+        $currentYear = in_array(date('n'), [1, 2]) ? date('Y') - 1 : date('Y');
+
+        // 2. Tipos de formulários válidos
+        $formTypes = ['servidor', 'gestor', 'comissionado']; // adapte se necessário
+
+        // 3. Busca o prazo final via tabela forms
+        $form = Form::where('year', $currentYear)
+            ->whereIn('type', $formTypes)
+            ->where('release', true)
+            ->select('term_first', 'term_end')
+            ->first();
+
+        // 4. Verifica se o prazo já encerrou
+        $prazoFinal = $form?->term_end ? Carbon::parse($form->term_end)->endOfDay() : null;
+
+        if (!$prazoFinal || now()->lessThanOrEqualTo($prazoFinal)) {
+            return redirect()->route('evaluations.pending')
+                ->with('error', 'As avaliações ainda estão dentro do prazo.');
+        }
+
+        // 5. Consulta apenas avaliações pendentes
+        $query = EvaluationRequest::with([
+            'evaluation.form',
+            'evaluation.evaluatedPerson',
+            'requestedPerson'
+        ])->where('status', 'pending');
+
+        if ($search) {
+            $query->where(function ($q) use ($search) {
+                $q->whereHas('evaluation.evaluatedPerson', fn($q) => $q->where('name', 'like', "%{$search}%"))
+                    ->orWhereHas('requestedPerson', fn($q) => $q->where('name', 'like', "%{$search}%"));
+            });
+        }
+
+        $pendingExpired = $query
+            ->orderByDesc('created_at')
+            ->paginate(20)
+            ->through(function ($request) {
+                return [
+                    'id' => $request->id,
+                    'type' => $request->evaluation->type ?? '-',
+                    'form_name' => $request->evaluation->form->name ?? '-',
+                    'avaliado' => $request->evaluation->evaluatedPerson->name ?? '-',
+                    'avaliador' => $request->requestedPerson->name ?? '-',
+                    'created_at' => $request->created_at ? $request->created_at->format('d/m/Y H:i') : '',
+                ];
+            })
+            ->withQueryString();
+
+        return inertia('Evaluations/PendingExpired', [
+            'pendingRequests' => $pendingExpired,
+            'filters' => [
+                'search' => $search,
+            ],
+        ]);
     }
 
 }
