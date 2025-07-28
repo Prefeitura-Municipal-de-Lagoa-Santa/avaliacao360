@@ -85,7 +85,6 @@ class DashboardController extends Controller
         // dd(Auth::user()->cpf);
         $people = Person::where('cpf', Auth::user()->cpf)->first();
         $prazo = $this->getGroupDeadline('avaliacao');
-
         $estaNoPrazo = false;
         if ($prazo && $prazo->term_first && $prazo->term_end) {
             $hoje = now();
@@ -110,6 +109,12 @@ class DashboardController extends Controller
                 'isInAwarePeriod' => $isInAwarePeriod,
             ]);
         }
+
+
+        $recourse = EvaluationRecourse::with('evaluation.form')
+            ->where('person_id', $people->id)
+            ->latest()
+            ->first();
 
         // Busca pendentes normalmente (prazo + pending)
         $selfEvaluationVisible = $estaNoPrazo && EvaluationRequest::where('requested_person_id', $people->id)
@@ -206,6 +211,7 @@ class DashboardController extends Controller
             'bossEvaluationRequestId' => $bossEvaluationRequestId,
             'teamEvaluationRequestId' => $teamEvaluationRequestId,
             'isInAwarePeriod' => $isInAwarePeriod,
+            'recourseLink' => $recourse ? route('recourses.show', $recourse->id) : null,
         ]);
     }
 

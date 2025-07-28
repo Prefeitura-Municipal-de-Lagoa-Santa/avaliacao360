@@ -26,6 +26,7 @@ const props = defineProps<{
   selfEvaluationRequestId?: number | null;
   bossEvaluationRequestId?: number | null;
   teamEvaluationRequestId?: number | null;
+  recourseLink?: string | null;
 }>();
 
 // Computed para checar se está dentro do prazo
@@ -202,6 +203,19 @@ function showDetailsForDeadline() {
           <icons.CalendarDays />
         </template>
       </DashboardCard>
+
+      <DashboardCard
+        v-if="props.recourseLink"
+        label="Acompanhar Recurso"
+        iconBgColor="#059669"
+        buttonText="Visualizar"
+        :buttonAction="() => router.get(props.recourseLink)"
+      >
+        <template #icon>
+          <icons.FileSearch />
+        </template>
+      </DashboardCard>
+
 
       <!-- Diálogo de aviso -->
       <Dialog v-model:open="isDialogOpen">
