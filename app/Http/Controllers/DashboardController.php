@@ -8,7 +8,6 @@ use App\Models\Person;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Inertia\Inertia;
-use Inertia\Response;
 use App\Models\EvaluationRequest;
 use App\Models\configs as Config; // Importar o model de configurações
 use Carbon\Carbon; // Importar a classe Carbon
@@ -18,43 +17,54 @@ class DashboardController extends Controller
     /**
      * Função de ajuda para buscar o prazo de um grupo específico.
      */
-    private function getGroupDeadline(string $groupName): ?Form
+    private function getGroupDeadline(string $groupName, ?int $year = null): ?Form
     {
-        $currentYear = date('Y');
+        // Define ano atual padrão (ajustado para janeiro e fevereiro)
+        if (!$year) {
+            $year = in_array(date('n'), [1, 2]) ? date('Y') - 1 : date('Y');
+        }
         $formTypes = [];
 
         if ($groupName === 'avaliacao') {
             $formTypes = ['servidor', 'gestor', 'chefia', 'comissionado'];
         } elseif ($groupName === 'pdi') {
-            // ***** CORREÇÃO APLICADA AQUI *****
             $formTypes = ['pactuacao_servidor', 'pactuacao_comissionado', 'pactuacao_gestor'];
         }
 
-        return Form::where('year', $currentYear)
+        return Form::where('year', $year)
             ->whereIn('type', $formTypes)
             ->where('release', true)
             ->select('term_first', 'term_end')
             ->first();
     }
 
+
     /**
      * Exibe a página principal do dashboard.
      */
-    public function index()
+
+    public function index(Request $request)
     {
         if (!user_can('dashboard')) {
             return redirect()->route('evaluations');
         }
 
-        $prazoAvaliacao = $this->getGroupDeadline('avaliacao');
-        $prazoPdi = $this->getGroupDeadline('pdi');
+        // Lista de anos com formulários liberados
+        $availableYears = Form::where('release', true)
+            ->select('year')
+            ->distinct()
+            ->orderByDesc('year')
+            ->pluck('year')
+            ->toArray();
+
+        // Ano selecionado via query string (ou padrão)
+        $year = $request->input('year', date('Y'));
+
+        $prazoAvaliacao = $this->getGroupDeadline('avaliacao', $year);
+        $prazoPdi = $this->getGroupDeadline('pdi', $year);
 
         $prazoTerminou = false;
-        if (
-            $prazoAvaliacao &&
-            $prazoAvaliacao->term_first &&
-            $prazoAvaliacao->term_end
-        ) {
+        if ($prazoAvaliacao && $prazoAvaliacao->term_first && $prazoAvaliacao->term_end) {
             $hoje = now();
             $inicio = Carbon::parse($prazoAvaliacao->term_first)->startOfDay();
             $fim = Carbon::parse($prazoAvaliacao->term_end)->endOfDay();
@@ -62,13 +72,11 @@ class DashboardController extends Controller
         }
 
         $completedAssessments = EvaluationRequest::where('status', 'completed')->count();
-
         $pendingAssessments = EvaluationRequest::where('status', 'pending')->count();
-        $unansweredAssessments = 0;
+        $unansweredAssessments = $prazoTerminou ? $pendingAssessments : 0;
 
         if ($prazoTerminou) {
-            $unansweredAssessments = EvaluationRequest::where('status', 'pending')->count();
-            $pendingAssessments = 0; // mostra zero pendente se o prazo já acabou
+            $pendingAssessments = 0;
         }
 
         $totalAssessments = $completedAssessments + $pendingAssessments + $unansweredAssessments;
@@ -88,11 +96,14 @@ class DashboardController extends Controller
         ];
 
         return Inertia::render('Dashboard/Index', [
+            'selectedYear' => (int) $year,
+            'availableYears' => $availableYears,
             'prazoAvaliacao' => $prazoAvaliacao,
             'prazoPdi' => $prazoPdi,
             'dashboardStats' => $dashboardStats,
         ]);
     }
+
 
     // ... (os outros métodos como evaluation(), pdi(), etc., permanecem os mesmos) ...
     public function evaluation()

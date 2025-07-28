@@ -1,10 +1,13 @@
 <script setup lang="ts">
+import { ref, watch } from 'vue';
 import DashboardLayout from '@/layouts/DashboardLayout.vue';
 import DashboardCard from '@/components/DashboardCard.vue';
 import { Head, router } from '@inertiajs/vue3';
 import * as icons from 'lucide-vue-next';
 
 const props = defineProps<{
+  selectedYear: number;
+  availableYears: number[];
   prazoAvaliacao: { term_first: string; term_end: string } | null;
   prazoPdi: { term_first: string; term_end: string } | null;
   dashboardStats: {
@@ -14,6 +17,17 @@ const props = defineProps<{
     overallProgress: string;
   };
 }>();
+
+const selectedYear = ref(props.selectedYear);
+const availableYears = ref(props.availableYears);
+
+watch(selectedYear, (year) => {
+  router.get(route('dashboard.index'), { year }, {
+    preserveScroll: true,
+    preserveState: true,
+    replace: true,
+  });
+});
 
 function formatPrazo(prazo: { term_first: string; term_end: string } | null): string {
   if (!prazo) return 'Não definido';
@@ -45,8 +59,18 @@ function showDetailsForUnanswered() {
 <template>
   <Head title="Dashboard" />
   <DashboardLayout pageTitle="Dashboard de Avaliação">
-    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
 
+    <!-- Dropdown de Ano -->
+    <div class="flex justify-end mb-6">
+      <label class="font-semibold mr-2 text-gray-700">Ano:</label>
+      <select v-model="selectedYear" class="border rounded px-3 py-1 text-gray-700">
+        <option v-for="year in availableYears" :key="year" :value="year">
+          {{ year }}
+        </option>
+      </select>
+    </div>
+
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
       <!-- Avaliações Concluídas -->
       <DashboardCard
         :value="props.dashboardStats.completedAssessments"
@@ -124,7 +148,6 @@ function showDetailsForUnanswered() {
           <icons.CalendarClock />
         </template>
       </DashboardCard>
-
     </div>
   </DashboardLayout>
 </template>
