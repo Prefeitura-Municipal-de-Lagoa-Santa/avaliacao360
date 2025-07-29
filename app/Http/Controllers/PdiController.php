@@ -2,28 +2,28 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\Pdi;
+use App\Models\PdiAnswer;
 use App\Models\PdiRequest;
 use App\Models\Person;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Inertia\Inertia;
 use Illuminate\Support\Facades\DB;
+use Log;
 
 class PdiController extends Controller
 {
     // Mostra a lista de PDIs para o usuário (seja ele gestor ou servidor)
     public function index()
     {
-         
         $user = Auth::user();
-        $cpf= 10798101610;
         
         if (!$user || !$user->cpf) {
             return redirect()->route('dashboard')->with('error', 'Seu usuário não possui um CPF configurado.');
         }
 
-        $person = Person::where('cpf', $cpf)->firstOrFail();
+        // CORREÇÃO: Usa o CPF do usuário autenticado
+        $person = Person::where('cpf', $user->cpf)->firstOrFail();
         
         // PDIs que o usuário (como gestor) precisa preencher
         $pdisToFill = PdiRequest::with('person', 'pdi.form')
@@ -45,6 +45,7 @@ class PdiController extends Controller
              })
             ->where('status', 'completed')
             ->get();
+            
 
         return Inertia::render('PDI/PdiList', [
             'pdisToFill' => $pdisToFill,
@@ -56,41 +57,72 @@ class PdiController extends Controller
     // Mostra o formulário de PDI para preenchimento ou ciência
     public function show(PdiRequest $pdiRequest)
     {
-        $pdiRequest->load(['pdi.form', 'person.jobFunction', 'manager.jobFunction']);
-
+        // Carrega os relacionamentos, incluindo as respostas já salvas
+        $pdiRequest->load([
+            'pdi.form.groupQuestions.questions',
+            'answers', // Carrega as respostas da relação correta em PdiRequest
+            'person.jobFunction',
+            'manager.jobFunction'
+        ]);
+        
+     
         return Inertia::render('PDI/PdiFormPage', [
             'pdiRequest' => $pdiRequest,
+            'pdiAnswers' => $pdiRequest->answers,
         ]);
     }
 
     // Atualiza o PDI (preenchimento do gestor ou assinatura do servidor)
     public function update(Request $request, PdiRequest $pdiRequest)
     {
-        $validated = $request->validate([
-            'signature_base64' => 'required|string',
-            // Valida os campos do PDI apenas se o gestor estiver preenchendo
-            'development_goals' => 'required_if:status,pending_manager_fill|string|nullable',
-            'actions_needed' => 'required_if:status,pending_manager_fill|string|nullable',
-            'manager_feedback' => 'string|nullable',
-        ]);
-        
-        $person = Person::where('cpf', Auth::user()->cpf)->firstOrFail();
+        $user = Auth::user();
+               
+        $person = Person::where('cpf', $user->cpf)->firstOrFail();
 
+        // Se o gestor está preenchendo, valida as respostas e a assinatura
+        if ($pdiRequest->status === 'pending_manager_fill' && $pdiRequest->manager_id === $person->id) {
+            $validated = $request->validate([
+                'signature_base64' => 'required|string',
+                'answers' => 'required|array',
+                'answers.*.question_id' => 'required|integer|exists:questions,id',
+                'answers.*.response_content' => 'nullable|string',
+            ]);
+        // Se o servidor está assinando, valida apenas a assinatura
+        } elseif ($pdiRequest->status === 'pending_employee_signature' && $pdiRequest->person_id === $person->id) {
+            $validated = $request->validate([
+                'signature_base64' => 'required|string',
+            ]);
+        } else {
+             // Se nenhuma das condições for válida, a permissão é negada.
+            abort(403, 'Ação não permitida ou status inválido.');
+        }
+        
         DB::beginTransaction();
         try {
             // Se o gestor está preenchendo
             if ($pdiRequest->status === 'pending_manager_fill' && $pdiRequest->manager_id === $person->id) {
+                ;
+                // Salva ou atualiza cada resposta
+                foreach($validated['answers'] as $answerData) {
+                    
+                    PdiAnswer::updateOrCreate(
+                        [
+                            'pdi_request_id' => $pdiRequest->id,
+                            'question_id' => $answerData['question_id'],
+                        ],
+                        [
+                            'response_content' => $answerData['response_content'],
+                            
+                        ]
+                        
+                    );
+                    
+                }
                 
-                $pdiRequest->pdi->update([
-                    'development_goals' => $validated['development_goals'],
-                    'actions_needed' => $validated['actions_needed'],
-                    'manager_feedback' => $validated['manager_feedback'],
-                ]);
-
                 $pdiRequest->update([
                     'manager_signature_base64' => $validated['signature_base64'],
                     'manager_signed_at' => now(),
-                    'status' => 'pending_employee_signature', // Avança para o próximo passo
+                    'status' => 'pending_employee_signature',
                 ]);
 
             // Se o servidor está dando ciência
@@ -99,11 +131,9 @@ class PdiController extends Controller
                 $pdiRequest->update([
                     'person_signature_base64' => $validated['signature_base64'],
                     'person_signed_at' => now(),
-                    'status' => 'completed', // Finaliza o processo
+                    'status' => 'completed',
                 ]);
 
-            } else {
-                throw new \Exception("Ação não permitida ou status inválido.");
             }
 
             DB::commit();

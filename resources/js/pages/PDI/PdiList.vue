@@ -7,10 +7,12 @@ defineProps<{
   pdisToSign: any[],
   pdisCompleted: any[],
 }>();
+ 
 
 const goToPdiForm = (id: number) => {
     router.get(route('pdi.show', id));
 }
+
 </script>
 
 <template>
@@ -31,7 +33,7 @@ const goToPdiForm = (id: number) => {
              <div class="bg-white p-4 rounded-lg shadow">
                 <div v-for="pdi in pdisToSign" :key="pdi.id" class="flex justify-between items-center p-2 border-b">
                     <span>Gestor: {{ pdi.manager.name }} - Ano: {{ pdi.pdi.year }}</span>
-                    <button @click="goToPdiForm(pdi.id)" class="btn btn-yellow">Revisar e Assinar</button>
+                    <button @click="goToPdiForm(pdi.id)" class="btn btn-green">Revisar e Assinar</button>
                 </div>
             </div>
         </div>
@@ -41,7 +43,7 @@ const goToPdiForm = (id: number) => {
              <div class="bg-white p-4 rounded-lg shadow">
                 <div v-for="pdi in pdisCompleted" :key="pdi.id" class="flex justify-between items-center p-2 border-b">
                      <span>{{ pdi.person.id === $page.props.auth.user.id ? `Gestor: ${pdi.manager.name}` : `Servidor: ${pdi.person.name}`}} - Ano: {{ pdi.pdi.year }}</span>
-                    <button @click="goToPdiForm(pdi.id)" class="btn btn-gray">Visualizar</button>
+                    <button @click="goToPdiForm(pdi.id)" class="btn btn-blue">Visualizar</button>
                 </div>
             </div>
         </div>

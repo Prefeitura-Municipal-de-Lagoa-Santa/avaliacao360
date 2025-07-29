@@ -5,6 +5,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class PdiRequest extends Model
 {
@@ -39,5 +40,9 @@ class PdiRequest extends Model
     public function manager(): BelongsTo
     {
         return $this->belongsTo(Person::class, 'manager_id');
+    }
+     public function answers(): HasMany
+    {
+        return $this->hasMany(PdiAnswer::class);
     }
 }
