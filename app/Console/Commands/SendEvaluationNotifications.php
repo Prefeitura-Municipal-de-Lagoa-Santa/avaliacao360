@@ -50,10 +50,15 @@ class SendEvaluationNotifications extends Command
             $this->notifyAll($users, 'Prazo final para responder avaliações', 'Faltam apenas 3 dias para encerrar o prazo de avaliações.', route('evaluations'));
         }
 
-        // 4. Liberação da nota (opcional, comentado)
-        // if ($hoje->toDateString() === '2025-01-20') {
-        //     $this->notifyAll($users, 'Notas liberadas', 'As notas das avaliações foram liberadas.', route('evaluations'));
-        // }
+        // 4. Fim próximo do prazo
+        $formFim = Form::where('year', $year)
+            ->whereIn('type', ['servidor', 'gestor', 'chefia', 'comissionado'])
+            ->whereDate('term_end', $hoje)
+            ->first();
+
+        if ($formFim) {
+            $this->notifyAll($users, 'Prazo final para responder avaliações', 'Último dia do prazo de avaliações.', route('evaluations'));
+        }
 
         // 5. Liberação de PDI
         $pdiLiberado = Form::where('year', $year)
