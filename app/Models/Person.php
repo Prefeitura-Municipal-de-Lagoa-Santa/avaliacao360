@@ -58,7 +58,7 @@ class Person extends Model
     {
         $probationaryCutoffDate = Carbon::now()->subYears(3);
 
-        $query->where('functional_status', 'TRABALHANDO')
+        $query->where('functional_status', 'TRABALHANDO', 'FERIAS')
             ->where(function (Builder $subQuery) use ($probationaryCutoffDate) {
                 // 0. Exclui "3 - Concursado" sem função
                 $subQuery->where(function (Builder $q) {
