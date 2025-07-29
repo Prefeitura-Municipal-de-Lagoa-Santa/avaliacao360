@@ -50,6 +50,8 @@ class CreateRolesSeeder extends Seeder
             'releases.generate',
             'reports',
             'storage.local',
+            'users.manage-roles',
+            'users.assign-role',
         ])->values());
 
         // Comissão

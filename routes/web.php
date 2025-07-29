@@ -15,6 +15,7 @@ use App\Http\Controllers\ReleaseController;
 use App\Http\Controllers\UserRoleController;
 use App\Http\Middleware\EnsureCpfIsFilled;
 use App\Http\Middleware\RedirectIfMustChangePassword;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 
 Route::redirect("/", "/dashboard");
@@ -128,6 +129,18 @@ Route::middleware(['auth', 'verified', EnsureCpfIsFilled::class, RedirectIfMustC
         ->name('recourses.respond');
 
     Route::get('/evaluations/unanswered', [EvaluationController::class, 'unanswered'])->name('evaluations.unanswered');
+
+    Route::get('/notifications', function () {
+        $user = Auth::user();
+        return $user ? $user->unreadNotifications()->latest()->take(10)->get() : [];
+    })->name('notifications.index');
+
+
+    Route::delete('/notifications/{id}', function (Request $request, string $id) {
+        $notification = $request->user()->notifications()->where('id', $id)->firstOrFail();
+        $notification->markAsRead(); // ou ->delete()
+        return response()->noContent();
+    })->middleware('auth');
 
 });
 
