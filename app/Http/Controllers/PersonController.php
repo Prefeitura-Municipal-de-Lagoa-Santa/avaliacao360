@@ -59,7 +59,7 @@ class PersonController extends Controller
     public function create()
     {
         $organizationalUnits = OrganizationalUnit::orderBy('name')->get(['id', 'name']);
-        $functionalStatuses = ['ATIVO', 'INATIVO', 'CEDIDO', 'AFASTADO', 'LICENÇA', 'FÉRIAS', 'EXONERADO', 'APOSENTADO', 'TRABALHANDO'];
+        $functionalStatuses = ['ATIVO', 'INATIVO', 'CEDIDO', 'AFASTADO', 'LICENÇA', 'FERIAS', 'EXONERADO', 'APOSENTADO', 'TRABALHANDO'];
         return Inertia::render('People/Edit', [
             'organizationalUnits' => $organizationalUnits,
             'functionalStatuses' => $functionalStatuses,
@@ -68,7 +68,7 @@ class PersonController extends Controller
 
     public function store(Request $request)
     {
-        $functionalStatuses = ['ATIVO', 'INATIVO', 'CEDIDO', 'AFASTADO', 'LICENÇA', 'FÉRIAS', 'EXONERADO', 'APOSENTADO', 'TRABALHANDO'];
+        $functionalStatuses = ['ATIVO', 'INATIVO', 'CEDIDO', 'AFASTADO', 'LICENÇA', 'FERIAS', 'EXONERADO', 'APOSENTADO', 'TRABALHANDO'];
         $validatedData = $request->validate([
             'name' => 'required|string|max:255',
             'registration_number' => 'nullable|string|unique:people,registration_number',
@@ -91,7 +91,7 @@ class PersonController extends Controller
             'CEDIDO',
             'AFASTADO',
             'LICENÇA',
-            'FÉRIAS',
+            'FERIAS',
             'EXONERADO',
             'APOSENTADO',
             'TRABALHANDO'
@@ -131,7 +131,7 @@ class PersonController extends Controller
 
     public function update(Request $request, Person $person)
     {
-        $functionalStatuses = ['ATIVO', 'INATIVO', 'CEDIDO', 'AFASTADO', 'LICENÇA', 'FÉRIAS', 'EXONERADO', 'APOSENTADO', 'TRABALHANDO'];
+        $functionalStatuses = ['ATIVO', 'INATIVO', 'CEDIDO', 'AFASTADO', 'LICENÇA', 'FERIAS', 'EXONERADO', 'APOSENTADO', 'TRABALHANDO'];
 
         // Define se é um vínculo manual
         $isManual = $request->input('bond_type') === 'manual';
