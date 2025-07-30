@@ -5,6 +5,7 @@ use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\FormController;
 use App\Http\Controllers\ConfigController;
 use App\Http\Controllers\JobFunctionController;
+use App\Http\Controllers\NotificationController;
 use App\Http\Controllers\OrganizationalChartController;
 use App\Http\Controllers\PdiController;
 use App\Http\Controllers\PasswordChangeController;
@@ -16,6 +17,7 @@ use App\Http\Controllers\UserRoleController;
 use App\Http\Middleware\EnsureCpfIsFilled;
 use App\Http\Middleware\RedirectIfMustChangePassword;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Route;
 
 Route::redirect("/", "/dashboard");
@@ -130,17 +132,41 @@ Route::middleware(['auth', 'verified', EnsureCpfIsFilled::class, RedirectIfMustC
 
     Route::get('/evaluations/unanswered', [EvaluationController::class, 'unanswered'])->name('evaluations.unanswered');
 
-    Route::get('/notifications', function () {
-        $user = Auth::user();
-        return $user ? $user->unreadNotifications()->latest()->take(10)->get() : [];
-    })->name('notifications.index');
-
-
-    Route::delete('/notifications/{id}', function (Request $request, string $id) {
-        $notification = $request->user()->notifications()->where('id', $id)->firstOrFail();
-        $notification->markAsRead(); // ou ->delete()
-        return response()->noContent();
-    })->middleware('auth');
+    // Rotas de notificações
+    Route::get('/notifications', [NotificationController::class, 'unread'])->name('notifications.unread');
+    Route::get('/notifications/history', [NotificationController::class, 'index'])->name('notifications.history');
+    Route::patch('/notifications/{id}/read', [NotificationController::class, 'markAsRead'])->name('notifications.read');
+    Route::post('/notifications/mark-all-read', [NotificationController::class, 'markAllAsRead'])->name('notifications.mark-all-read');
+    Route::post('/notifications/mark-selected-read', function (Request $request) {
+        $validated = $request->validate([
+            'notification_ids' => 'required|array',
+            'notification_ids.*' => 'required|string|exists:notifications,id'
+        ]);
+        
+        $user = $request->user();
+        $count = $user->notifications()
+            ->whereIn('id', $validated['notification_ids'])
+            ->whereNull('read_at')
+            ->update(['read_at' => now()]);
+            
+        return back()->with('success', "{$count} notificações marcadas como lidas");
+    })->name('notifications.mark-selected-read');
+    
+    Route::post('/notifications/delete-selected', function (Request $request) {
+        $validated = $request->validate([
+            'notification_ids' => 'required|array',
+            'notification_ids.*' => 'required|string|exists:notifications,id'
+        ]);
+        
+        $user = $request->user();
+        $count = $user->notifications()
+            ->whereIn('id', $validated['notification_ids'])
+            ->delete();
+            
+        return back()->with('success', "{$count} notificações excluídas");
+    })->name('notifications.delete-selected');
+    
+    Route::delete('/notifications/{id}', [NotificationController::class, 'destroy'])->name('notifications.destroy');
 
 });
 
