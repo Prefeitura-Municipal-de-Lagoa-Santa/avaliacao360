@@ -28,28 +28,46 @@ function goBack() {
 
 // Nota ponderada (ajuste se necessário)
 const grandTotal = computed(() => {
-    if (!props.form?.group_questions || !props.evaluation?.answers) return 0;
+  if (!props.form?.group_questions || !props.evaluation?.answers) {
+    console.log('[DEBUG] Dados ausentes: form.group_questions ou evaluation.answers');
+    return 0;
+  }
 
-    let somaNotas = 0;
-    let somaPesos = 0;
-    let hasRespostas = false;
+  let somaNotas = 0;
+  let somaPesos = 0;
+  let hasRespostas = false;
 
-    props.form.group_questions.forEach(group => {
-        group.questions.forEach(question => {
-            const answer = props.evaluation.answers.find(ans => ans.question_id === question.id);
-            if (answer && answer.score !== null && answer.score !== undefined) {
-                hasRespostas = true;
-                somaNotas += Number(answer.score) * question.weight;
-                somaPesos += question.weight;
-            }
-        });
+  props.form.group_questions.forEach(group => {
+    group.questions.forEach(question => {
+      const answer = props.evaluation.answers.find(ans => ans.question_id === question.id);
+      const nota = Number(answer?.score);
+      const peso = Number(question.weight);
+
+      console.log('[DEBUG] Questão:', question.text_content);
+      console.log('→ Score recebido:', answer?.score, '| Interpretado como:', nota);
+      console.log('→ Peso recebido:', question.weight, '| Interpretado como:', peso);
+
+      if (!isNaN(nota) && !isNaN(peso)) {
+        hasRespostas = true;
+        somaNotas += nota * peso;
+        somaPesos += peso;
+      } else {
+        console.warn('[AVISO] Nota ou peso inválido:', { nota, peso, answer });
+      }
     });
+  });
 
-    // Se não houver respostas válidas, retorna 0 (nota zerada)
-    if (!hasRespostas || somaPesos === 0) return 0;
+  if (!hasRespostas || somaPesos === 0) {
+    console.log('[INFO] Nenhuma resposta válida ou peso total zero');
+    return 0;
+  }
 
-    return Math.round(somaNotas / somaPesos);
+  const resultado = Math.round(somaNotas / somaPesos);
+  console.log('[RESULTADO] somaNotas:', somaNotas, '| somaPesos:', somaPesos, '| Média final:', resultado);
+
+  return resultado;
 });
+
 
 // Cargo/função dinâmica
 const cargoOuFuncao = computed(() => {
