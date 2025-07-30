@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\EvaluationRecourse;
 use App\Models\Form;
+use App\Models\PdiRequest;
 use App\Models\Person;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -247,19 +248,53 @@ class DashboardController extends Controller
     }
 
     public function pdi()
-    {
+{
+    $user = Auth::user();
+    $pdiStatus = 'not_released'; // Status padrão
+    $prazoPdi = null; // Prazo padrão
+    $cpf = '10798101610'; 
+        // Busca a pessoa pelo CPF do usuário logado
+    $person = Person::where('cpf', $cpf)->first();
+    
+    // Verifica se é gestor (ajuste conforme sua lógica de permissão)
+    $isManager = $person && $person->job_function_id; // Supondo que exista o campo is_manager
 
-        if (!user_can('pdi')) {
-            return redirect()->route('evaluations')->with('error', 'Você não tem permissão para acessar essa área.');
+    // Se a pessoa existe, verificamos o status do PDI
+    if ($person) {
+        // Busca o PDI mais recente do ano corrente para o servidor
+        $pdiRequest = PdiRequest::where('person_id', $person->id)
+            ->whereHas('pdi', function ($query) {
+                $query->where('year', now()->year);
+            })
+            ->first();
+
+        if ($pdiRequest) {
+            if ($pdiRequest->status === 'pending_manager_fill') {
+                $pdiStatus = 'pending_manager'; // Gestor ainda não preencheu
+            } else {
+                $pdiStatus = 'available'; // PDI disponível para o servidor
+            }
         }
-
-        // Busca o prazo apenas para o grupo de PDI
-        $prazoPdi = $this->getGroupDeadline('pdi');
-
-        return Inertia::render('Dashboard/PDI', [
-            'prazoPdi' => $prazoPdi,
-        ]);
+    } else {
+        $pdiStatus = 'user_not_found'; // Usuário sem cadastro em 'people'
     }
+
+    // Se for gestor, carrega a lista de servidores sob sua gestão
+    $managedServers = [];
+    if ($isManager) {
+        $managedServers = Person::where('manager_id', $person->id)->get(); // Ajuste o campo conforme seu banco
+    }
+
+    $year = (in_array(date('n'), [1, 2])) ? date('Y') - 1 : date('Y');
+    $prazoPdi = $this->getGroupDeadline('pdi', $year);
+
+    return Inertia::render('Dashboard/PDI', [
+        'pdiStatus' => $pdiStatus,
+        'prazoPdi' => $prazoPdi,
+        'managedServers' => $managedServers, // Envia a lista para o front
+        'isManager' => $isManager,
+    ]);
+}
 
     public function recourse()
     {

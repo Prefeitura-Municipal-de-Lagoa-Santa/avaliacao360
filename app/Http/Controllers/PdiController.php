@@ -21,9 +21,12 @@ class PdiController extends Controller
         if (!$user || !$user->cpf) {
             return redirect()->route('dashboard')->with('error', 'Seu usuário não possui um CPF configurado.');
         }
-
-        // CORREÇÃO: Usa o CPF do usuário autenticado
+              
         $person = Person::where('cpf', $user->cpf)->firstOrFail();
+
+        if (!$person) {
+        return redirect()->route('dashboard')->with('error', 'Seu cadastro de servidor não foi encontrado. Entre em contato com o RH.');
+    }
         
         // PDIs que o usuário (como gestor) precisa preencher
         $pdisToFill = PdiRequest::with('person', 'pdi.form')
@@ -75,10 +78,10 @@ class PdiController extends Controller
     // Atualiza o PDI (preenchimento do gestor ou assinatura do servidor)
     public function update(Request $request, PdiRequest $pdiRequest)
     {
-        $user = Auth::user();
-               
+        $user = Auth::user();    
+       
         $person = Person::where('cpf', $user->cpf)->firstOrFail();
-
+        
         // Se o gestor está preenchendo, valida as respostas e a assinatura
         if ($pdiRequest->status === 'pending_manager_fill' && $pdiRequest->manager_id === $person->id) {
             $validated = $request->validate([
