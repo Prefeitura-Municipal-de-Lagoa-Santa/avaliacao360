@@ -194,10 +194,9 @@ function showDetailsForDeadline() {
 
       <!-- Card Prazo da Avaliação (sempre visível) -->
       <DashboardCard
+        label="Data Avaliação"
         :value="formatPrazo(props.prazo)"
         iconBgColor="#ef4444"
-        :buttonAction="goToCalendar"
-        buttonText="Ver Calendário"
       >
         <template #icon>
           <icons.CalendarDays />
