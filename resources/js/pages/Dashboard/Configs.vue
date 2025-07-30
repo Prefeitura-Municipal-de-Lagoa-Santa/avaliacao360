@@ -142,6 +142,20 @@ const pdiReleaseData = computed(() => {
   return f ? new Date(f.release_data!).toLocaleDateString('pt-BR') : 'Data não encontrada';
 });
 
+const canManuallyGeneratePdi = computed(() => {
+  const pdiForm = formsForSelectedYear.value.find(form =>
+    ['pactuacao_servidor', 'pactuacao_comissionado', 'pactuacao_gestor'].includes(form.type)
+  );
+  if (!pdiForm || !pdiForm.term_first) {
+    return false;
+  }
+  const startDate = new Date(pdiForm.term_first);
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  // Só permite gerar manualmente se a data atual for menor que o início do prazo
+  return startDate > today;
+});
+
 // --- MÉTODOS DE AÇÃO - FORMULÁRIOS ---
 const getFormForType = (type: string) => props.forms[`${selectedYear.value}_${type}`] || null;
 
@@ -580,38 +594,65 @@ onUnmounted(() => {
             <div v-else class="text-green-600 font-semibold flex items-center gap-2">
               <component :is="icons.CheckCircle2Icon" class="size-5" />
               Liberado em: {{ pdiReleaseData }}
-              <Dialog>
-          <DialogTrigger as-child>
-            <button class="ml-4 btn btn-blue"> <component :is="icons.SquarePenIcon" class="size-5 mr-2" />
-              Gerar PDIs
-            </button>
-          </DialogTrigger>
-          <DialogContent class="sm:max-w-md bg-white">
-            <DialogHeader>
-              <DialogTitle class="text-lg font-semibold text-gray-900">Gerar PDIs</DialogTitle>
-              <DialogDescription class="mt-2 text-sm text-gray-600">
-                Tem certeza que deseja gerar os Planos de Desenvolvimento Individual (PDI) para o ano de {{ selectedYear }}?
-              </DialogDescription>
-            </DialogHeader>
-            <DialogFooter class="mt-6 flex flex-col-reverse sm:flex-row sm:justify-end sm:space-x-2">
-              <DialogClose as-child>
-                <button type="button" class="w-full sm:w-auto inline-flex justify-center rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50">
-                  Cancelar
-                </button>
-              </DialogClose>
-              <DialogClose as-child>
-                <button @click="generatePdiRelease" type="button" class="w-full sm:w-auto inline-flex justify-center rounded-md border border-transparent bg-green-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-green-700">
-                  Sim, Gerar
-                </button>
-              </DialogClose>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
+              <Dialog v-if="canManuallyGeneratePdi">
+    <DialogTrigger as-child>
+      <button class="ml-4 btn btn-blue">
+        <component :is="icons.SquarePenIcon" class="size-5 mr-2" />
+        Gerar PDIs
+      </button>
+    </DialogTrigger>
+    <DialogContent class="sm:max-w-md bg-white">
+      <DialogHeader>
+        <DialogTitle class="text-lg font-semibold text-gray-900">Gerar PDIs</DialogTitle>
+        <DialogDescription class="mt-2 text-sm text-gray-600">
+          Tem certeza que deseja gerar os Planos de Desenvolvimento Individual (PDI) para o ano de {{ selectedYear }}?
+        </DialogDescription>
+      </DialogHeader>
+      <DialogFooter class="mt-6 flex flex-col-reverse sm:flex-row sm:justify-end sm:space-x-2">
+        <DialogClose as-child>
+          <button type="button" class="w-full sm:w-auto inline-flex justify-center rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50">
+            Cancelar
+          </button>
+        </DialogClose>
+        <DialogClose as-child>
+          <button @click="generatePdiRelease" type="button" class="w-full sm:w-auto inline-flex justify-center rounded-md border border-transparent bg-green-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-green-700">
+            Sim, Gerar
+          </button>
+        </DialogClose>
+      </DialogFooter>
+    </DialogContent>
+  </Dialog>
             </div>
           </div>
         </div>
       </div>
-      
+       <!-- Configurações -->
+      <div class="settings-section">
+        <h3>Configurações</h3>
+
+        <div class="setting-item">
+          <label for="release-date">Definir data de divulgação das notas:</label>
+          <input type="date" id="release-date" class="input-date" v-model="gradesPeriod">
+        </div>
+
+        <div class="setting-item">
+          <label>Definir período de ciência das notas (quantidade de dias após divulgação):</label>
+          <input type="number" id="aware-period" min="0" class="input-day" placeholder="Nº de dias" v-model="awarePeriod">
+        </div>
+
+        <div class="setting-item">
+          <label for="appeal-days">Definir período de recurso (quantidade de dias após a ciência das notas):</label>
+          <input type="number" id="recourse-period" min="0" class="input-day" placeholder="Nº de dias" v-model="recoursePeriod">
+        </div>
+
+        <div class="setting-item">
+          <label>Salvar alterações:</label>
+          <button @click="saveSettings" class="btn btn-green">
+            <span>Salvar</span>
+            <component :is="icons.SaveIcon" class="size-5" />
+          </button>
+        </div>
+      </div>
       <div class="settings-section">
         <h3>Gestão de Pessoas</h3>
         <div class="setting-item">
@@ -663,33 +704,7 @@ onUnmounted(() => {
         </div>
       </div>
 
-      <!-- Configurações -->
-      <div class="settings-section">
-        <h3>Configurações</h3>
-
-        <div class="setting-item">
-          <label for="release-date">Definir data de divulgação das notas:</label>
-          <input type="date" id="release-date" class="input-date" v-model="gradesPeriod">
-        </div>
-
-        <div class="setting-item">
-          <label>Definir período de ciência das notas (quantidade de dias após divulgação):</label>
-          <input type="number" id="aware-period" min="0" class="input-day" placeholder="Nº de dias" v-model="awarePeriod">
-        </div>
-
-        <div class="setting-item">
-          <label for="appeal-days">Definir período de recurso (quantidade de dias após a ciência das notas):</label>
-          <input type="number" id="recourse-period" min="0" class="input-day" placeholder="Nº de dias" v-model="recoursePeriod">
-        </div>
-
-        <div class="setting-item">
-          <label>Salvar alterações:</label>
-          <button @click="saveSettings" class="btn btn-green">
-            <span>Salvar</span>
-            <component :is="icons.SaveIcon" class="size-5" />
-          </button>
-        </div>
-      </div>
+     
     </div>
 
 

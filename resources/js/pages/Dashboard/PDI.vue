@@ -25,7 +25,7 @@ const props = defineProps<{
   managedServers?: Array<{ id: number; name: string; cpf: string }> ;
   isManager?: boolean;
 }>();
-console.log(props);
+
 const isPdiAvailable = computed(() => props.pdiStatus === 'available');
 const pdiIconBgColor = computed(() => isPdiAvailable.value ? '#1d82c4' : '#9ca3af');
 
@@ -124,8 +124,6 @@ function goToCalendar() {
         </template>
       </DashboardCard>
     </div>
-
-  
 
     <Dialog :open="isDialogOpen" @update:open="isDialogOpen = $event">
       <DialogContent class="sm:max-w-md">

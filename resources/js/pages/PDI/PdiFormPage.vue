@@ -50,8 +50,6 @@ const props = defineProps<{
     // pois a lógica de popular já estava comentada ou com erro.
     // Se você a usa, descomente as linhas relacionadas.
 }>();
-
-console.log(props);
 const page = usePage();
 // Corrigido para buscar o person_id do usuário logado a partir do objeto auth.
 // const loggedInPersonId = computed(() => (page.props.auth as any).person.id);

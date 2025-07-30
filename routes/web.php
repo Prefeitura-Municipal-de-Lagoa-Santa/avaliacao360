@@ -90,10 +90,10 @@ Route::middleware(['auth', 'verified', EnsureCpfIsFilled::class, RedirectIfMustC
     Route::get('/organizational-chart', [OrganizationalChartController::class, 'index'])
         ->name('organizational-chart.index');
 
-    Route::post('/releases-generate/{year}', [ReleaseController::class, 'generateRelease'])
+    Route::post('/releases/generate/{year}', [ReleaseController::class, 'generateRelease'])
         ->name('releases.generate');
 
-    Route::post('/pdi-generate/{year}', [ReleaseController::class, 'generatePdi'])
+    Route::post('/pdi/generate/{year}', [ReleaseController::class, 'generatePdi'])
         ->name('pdi.generate');
 
     Route::get('/avaliacoes/autoavaliacao/resultado/{evaluationRequest}', [EvaluationController::class, 'showEvaluationResult'])
