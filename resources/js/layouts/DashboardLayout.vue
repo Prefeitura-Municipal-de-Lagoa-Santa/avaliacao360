@@ -82,6 +82,34 @@ const notifications = ref<any[]>([]);
 const unreadCount = ref(0);
 const showDropdown = ref(false);
 const toggleDropdown = () => { showDropdown.value = !showDropdown.value; };
+
+function formatNotificationDate(dateString: string): string {
+  const date = new Date(dateString);
+  const now = new Date();
+  const diffInMinutes = Math.floor((now.getTime() - date.getTime()) / (1000 * 60));
+  
+  if (diffInMinutes < 1) return 'Agora';
+  if (diffInMinutes < 60) return `${diffInMinutes}m atrás`;
+  
+  const diffInHours = Math.floor(diffInMinutes / 60);
+  if (diffInHours < 24) return `${diffInHours}h atrás`;
+  
+  const diffInDays = Math.floor(diffInHours / 24);
+  if (diffInDays < 7) return `${diffInDays}d atrás`;
+  
+  return date.toLocaleDateString('pt-BR');
+}
+
+function goToNotificationUrl(notification: any) {
+  if (notification.data.url) {
+    // Marca como lida primeiro
+    if (!notification.read_at) {
+      dismissNotification(notification.id);
+    }
+    showDropdown.value = false;
+    window.location.href = notification.data.url;
+  }
+}
 </script>
 
 <template>
@@ -105,14 +133,31 @@ const toggleDropdown = () => { showDropdown.value = !showDropdown.value; };
               </span>
             </button>
             <div v-if="showDropdown" class="absolute right-0 mt-2 w-80 bg-white shadow-xl rounded-lg z-50 max-h-96 overflow-y-auto">
+              <!-- Link para o histórico no topo -->
+              <div class="border-b border-gray-200 p-3">
+                <Link 
+                  :href="route('notifications.history')" 
+                  class="flex items-center gap-2 text-sm font-medium text-indigo-600 hover:text-indigo-800 transition-colors"
+                >
+                  <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" 
+                      d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  Ver histórico completo
+                </Link>
+              </div>
+              
               <ul>
                 <li v-for="n in notifications" :key="n.id" class="border-b p-2 text-sm hover:bg-gray-50 flex justify-between items-start">
-                  <div class="pr-2">
+                  <div class="pr-2 flex-grow cursor-pointer" @click="goToNotificationUrl(n)">
                     <strong class="block text-gray-700">{{ n.data.title }}</strong>
                     <span class="text-gray-600">{{ n.data.content }}</span>
+                    <div class="text-xs text-gray-500 mt-1">
+                      {{ formatNotificationDate(n.created_at) }}
+                    </div>
                   </div>
-                  <button @click="dismissNotification(n.id)" class="text-gray-400 hover:text-red-500 text-xs ml-2" title="Fechar">
-                    ❌
+                  <button @click="dismissNotification(n.id)" class="text-gray-400 hover:text-red-500 text-xs ml-2 flex-shrink-0" title="Marcar como lida">
+                    ✓
                   </button>
                 </li>
                 <li v-if="notifications.length === 0" class="p-4 text-center text-sm text-gray-500">

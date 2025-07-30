@@ -133,12 +133,13 @@ function showDetailsForDeadline() {
 <template>
   <Head title="Dashboard" />
   <DashboardLayout pageTitle="Dashboard de Avaliação">
-    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 items-stretch">
 
       <!-- Card Autoavaliação -->
       <DashboardCard
-        label="Autoavaliação"
-        iconBgColor="#1d82c4"
+        :label="props.selfEvaluationCompleted ? 'Autoavaliação - Concluído' : 'Autoavaliação'"
+        :iconBgColor="props.selfEvaluationCompleted ? '#22c55e' : '#1d82c4'"
+        :buttonBgColor="props.selfEvaluationCompleted ? '#16a34a' : '#0369a1'"
         :buttonAction="props.selfEvaluationCompleted
           ? () => showEvaluationResult(props.selfEvaluationRequestId)
           : handleAutoavaliacaoClick"
@@ -152,8 +153,9 @@ function showDetailsForDeadline() {
 
       <!-- Card Avaliação Chefia -->
       <DashboardCard
-        label="Avaliação Chefia"
-        iconBgColor="#ef4444"
+        :label="props.bossEvaluationCompleted ? 'Avaliação Chefia - Concluído' : 'Avaliação Chefia'"
+        :iconBgColor="props.bossEvaluationCompleted ? '#22c55e' : '#ef4444'"
+        :buttonBgColor="props.bossEvaluationCompleted ? '#16a34a' : '#dc2626'"
         :buttonAction="props.bossEvaluationCompleted
           ? () => showEvaluationResult(props.bossEvaluationRequestId)
           : handleChefiaEvaluationClick"
@@ -167,8 +169,9 @@ function showDetailsForDeadline() {
 
       <!-- Card Avaliar Equipe -->
       <DashboardCard
-        label="Avaliar Equipe"
-        iconBgColor="#8b5cf6"
+        :label="props.teamEvaluationCompleted ? 'Avaliar Equipe - Concluído' : 'Avaliar Equipe'"
+        :iconBgColor="props.teamEvaluationCompleted ? '#22c55e' : '#8b5cf6'"
+        :buttonBgColor="props.teamEvaluationCompleted ? '#16a34a' : '#7c3aed'"
         :buttonAction="props.teamEvaluationCompleted
           ? () => showEvaluationResult(props.teamEvaluationRequestId)
           : handleManagerEvaluationClick"
@@ -182,7 +185,7 @@ function showDetailsForDeadline() {
 
       <!-- Card Minhas Avaliações (sempre visível) -->
       <DashboardCard
-        label="Minhas Avaliações"
+        label="Minhas Notas"
         iconBgColor="#15B2CB"
         buttonText="Ver Resultados"
         :buttonAction="showDetailsForDeadline"
@@ -194,10 +197,9 @@ function showDetailsForDeadline() {
 
       <!-- Card Prazo da Avaliação (sempre visível) -->
       <DashboardCard
+        label="Data Avaliação"
         :value="formatPrazo(props.prazo)"
         iconBgColor="#ef4444"
-        :buttonAction="goToCalendar"
-        buttonText="Ver Calendário"
       >
         <template #icon>
           <icons.CalendarDays />
@@ -209,7 +211,7 @@ function showDetailsForDeadline() {
         label="Acompanhar Recurso"
         iconBgColor="#059669"
         buttonText="Visualizar"
-        :buttonAction="() => router.get(props.recourseLink)"
+        :buttonAction="() => props.recourseLink && router.get(props.recourseLink)"
       >
         <template #icon>
           <icons.FileSearch />

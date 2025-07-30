@@ -128,8 +128,6 @@ function showDetailsForUnanswered() {
         :value="formatPrazo(props.prazoAvaliacao)"
         label="Data Avaliação"
         iconBgColor="#ef4444"
-        :buttonAction="goToCalendar"
-        buttonText="Ver Calendário"
       >
         <template #icon>
           <icons.CalendarDays />
@@ -141,8 +139,6 @@ function showDetailsForUnanswered() {
         :value="formatPrazo(props.prazoPdi)"
         label="Data PDI"
         iconBgColor="#f97316"
-        :buttonAction="goToCalendar"
-        buttonText="Ver Calendário"
       >
         <template #icon>
           <icons.CalendarClock />
