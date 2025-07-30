@@ -39,7 +39,7 @@ const grandTotal = computed(() => {
             const answer = props.evaluation.answers.find(ans => ans.question_id === question.id);
             if (answer && answer.score !== null && answer.score !== undefined) {
                 hasRespostas = true;
-                somaNotas += parseInt(answer.score) * question.weight;
+                somaNotas += Number(answer.score) * question.weight;
                 somaPesos += question.weight;
             }
         });
