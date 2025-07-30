@@ -39,7 +39,7 @@ Route::middleware(['auth', 'verified', EnsureCpfIsFilled::class, RedirectIfMustC
     Route::get('/recourse', [DashboardController::class, 'recourse'])->name('recourse');
 
     Route::get('/configs/form/create', [FormController::class, 'create'])->name('configs.create');
-    Route::post('/configs/form', [FormController::class, 'store'])->name('configs.store');
+    Route::post('/configs/form', [FormController::class, 'store'])->name('configs.form.store');
     Route::get('/configs/form/{formulario}', [FormController::class, 'show'])->name('configs.show');
     Route::get('/configs/form/{formulario}/editar', [FormController::class, 'edit'])->name('configs.edit');
     Route::put('/configs/form/{formulario}', [FormController::class, 'update'])->name('configs.update');
