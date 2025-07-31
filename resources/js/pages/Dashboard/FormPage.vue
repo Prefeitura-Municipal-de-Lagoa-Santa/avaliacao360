@@ -77,14 +77,14 @@ function handleSave(groupsPayload: GroupPayload[]) {
 
   if (isEditing.value) {
     // Ao editar, usa form.put() que envia uma requisição PUT.
-    form.put(route('configs.update', { formulario: props.form!.id }), {
+    form.put(route('configs.form.update', { formulario: props.form!.id }), {
         onError: (errors) => {
             console.error("Erro ao atualizar:", errors);
         },
     });
   } else {
     // Ao criar, usa form.post() que envia uma requisição POST.
-    form.post(route('configs.store'), {
+    form.post(route('configs.form.store'), {
         onError: (errors) => {
             console.error("Erro ao criar:", errors);
         },
