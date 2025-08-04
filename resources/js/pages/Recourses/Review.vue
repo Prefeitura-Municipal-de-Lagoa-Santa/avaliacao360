@@ -13,6 +13,7 @@ const props = defineProps<{
     response: string | null;
     attachments: Array<{ name: string; url: string }>;
     responseAttachments?: Array<{ name: string; url: string }>;
+    responsiblePersons: Array<{ id: number; name: string; registration_number: string }>;
     person: { name: string };
     evaluation: {
       id: number;
@@ -24,6 +25,8 @@ const props = defineProps<{
     };
     logs: Array<{ status: string; message: string | null; created_at: string }>;
   };
+  availablePersons: Array<{ id: number; name: string; registration_number: string }>;
+  canManageAssignees: boolean;
 }>();
 
 const response = ref('');
@@ -31,6 +34,10 @@ const decision = ref<'respondido' | 'indeferido' | null>(null);
 const responseAttachments = ref<File[]>([]);
 const fileInput = ref<HTMLInputElement | null>(null);
 const isAnalyzing = ref(props.recourse.status === 'em_analise');
+
+// Estados para gerenciar responsáveis
+const selectedPersonId = ref<number | null>(null);
+const showAssignForm = ref(false);
 
 function markAsAnalyzing() {
   router.post(route('recourses.markAnalyzing', props.recourse.id), {}, {
@@ -77,15 +84,41 @@ function submitAnalysis() {
   formData.append('status', decision.value);
   formData.append('response', response.value);
   
-  // Adiciona anexos se houver
+  // Adiciona os anexos de resposta
   responseAttachments.value.forEach((file, index) => {
     formData.append(`response_attachments[${index}]`, file);
   });
 
   router.post(route('recourses.respond', props.recourse.id), formData, {
-    headers: {
-      'Content-Type': 'multipart/form-data',
+    forceFormData: true,
+  });
+}
+
+function assignResponsible() {
+  if (!selectedPersonId.value) {
+    alert('Selecione uma pessoa para atribuir como responsável.');
+    return;
+  }
+
+  router.post(route('recourses.assignResponsible', props.recourse.id), {
+    person_id: selectedPersonId.value,
+  }, {
+    preserveScroll: true,
+    onSuccess: () => {
+      selectedPersonId.value = null;
+      showAssignForm.value = false;
     },
+  });
+}
+
+function removeResponsible(personId: number) {
+  if (!confirm('Tem certeza que deseja remover este responsável?')) {
+    return;
+  }
+
+  router.delete(route('recourses.removeResponsible', props.recourse.id), {
+    data: { person_id: personId },
+    preserveScroll: true,
   });
 }
 
@@ -149,6 +182,93 @@ function goBack() {
           >
             <icons.FileSearch class="w-4 h-4 mr-1" /> Ver respostas completas
           </a>
+        </div>
+      </div>
+
+      <!-- SEÇÃO: Responsáveis (apenas para RH) -->
+            <!-- Seção de Responsáveis -->
+      <div v-if="canManageAssignees" class="mt-6 border-t pt-4">
+        <h3 class="font-semibold text-sm text-gray-700 mb-3 flex items-center gap-2">
+          <icons.Users class="w-4 h-4" />
+          Responsáveis pelo Recurso
+        </h3>
+        
+        <!-- Lista de responsáveis atuais -->
+        <div v-if="recourse.responsiblePersons.length" class="mb-4">
+          <div class="space-y-2">
+            <div
+              v-for="responsible in recourse.responsiblePersons"
+              :key="responsible.id"
+              class="flex items-center justify-between bg-blue-50 p-3 rounded border"
+            >
+              <div class="flex items-center gap-2">
+                <icons.User class="w-4 h-4 text-blue-600" />
+                <span class="text-sm font-medium">{{ responsible.name }}</span>
+                <span class="text-xs text-gray-500">({{ responsible.registration_number }})</span>
+              </div>
+              <button
+                @click="removeResponsible(responsible.id)"
+                class="text-red-600 hover:text-red-800 p-1"
+                type="button"
+                title="Remover responsável"
+              >
+                <icons.X class="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+        </div>
+        
+        <div v-else class="mb-4 text-sm text-gray-500 italic">
+          Nenhum responsável atribuído ainda.
+        </div>
+
+        <!-- Formulário para adicionar responsável -->
+        <div class="bg-gray-50 p-4 rounded border">
+          <div v-if="!showAssignForm" class="text-center">
+            <button
+              @click="showAssignForm = true"
+              class="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 text-sm inline-flex items-center gap-2"
+            >
+              <icons.UserPlus class="w-4 h-4" />
+              Adicionar Responsável
+            </button>
+          </div>
+
+          <div v-else class="space-y-3">
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-1">
+                Selecionar Responsável (Comissão)
+              </label>
+              <select
+                v-model="selectedPersonId"
+                class="w-full border rounded p-2 text-sm"
+              >
+                <option value="" disabled>Escolha uma pessoa...</option>
+                <option
+                  v-for="person in availablePersons.filter(p => !recourse.responsiblePersons.some(r => r.id === p.id))"
+                  :key="person.id"
+                  :value="person.id"
+                >
+                  {{ person.registration_number }} - {{ person.name }}
+                </option>
+              </select>
+            </div>
+            <div class="flex gap-2">
+              <button
+                @click="assignResponsible"
+                class="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 text-sm"
+                :disabled="!selectedPersonId"
+              >
+                Atribuir
+              </button>
+              <button
+                @click="showAssignForm = false; selectedPersonId = null"
+                class="px-4 py-2 bg-gray-600 text-white rounded hover:bg-gray-700 text-sm"
+              >
+                Cancelar
+              </button>
+            </div>
+          </div>
         </div>
       </div>
 

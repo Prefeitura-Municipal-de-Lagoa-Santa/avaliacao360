@@ -51,6 +51,13 @@ class Person extends Model
         return $this->belongsTo(User::class);
     }
 
+    public function assignedRecourses()
+    {
+        return $this->belongsToMany(EvaluationRecourse::class, 'evaluation_recourse_assignees', 'person_id', 'recourse_id')
+                    ->withTimestamps()
+                    ->withPivot('assigned_by', 'assigned_at');
+    }
+
     /**
      * Escopo para obter apenas pessoas elegíveis para avaliação.
      */

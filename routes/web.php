@@ -130,6 +130,12 @@ Route::middleware(['auth', 'verified', EnsureCpfIsFilled::class, RedirectIfMustC
     Route::post('/recourses/{recourse}/respond', [EvaluationRecourseController::class, 'respond'])
         ->name('recourses.respond');
 
+    Route::post('/recourses/{recourse}/assign-responsible', [EvaluationRecourseController::class, 'assignResponsible'])
+        ->name('recourses.assignResponsible');
+
+    Route::delete('/recourses/{recourse}/remove-responsible', [EvaluationRecourseController::class, 'removeResponsible'])
+        ->name('recourses.removeResponsible');
+
     Route::get('/evaluations/unanswered', [EvaluationController::class, 'unanswered'])->name('evaluations.unanswered');
 
     // Rotas de notificações

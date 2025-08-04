@@ -45,6 +45,18 @@ class EvaluationRecourse extends Model
         return $this->hasMany(EvaluationRecourseResponseAttachment::class, 'recourse_id');
     }
 
+    public function assignees()
+    {
+        return $this->hasMany(EvaluationRecourseAssignee::class, 'recourse_id');
+    }
+
+    public function responsiblePersons()
+    {
+        return $this->belongsToMany(Person::class, 'evaluation_recourse_assignees', 'recourse_id', 'person_id')
+                    ->withTimestamps()
+                    ->withPivot('assigned_by', 'assigned_at');
+    }
+
     public function logs()
     {
         return $this->hasMany(EvaluationRecourseLog::class, 'recourse_id');

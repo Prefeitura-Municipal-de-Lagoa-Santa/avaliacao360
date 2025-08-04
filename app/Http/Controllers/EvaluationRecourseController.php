@@ -3,10 +3,12 @@
 namespace App\Http\Controllers;
 
 use App\Models\EvaluationRecourse;
+use App\Models\EvaluationRecourseAssignee;
 use App\Models\EvaluationRecourseAttachment;
 use App\Models\EvaluationRecourseResponseAttachment;
 use App\Models\EvaluationRequest;
 use App\Models\Person;
+use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Storage;
@@ -15,16 +17,29 @@ class EvaluationRecourseController extends Controller
 {
     public function index(Request $request)
     {
-        if (!user_can('recourse')) {
-            return redirect()->route('dashboard')->with('error', 'Você não tem permissão.');
-        }
-
+        $user = Auth::user();
+        $person = Person::where('cpf', $user->cpf)->first();
+        
         $status = $request->get('status', 'aberto');
 
-        $recourses = EvaluationRecourse::with([
+        $query = EvaluationRecourse::with([
             'person',
             'evaluation.evaluation.form',
-        ])
+            'responsiblePersons',
+        ]);
+
+        // Se não é RH (que tem permissão total), filtra apenas pelos recursos que a pessoa é responsável
+        if (!user_can('recourse')) {
+            if (!$person) {
+                return redirect()->route('dashboard')->with('error', 'Dados de pessoa não encontrados.');
+            }
+            
+            $query->whereHas('responsiblePersons', function($q) use ($person) {
+                $q->where('person_id', $person->id);
+            });
+        }
+
+        $recourses = $query
             ->when($status, fn($q) => $q->where('status', $status))
             ->latest()
             ->paginate(10)
@@ -40,6 +55,10 @@ class EvaluationRecourseController extends Controller
                         'id' => $recourse->evaluation->id,
                         'year' => optional($recourse->evaluation->evaluation->form)->year ?? '—',
                     ],
+                    'responsible_persons' => $recourse->responsiblePersons->map(fn($p) => [
+                        'name' => $p->name,
+                        'registration_number' => $p->registration_number,
+                    ]),
                 ];
             })
             ->withQueryString();
@@ -47,6 +66,7 @@ class EvaluationRecourseController extends Controller
         return inertia('Recourses/Index', [
             'recourses' => $recourses,
             'status' => $status,
+            'canManageAssignees' => user_can('recourse'), // RH pode gerenciar responsáveis
         ]);
     }
 
@@ -144,15 +164,45 @@ class EvaluationRecourseController extends Controller
 
     public function review(EvaluationRecourse $recourse)
     {
+        $user = Auth::user();
+        $person = Person::where('cpf', $user->cpf)->first();
+        
+        // Verifica se a pessoa tem permissão (RH ou é responsável pelo recurso)
+        $canAccess = user_can('recourse') || 
+                    ($person && $recourse->responsiblePersons()->where('person_id', $person->id)->exists());
+        
+        if (!$canAccess) {
+            return redirect()->route('dashboard')->with('error', 'Você não tem permissão para acessar este recurso.');
+        }
+
         $recourse->load([
             'evaluation.evaluation.form',
             'evaluation.evaluation.evaluatedPerson',
             'evaluation.evaluation.answers.question',
             'attachments',
             'responseAttachments',
+            'responsiblePersons',
             'person',
             'logs' => fn($q) => $q->orderBy('created_at'),
         ]);
+
+        // Busca apenas pessoas com role "Comissão" para poder atribuir responsáveis (apenas RH)
+        $availablePersons = user_can('recourse') 
+            ? Person::whereIn('cpf', function ($query) {
+                    $query->select('cpf')
+                        ->from('users')
+                        ->whereExists(function ($subQuery) {
+                            $subQuery->select('*')
+                                ->from('role_user')
+                                ->join('roles', 'roles.id', '=', 'role_user.role_id')
+                                ->whereColumn('role_user.user_id', 'users.id')
+                                ->where('roles.name', 'Comissão');
+                        });
+                })
+                ->select('id', 'name', 'registration_number')
+                ->orderBy('name')
+                ->get()
+            : collect();
 
         return inertia('Recourses/Review', [
             'recourse' => [
@@ -167,6 +217,11 @@ class EvaluationRecourseController extends Controller
                 'responseAttachments' => $recourse->responseAttachments->map(fn($a) => [
                     'name' => $a->original_name,
                     'url' => Storage::url($a->file_path),
+                ]),
+                'responsiblePersons' => $recourse->responsiblePersons->map(fn($p) => [
+                    'id' => $p->id,
+                    'name' => $p->name,
+                    'registration_number' => $p->registration_number,
                 ]),
                 'person' => [
                     'name' => $recourse->person->name,
@@ -188,6 +243,8 @@ class EvaluationRecourseController extends Controller
                     'created_at' => $log->created_at->format('d/m/Y H:i'),
                 ]),
             ],
+            'availablePersons' => $availablePersons,
+            'canManageAssignees' => user_can('recourse'),
         ]);
     }
 
@@ -240,5 +297,85 @@ class EvaluationRecourseController extends Controller
         return redirect()
             ->back()
             ->with('success', 'Parecer salvo com sucesso!');
+    }
+
+    public function assignResponsible(Request $request, EvaluationRecourse $recourse)
+    {
+        if (!user_can('recourse')) {
+            return redirect()->back()->with('error', 'Você não tem permissão para atribuir responsáveis.');
+        }
+
+        $validated = $request->validate([
+            'person_id' => ['required', 'exists:people,id'],
+        ]);
+
+        // Verifica se a pessoa tem role "Comissão"
+        $person = Person::find($validated['person_id']);
+        if (!$person) {
+            return redirect()->back()->with('error', 'Pessoa não encontrada.');
+        }
+
+        // Verifica se a pessoa tem role "Comissão" através do CPF
+        $user = User::where('cpf', $person->cpf)->first();
+        if (!$user || !$user->roles->pluck('name')->contains('Comissão')) {
+            return redirect()->back()->with('error', 'Apenas pessoas com role "Comissão" podem ser responsáveis por recursos.');
+        }
+
+        $user = Auth::user();
+        $assignedBy = Person::where('cpf', $user->cpf)->first();
+
+        // Verifica se a pessoa já é responsável
+        $exists = EvaluationRecourseAssignee::where('recourse_id', $recourse->id)
+                                          ->where('person_id', $validated['person_id'])
+                                          ->exists();
+
+        if ($exists) {
+            return redirect()->back()->with('error', 'Esta pessoa já é responsável por este recurso.');
+        }
+
+        EvaluationRecourseAssignee::create([
+            'recourse_id' => $recourse->id,
+            'person_id' => $validated['person_id'],
+            'assigned_by' => $assignedBy?->id,
+            'assigned_at' => now(),
+        ]);
+
+        $assignedPerson = Person::find($validated['person_id']);
+        
+        $recourse->logs()->create([
+            'status' => 'responsavel_atribuido',
+            'message' => "Responsável atribuído: {$assignedPerson->name}",
+        ]);
+
+        return redirect()->back()->with('success', 'Responsável atribuído com sucesso!');
+    }
+
+    public function removeResponsible(Request $request, EvaluationRecourse $recourse)
+    {
+        if (!user_can('recourse')) {
+            return redirect()->back()->with('error', 'Você não tem permissão para remover responsáveis.');
+        }
+
+        $validated = $request->validate([
+            'person_id' => ['required', 'exists:people,id'],
+        ]);
+
+        $assignee = EvaluationRecourseAssignee::where('recourse_id', $recourse->id)
+                                             ->where('person_id', $validated['person_id'])
+                                             ->first();
+
+        if (!$assignee) {
+            return redirect()->back()->with('error', 'Esta pessoa não é responsável por este recurso.');
+        }
+
+        $removedPerson = Person::find($validated['person_id']);
+        $assignee->delete();
+
+        $recourse->logs()->create([
+            'status' => 'responsavel_removido',
+            'message' => "Responsável removido: {$removedPerson->name}",
+        ]);
+
+        return redirect()->back()->with('success', 'Responsável removido com sucesso!');
     }
 }
