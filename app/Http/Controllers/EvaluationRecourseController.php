@@ -217,8 +217,13 @@ class EvaluationRecourseController extends Controller
             'logs' => fn($q) => $q->orderBy('created_at'),
         ]);
 
-        // Busca apenas pessoas com role "Comissão" para poder atribuir responsáveis (apenas RH)
-        $availablePersons = $this->isRH() 
+        // Busca apenas pessoas com role "Comissão" para poder atribuir responsáveis (apenas RH puro)
+        $user = Auth::user();
+        $isRH = $this->isRH();
+        $isComissao = $user && $user->roles->pluck('name')->contains('Comissão');
+        $canManageAssignees = $isRH && !$isComissao; // Apenas RH puro pode gerenciar
+        
+        $availablePersons = $canManageAssignees 
             ? Person::whereIn('cpf', function ($query) {
                     $query->select('cpf')
                         ->from('users')
@@ -275,8 +280,8 @@ class EvaluationRecourseController extends Controller
                 ]),
             ],
             'availablePersons' => $availablePersons,
-            'canManageAssignees' => $this->isRH(), // Apenas RH pode gerenciar responsáveis
-            'userRole' => $this->isRH() ? 'RH' : 'Comissão', // Para debug/informação
+            'canManageAssignees' => $canManageAssignees, // Apenas RH puro pode gerenciar responsáveis
+            'userRole' => $isComissao ? 'Comissão' : ($isRH ? 'RH' : 'Sem permissão'), // Para debug/informação
         ]);
     }
 
@@ -343,8 +348,12 @@ class EvaluationRecourseController extends Controller
 
     public function assignResponsible(Request $request, EvaluationRecourse $recourse)
     {
-        // Apenas RH pode atribuir responsáveis
-        if (!$this->isRH()) {
+        $user = Auth::user();
+        $isRH = $this->isRH();
+        $isComissao = $user && $user->roles->pluck('name')->contains('Comissão');
+        
+        // Apenas RH puro (que não é Comissão) pode atribuir responsáveis
+        if (!$isRH || $isComissao) {
             return redirect()->back()->with('error', 'Apenas o RH pode atribuir responsáveis.');
         }
 
@@ -395,8 +404,12 @@ class EvaluationRecourseController extends Controller
 
     public function removeResponsible(Request $request, EvaluationRecourse $recourse)
     {
-        // Apenas RH pode remover responsáveis
-        if (!$this->isRH()) {
+        $user = Auth::user();
+        $isRH = $this->isRH();
+        $isComissao = $user && $user->roles->pluck('name')->contains('Comissão');
+        
+        // Apenas RH puro (que não é Comissão) pode remover responsáveis
+        if (!$isRH || $isComissao) {
             return redirect()->back()->with('error', 'Apenas o RH pode remover responsáveis.');
         }
 
