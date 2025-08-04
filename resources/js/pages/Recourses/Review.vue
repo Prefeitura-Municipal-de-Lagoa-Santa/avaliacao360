@@ -126,7 +126,7 @@ function goBack() {
   if (window.history.length > 1) {
     window.history.back();
   } else {
-    router.get(route('recourses.dashboard'));
+    router.get(route('recourse')); // Dashboard de recursos
   }
 }
 </script>

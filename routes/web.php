@@ -38,6 +38,20 @@ Route::middleware(['auth', 'verified', EnsureCpfIsFilled::class, RedirectIfMustC
 
     Route::get('/configs', [DashboardController::class, 'configs'])->name('configs');
 
+    // Debug temporário
+    Route::get('/debug-user', function() {
+        $user = Auth::user();
+        if (!$user) return 'Usuário não logado';
+        
+        return [
+            'name' => $user->name,
+            'cpf' => $user->cpf,
+            'roles' => $user->roles->pluck('name'),
+            'user_can_recourse' => user_can('recourse'),
+            'is_comissao' => $user->roles->pluck('name')->contains('Comissão'),
+        ];
+    });
+
     Route::get('/recourse', [DashboardController::class, 'recourse'])->name('recourse');
 
     Route::get('/configs/form/create', [FormController::class, 'create'])->name('configs.create');
