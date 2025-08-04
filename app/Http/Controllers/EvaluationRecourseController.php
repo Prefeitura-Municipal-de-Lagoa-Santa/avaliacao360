@@ -47,20 +47,24 @@ class EvaluationRecourseController extends Controller
         $user = Auth::user();
         $person = Person::where('cpf', $user->cpf)->first();
         
-        // Para RH, status padrão é 'aberto'. Para Comissão, sem filtro padrão (todos os status)
+        $isRH = user_can('recourse');
+        
+        // PRIORIDADE: Se tem role "Comissão", trata como Comissão mesmo que tenha permissão RH
+        $isComissao = $user && $user->roles->pluck('name')->contains('Comissão');
+        
+        // Para RH (que não é Comissão), status padrão é 'aberto'. Para Comissão, sem filtro padrão (todos os status)
         $status = $request->get('status');
-        if (!$status && $this->isRH()) {
-            $status = 'aberto'; // RH vê recursos abertos por padrão
+        if (!$status && $isRH && !$isComissao) {
+            $status = 'aberto'; // Apenas RH puro vê recursos abertos por padrão
         }
 
         $query = EvaluationRecourse::with([
             'person',
-            'evaluation.evaluation.form',
             'responsiblePersons',
         ]);
 
-        // Se não é RH (que tem permissão total), filtra apenas pelos recursos que a pessoa é responsável
-        if (!$this->isRH()) {
+        // Se é Comissão OU se não é RH, filtra apenas pelos recursos que a pessoa é responsável
+        if ($isComissao || !$isRH) {
             if (!$person) {
                 return redirect()->route('dashboard')->with('error', 'Dados de pessoa não encontrados.');
             }
@@ -84,8 +88,8 @@ class EvaluationRecourseController extends Controller
                         'name' => $recourse->person->name ?? '—',
                     ],
                     'evaluation' => [
-                        'id' => $recourse->evaluation->id,
-                        'year' => optional($recourse->evaluation->evaluation->form)->year ?? '—',
+                        'id' => $recourse->evaluation->id ?? null,
+                        'year' => '—', // Temporariamente removido o relacionamento aninhado
                     ],
                     'responsiblePersons' => $recourse->responsiblePersons->map(fn($p) => [
                         'name' => $p->name,
@@ -98,8 +102,8 @@ class EvaluationRecourseController extends Controller
         return inertia('Recourses/Index', [
             'recourses' => $recourses,
             'status' => $status ?? 'todos', // Para mostrar no título
-            'canManageAssignees' => $this->isRH(), // Apenas RH pode gerenciar responsáveis
-            'userRole' => $this->isRH() ? 'RH' : 'Comissão', // Para debug/informação
+            'canManageAssignees' => $isRH && !$isComissao, // Apenas RH puro pode gerenciar responsáveis
+            'userRole' => $isComissao ? 'Comissão' : ($isRH ? 'RH' : 'Sem permissão'), // Para debug/informação
         ]);
     }
 

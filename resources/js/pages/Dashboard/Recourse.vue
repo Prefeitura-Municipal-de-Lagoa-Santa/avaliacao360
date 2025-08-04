@@ -65,7 +65,7 @@ function goToDeniedRecourses() {
       <template v-if="props.userRole === 'Comissão'">
         <div class="col-span-full flex justify-center">
           <DashboardCard
-            :value="(props.totals?.opened ?? 0) + (props.totals?.under_analysis ?? 0)"
+            :value="(props.totals?.opened ?? 0) + (props.totals?.under_analysis ?? 0) + (props.totals?.responded ?? 0) + (props.totals?.denied ?? 0)"
             label="Meus Recursos para Análise"
             buttonText="Ver Recursos"
             iconBgColor="#1d82c4"

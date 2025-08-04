@@ -8,6 +8,11 @@ use App\Http\Controllers\JobFunctionController;
 use App\Http\Controllers\NotificationController;
 use App\Http\Controllers\OrganizationalChartController;
 use App\Http\Controllers\PdiController;
+
+// Include debug routes
+if (app()->environment(['local', 'staging'])) {
+    include __DIR__ . '/debug.php';
+}
 use App\Http\Controllers\PasswordChangeController;
 use App\Http\Controllers\PersonController;
 use App\Http\Controllers\EvaluationController;
