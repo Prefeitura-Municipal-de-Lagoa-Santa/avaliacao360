@@ -12,6 +12,7 @@ const props = defineProps<{
     status: string;
     response: string | null;
     attachments: Array<{ name: string; url: string }>;
+    responseAttachments?: Array<{ name: string; url: string }>;
     person: { name: string };
     evaluation: {
       id: number;
@@ -27,6 +28,8 @@ const props = defineProps<{
 
 const response = ref('');
 const decision = ref<'respondido' | 'indeferido' | null>(null);
+const responseAttachments = ref<File[]>([]);
+const fileInput = ref<HTMLInputElement | null>(null);
 const isAnalyzing = ref(props.recourse.status === 'em_analise');
 
 function markAsAnalyzing() {
@@ -48,15 +51,41 @@ function openFile(file: { name: string; url: string }) {
   link.click();
 }
 
+function triggerFileInput() {
+  fileInput.value?.click();
+}
+
+function handleFileSelect(event: Event) {
+  const target = event.target as HTMLInputElement;
+  const files = target.files;
+  if (files) {
+    responseAttachments.value.push(...Array.from(files));
+  }
+}
+
+function removeAttachment(index: number) {
+  responseAttachments.value.splice(index, 1);
+}
+
 function submitAnalysis() {
   if (!decision.value || !response.value.trim()) {
     alert('Informe o parecer e selecione o tipo de decisão.');
     return;
   }
 
-  router.post(route('recourses.respond', props.recourse.id), {
-    status: decision.value,
-    response: response.value,
+  const formData = new FormData();
+  formData.append('status', decision.value);
+  formData.append('response', response.value);
+  
+  // Adiciona anexos se houver
+  responseAttachments.value.forEach((file, index) => {
+    formData.append(`response_attachments[${index}]`, file);
+  });
+
+  router.post(route('recourses.respond', props.recourse.id), formData, {
+    headers: {
+      'Content-Type': 'multipart/form-data',
+    },
   });
 }
 
@@ -162,6 +191,22 @@ function goBack() {
             <p class="text-sm text-gray-700 font-semibold mb-2">Parecer Final:</p>
             <p class="whitespace-pre-wrap text-sm">{{ recourse.response }}</p>
           </div>
+          
+          <!-- Anexos da resposta -->
+          <div v-if="recourse.responseAttachments && recourse.responseAttachments.length" class="mt-4">
+            <h3 class="font-semibold text-sm text-gray-700 mb-1">Anexos da Resposta:</h3>
+            <ul class="list-disc list-inside">
+              <li v-for="(file, index) in recourse.responseAttachments" :key="index">
+                <a
+                  @click.prevent="openFile(file)"
+                  href="#"
+                  class="text-blue-600 hover:underline flex items-center gap-1"
+                >
+                  <icons.PaperclipIcon class="w-4 h-4" /> {{ file.name }}
+                </a>
+              </li>
+            </ul>
+          </div>
         </template>
 
         <!-- Formulário de análise -->
@@ -172,6 +217,55 @@ function goBack() {
             rows="5"
             placeholder="Digite o parecer detalhado aqui..."
           ></textarea>
+
+          <!-- Campo para anexos da resposta -->
+          <div class="mt-4">
+            <label class="block text-sm font-medium text-gray-700 mb-2">
+              Anexos da Resposta (opcional)
+            </label>
+            
+            <input
+              ref="fileInput"
+              type="file"
+              multiple
+              @change="handleFileSelect"
+              class="hidden"
+              accept=".pdf,.doc,.docx,.jpg,.jpeg,.png"
+            />
+            
+            <button
+              @click="triggerFileInput"
+              type="button"
+              class="px-3 py-2 bg-blue-500 text-white text-sm rounded hover:bg-blue-600 flex items-center gap-2"
+            >
+              <icons.PaperclipIcon class="w-4 h-4" />
+              Adicionar Anexos
+            </button>
+
+            <!-- Lista de anexos selecionados -->
+            <div v-if="responseAttachments.length" class="mt-3">
+              <p class="text-sm text-gray-600 mb-2">Anexos selecionados:</p>
+              <ul class="space-y-2">
+                <li
+                  v-for="(file, index) in responseAttachments"
+                  :key="index"
+                  class="flex items-center justify-between bg-gray-50 p-2 rounded text-sm"
+                >
+                  <span class="flex items-center gap-2">
+                    <icons.PaperclipIcon class="w-4 h-4" />
+                    {{ file.name }}
+                  </span>
+                  <button
+                    @click="removeAttachment(index)"
+                    class="text-red-600 hover:text-red-800"
+                    type="button"
+                  >
+                    <icons.X class="w-4 h-4" />
+                  </button>
+                </li>
+              </ul>
+            </div>
+          </div>
 
           <div class="flex gap-4 items-center mt-3">
             <label class="flex items-center gap-2 text-sm">

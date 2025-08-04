@@ -101,7 +101,7 @@ class PersonController extends Controller
         // Lista de possíveis chefes (ex: quem tem função de chefia)
         $managerOptions = Person::whereNotNull('job_function_id')
             ->orderBy('name')
-            ->get(['id', 'name']);
+            ->get(['id', 'name', 'registration_number']);
 
         $subordinates = $person->subordinates()->orderBy('name')->get(['id', 'name', 'registration_number']);
 

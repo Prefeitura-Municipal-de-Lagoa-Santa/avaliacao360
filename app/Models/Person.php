@@ -31,8 +31,8 @@ class Person extends Model
     ];
 
     protected $casts = [
-        'admission_date' => 'date',
-        'dismissal_date' => 'date',
+        'admission_date' => 'datetime',
+        'dismissal_date' => 'datetime',
     ];
 
     /**

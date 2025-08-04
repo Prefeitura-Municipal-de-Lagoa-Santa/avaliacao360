@@ -8,24 +8,16 @@ const props = defineProps<{
     id: number;
     text: string;
     status: string;
-    response: string | null;
-    responded_at: string | null;
+    response?: string;
+    responded_at?: string;
+    attachments: Array<{ name: string; url: string }>;
+    responseAttachments?: Array<{ name: string; url: string }>;
     evaluation: {
-      year: string;
       id: number;
+      year: string;
     };
-    person: {
-      name: string;
-    };
-    attachments: Array<{
-      name: string;
-      url: string;
-    }>;
-    logs: Array<{
-      status: string;
-      message: string | null;
-      created_at: string;
-    }>;
+    person: { name: string };
+    logs: Array<{ status: string; message: string; created_at: string }>;
   };
 }>();
 
@@ -121,6 +113,23 @@ function goBack() {
         <p class="text-xs text-gray-500 mt-1">
           Respondido em: {{ recourse.responded_at }}
         </p>
+        
+        <!-- Anexos da resposta -->
+        <div v-if="recourse.responseAttachments && recourse.responseAttachments.length" class="mt-4">
+          <h4 class="font-semibold text-sm text-gray-700 mb-1">Anexos da Resposta:</h4>
+          <ul class="list-disc list-inside space-y-1">
+            <li v-for="(file, index) in recourse.responseAttachments" :key="index">
+              <a
+                href="#"
+                @click.prevent="openFile(file)"
+                class="text-blue-600 hover:underline flex items-center gap-1"
+              >
+                <icons.PaperclipIcon class="w-4 h-4" />
+                {{ file.name }}
+              </a>
+            </li>
+          </ul>
+        </div>
       </div>
 
       <!-- Linha do tempo -->

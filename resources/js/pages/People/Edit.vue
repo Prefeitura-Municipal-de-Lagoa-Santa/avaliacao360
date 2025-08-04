@@ -23,7 +23,7 @@ const props = defineProps<{
   jobFunctions: Array<{ id: number; name: string }>;
   organizationalUnits: Array<{ id: number; name: string }>;
   functionalStatuses: Array<string>;
-  managerOptions: Array<{ id: number; name: string }>;
+  managerOptions: Array<{ id: number; name: string; registration_number: string | null }>;
   errors: Object;
   subordinates: Array<{ id: number; name: string; registration_number: string | null }>;
 }>();
@@ -158,7 +158,9 @@ const submit = () => {
                 class="block w-full px-3 py-2 border rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
                 :class="{ 'border-red-500': form.errors.direct_manager_id }">
                 <option :value="null">-- Nenhum Chefe --</option>
-                <option v-for="manager in managerOptions" :key="manager.id" :value="manager.id">{{ manager.name }}</option>
+                <option v-for="manager in managerOptions" :key="manager.id" :value="manager.id">
+                  {{ manager.registration_number ? `${manager.registration_number} - ${manager.name}` : manager.name }}
+                </option>
               </select>
               <div v-if="form.errors.direct_manager_id" class="text-sm text-red-600 mt-1">{{ form.errors.direct_manager_id }}</div>
             </div>

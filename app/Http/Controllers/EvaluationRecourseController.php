@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\EvaluationRecourse;
 use App\Models\EvaluationRecourseAttachment;
+use App\Models\EvaluationRecourseResponseAttachment;
 use App\Models\EvaluationRequest;
 use App\Models\Person;
 use Illuminate\Http\Request;
@@ -104,6 +105,7 @@ class EvaluationRecourseController extends Controller
         $recourse->load([
             'evaluation.evaluation.form',
             'attachments',
+            'responseAttachments',
             'person',
             'user',
             'logs' => fn($q) => $q->orderBy('created_at'),
@@ -118,11 +120,15 @@ class EvaluationRecourseController extends Controller
                 'responded_at' => optional($recourse->responded_at)?->format('Y-m-d'),
                 'attachments' => $recourse->attachments->map(fn($a) => [
                     'name' => $a->original_name,
-                    'url' => Storage::disk('public')->url($a->file_path),
+                    'url' => Storage::url($a->file_path),
+                ]),
+                'responseAttachments' => $recourse->responseAttachments->map(fn($a) => [
+                    'name' => $a->original_name,
+                    'url' => Storage::url($a->file_path),
                 ]),
                 'evaluation' => [
-                    'year' => optional($recourse->evaluation->evaluation->form)->year_formatted ?? '—',
-                    'id' => $recourse->evaluation->id,
+                    'id' => $recourse->evaluation->evaluation->id,
+                    'year' => optional($recourse->evaluation->evaluation->form)->year ?? '—',
                 ],
                 'person' => [
                     'name' => $recourse->person->name,
@@ -143,6 +149,7 @@ class EvaluationRecourseController extends Controller
             'evaluation.evaluation.evaluatedPerson',
             'evaluation.evaluation.answers.question',
             'attachments',
+            'responseAttachments',
             'person',
             'logs' => fn($q) => $q->orderBy('created_at'),
         ]);
@@ -155,14 +162,18 @@ class EvaluationRecourseController extends Controller
                 'response' => $recourse->response,
                 'attachments' => $recourse->attachments->map(fn($a) => [
                     'name' => $a->original_name,
-                    'url' => Storage::disk('public')->url($a->file_path),
+                    'url' => Storage::url($a->file_path),
+                ]),
+                'responseAttachments' => $recourse->responseAttachments->map(fn($a) => [
+                    'name' => $a->original_name,
+                    'url' => Storage::url($a->file_path),
                 ]),
                 'person' => [
                     'name' => $recourse->person->name,
                 ],
                 'evaluation' => [
                     'id' => $recourse->evaluation->evaluation->id,
-                    'year' => optional($recourse->evaluation->evaluation->form)->year_formatted ?? '—',
+                    'year' => optional($recourse->evaluation->evaluation->form)->year ?? '—',
                     'type' => $recourse->evaluation->evaluation->type ?? '—',
                     'form_name' => $recourse->evaluation->evaluation->form->name ?? '—',
                     'avaliado' => $recourse->evaluation->evaluation->evaluatedPerson->name ?? '—',
@@ -200,17 +211,31 @@ class EvaluationRecourseController extends Controller
         $validated = $request->validate([
             'status' => ['required', 'in:respondido,indeferido'],
             'response' => ['required', 'string', 'min:5'],
+            'response_attachments.*' => ['file', 'max:10240'], // Máximo 10MB por arquivo
         ]);
 
         $recourse->update([
             'status' => $validated['status'],
             'response' => $validated['response'],
+            'responded_at' => now(),
         ]);
 
         $recourse->logs()->create([
             'status' => $validated['status'],
             'message' => 'Parecer da comissão registrado.',
         ]);
+
+        // Salva anexos de resposta se houver
+        if ($request->hasFile('response_attachments')) {
+            foreach ($request->file('response_attachments') as $file) {
+                $path = $file->store('recourse_responses', 'public');
+                EvaluationRecourseResponseAttachment::create([
+                    'recourse_id' => $recourse->id,
+                    'file_path' => $path,
+                    'original_name' => $file->getClientOriginalName(),
+                ]);
+            }
+        }
 
         return redirect()
             ->back()
