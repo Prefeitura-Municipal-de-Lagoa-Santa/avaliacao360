@@ -217,6 +217,16 @@ class EvaluationRecourseController extends Controller
             'logs' => fn($q) => $q->orderBy('created_at'),
         ]);
 
+        // DEBUG: Ver qual avaliação está sendo enviada como "do chefe"
+        dd([
+            'recourse_id' => $recourse->id,
+            'evaluation_full' => $recourse->evaluation->evaluation,
+            'evaluation_type' => $recourse->evaluation->evaluation->type,
+            'evaluation_answers' => $recourse->evaluation->evaluation->answers,
+            'form_info' => $recourse->evaluation->evaluation->form,
+            'evaluated_person' => $recourse->evaluation->evaluation->evaluatedPerson,
+        ]);
+
         // Busca apenas pessoas com role "Comissão" para poder atribuir responsáveis (apenas RH puro)
         $user = Auth::user();
         $isRH = $this->isRH();
