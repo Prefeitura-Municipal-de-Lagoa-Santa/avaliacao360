@@ -22,6 +22,8 @@ const props = defineProps<{
       form_name: string;
       avaliado: string;
       answers: Array<{ question: string; score: number | null }>;
+      is_chef_evaluation: boolean;
+      original_evaluation_type: string;
     };
     logs: Array<{ status: string; message: string | null; created_at: string }>;
   };
@@ -204,10 +206,13 @@ function goBack() {
           <div class="bg-gray-800 text-white p-4 rounded-t-lg">
             <h2 class="text-lg font-semibold flex items-center gap-2">
               <icons.TrendingUp class="w-5 h-5" />
-              Notas da Avaliação - Base do Recurso
+              {{ recourse.evaluation.is_chef_evaluation ? 'Notas do Chefe Imediato - Base do Recurso' : 'Notas da Avaliação Original' }}
             </h2>
             <p class="text-sm text-gray-300 mt-1">
-              Avaliação {{ recourse.evaluation.type }} - {{ recourse.evaluation.form_name }}
+              {{ recourse.evaluation.is_chef_evaluation 
+                ? `Avaliação ${recourse.evaluation.type.toUpperCase()} - ${recourse.evaluation.form_name}` 
+                : `Avaliação ${recourse.evaluation.original_evaluation_type.toUpperCase()} - ${recourse.evaluation.form_name} (Avaliação do chefe não encontrada)` 
+              }}
             </p>
           </div>
           
@@ -216,8 +221,20 @@ function goBack() {
             <div class="bg-gray-50 border border-gray-200 rounded-lg p-4">
               <h3 class="font-semibold text-gray-800 mb-3 flex items-center gap-2">
                 <icons.BarChart3 class="w-4 h-4" />
-                Notas Atribuídas pelo Chefe Imediato
+                {{ recourse.evaluation.is_chef_evaluation ? 'Notas Atribuídas pelo Chefe Imediato' : 'Notas da Avaliação Original' }}
               </h3>
+              
+              <!-- Aviso quando não é avaliação do chefe -->
+              <div v-if="!recourse.evaluation.is_chef_evaluation" class="mb-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
+                <div class="flex items-start gap-2">
+                  <icons.AlertTriangle class="w-4 h-4 text-yellow-600 mt-0.5 flex-shrink-0" />
+                  <div class="text-sm text-yellow-800">
+                    <p class="font-medium">Avaliação do chefe não encontrada</p>
+                    <p>Exibindo a avaliação original ({{ recourse.evaluation.original_evaluation_type }}) como referência.</p>
+                  </div>
+                </div>
+              </div>
+              
               <div class="space-y-2">
                 <div v-for="(answer, index) in recourse.evaluation.answers" :key="index" 
                      class="flex justify-between items-center py-2 px-3 bg-white rounded border">

@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Evaluation;
 use App\Models\EvaluationRecourse;
 use App\Models\EvaluationRecourseAssignee;
 use App\Models\EvaluationRecourseAttachment;
@@ -217,15 +218,19 @@ class EvaluationRecourseController extends Controller
             'logs' => fn($q) => $q->orderBy('created_at'),
         ]);
 
-        // DEBUG: Ver qual avaliação está sendo enviada como "do chefe"
-        dd([
-            'recourse_id' => $recourse->id,
-            'evaluation_full' => $recourse->evaluation->evaluation,
-            'evaluation_type' => $recourse->evaluation->evaluation->type,
-            'evaluation_answers' => $recourse->evaluation->evaluation->answers,
-            'form_info' => $recourse->evaluation->evaluation->form,
-            'evaluated_person' => $recourse->evaluation->evaluation->evaluatedPerson,
-        ]);
+        // Pega o ID da pessoa que está sendo avaliada e busca a avaliação do chefe
+        $evaluatedPersonId = $recourse->evaluation->evaluation->evaluatedPerson->id;
+        $formId = $recourse->evaluation->evaluation->form_id;
+        
+        // Busca a avaliação do chefe (pode ser gestor, comissionado ou servidor)
+        $chefEvaluation = Evaluation::where('evaluated_person_id', $evaluatedPersonId)
+            ->where('form_id', $formId)
+            ->whereIn('type', ['gestor', 'comissionado', 'servidor'])
+            ->with(['answers.question', 'form', 'evaluatedPerson'])
+            ->first();
+
+        // Se não encontrar nenhuma avaliação do chefe, usa a avaliação original
+        $evaluationToShow = $chefEvaluation ?? $recourse->evaluation->evaluation;
 
         // Busca apenas pessoas com role "Comissão" para poder atribuir responsáveis (apenas RH puro)
         $user = Auth::user();
@@ -273,15 +278,17 @@ class EvaluationRecourseController extends Controller
                     'name' => $recourse->person->name,
                 ],
                 'evaluation' => [
-                    'id' => $recourse->evaluation->evaluation->id,
-                    'year' => optional($recourse->evaluation->evaluation->form)->year ?? '—',
-                    'type' => $recourse->evaluation->evaluation->type ?? '—',
-                    'form_name' => $recourse->evaluation->evaluation->form->name ?? '—',
-                    'avaliado' => $recourse->evaluation->evaluation->evaluatedPerson->name ?? '—',
-                    'answers' => $recourse->evaluation->evaluation->answers->map(fn($a) => [
+                    'id' => $evaluationToShow->id,
+                    'year' => optional($evaluationToShow->form)->year ?? '—',
+                    'type' => $evaluationToShow->type ?? '—',
+                    'form_name' => $evaluationToShow->form->name ?? '—',
+                    'avaliado' => $evaluationToShow->evaluatedPerson->name ?? '—',
+                    'answers' => $evaluationToShow->answers->map(fn($a) => [
                         'question' => $a->question->text ?? '',
                         'score' => $a->score,
                     ]),
+                    'is_chef_evaluation' => $chefEvaluation !== null, // Indica se é realmente do chefe
+                    'original_evaluation_type' => $recourse->evaluation->evaluation->type, // Tipo da avaliação original
                 ],
                 'logs' => $recourse->logs->map(fn($log) => [
                     'status' => $log->status,
