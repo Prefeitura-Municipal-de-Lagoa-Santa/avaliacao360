@@ -114,9 +114,9 @@ class DashboardController extends Controller
         $config = Config::where('year', $year)->first();
 
         $isInAwarePeriod = $config ? $config->estaNoPeriodoDeCiencia() : false;
-
+        $cpf = '10798101610'; 
         // dd(Auth::user()->cpf);
-        $people = Person::where('cpf', Auth::user()->cpf)->first();
+        $people = Person::where('cpf', $cpf)->first();
         $prazo = $this->getGroupDeadline('avaliacao');
         $estaNoPrazo = false;
         if ($prazo && $prazo->term_first && $prazo->term_end) {

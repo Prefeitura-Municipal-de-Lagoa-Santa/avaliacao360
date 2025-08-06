@@ -29,6 +29,7 @@ const props = defineProps<{
   recourseLink?: string | null;
 }>();
 
+
 // Computed para checar se está dentro do prazo
 const dentroDoPrazo = computed(() => {
   if (!props.prazo?.term_first || !props.prazo?.term_end) return false;

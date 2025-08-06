@@ -17,6 +17,7 @@ class EvaluationRequest extends Model
         'evidencias',
         'assinatura_base64',
         'status',
+        'deleted_by',
     ];
 
     public function evaluation(): BelongsTo
@@ -45,4 +46,9 @@ class EvaluationRequest extends Model
     {
         return $this->belongsTo(Form::class);
     }
+    public function deletedByUser()
+    {
+        return $this->belongsTo(User::class, 'deleted_by');
+    }
+
 }
