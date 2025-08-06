@@ -298,26 +298,67 @@ class DashboardController extends Controller
 
     public function recourse()
     {
-        if (!user_can('recourse')) {
+        $user = Auth::user();
+        $isRH = user_can('recourse');
+        
+        // Verifica se é RH ou se tem role "Comissão"
+        $isComissao = $user && $user->roles->pluck('name')->contains('Comissão');
+        
+        if (!$isRH && !$isComissao) {
             return redirect()->route('evaluations')->with('error', 'Você não tem permissão para acessar essa área.');
         }
 
         $recourse = $this->getGroupDeadline('recourse');
 
-        $total = EvaluationRecourse::count();
-        $responded = EvaluationRecourse::where('status', 'respondido')->count();
-        $denied = EvaluationRecourse::where('status', 'indeferido')->count();
+        // PRIORIDADE: Se tem role "Comissão", trata como Comissão mesmo que tenha permissão RH
+        if ($isComissao) {
+            // Se for da Comissão, mostra apenas os recursos pelos quais é responsável
+            $person = Person::where('cpf', $user->cpf)->first();
+            
+            if (!$person) {
+                return redirect()->route('evaluations')->with('error', 'Dados de pessoa não encontrados.');
+            }
 
-        return Inertia::render('Dashboard/Recourse', [
-            'recourse' => $recourse,
-            'totals' => [
-                'opened' => EvaluationRecourse::where('status', 'aberto')->count(),
-                'under_analysis' => EvaluationRecourse::where('status', 'em_analise')->count(),
-                'responded' => $responded,
-                'denied' => $denied,
-                'analyzed_percent' => $total > 0 ? round($responded / $total * 100) . '%' : '0%',
-            ],
-        ]);
+            // Busca apenas recursos onde a pessoa é responsável
+            $responsibleRecourses = EvaluationRecourse::whereHas('responsiblePersons', function($q) use ($person) {
+                $q->where('person_id', $person->id);
+            });
+
+            $total = $responsibleRecourses->count();
+            $responded = (clone $responsibleRecourses)->where('status', 'respondido')->count();
+            $denied = (clone $responsibleRecourses)->where('status', 'indeferido')->count();
+
+            return Inertia::render('Dashboard/Recourse', [
+                'recourse' => $recourse,
+                'totals' => [
+                    'opened' => (clone $responsibleRecourses)->where('status', 'aberto')->count(),
+                    'under_analysis' => (clone $responsibleRecourses)->where('status', 'em_analise')->count(),
+                    'responded' => $responded,
+                    'denied' => $denied,
+                    'analyzed_percent' => $total > 0 ? round($responded / $total * 100) . '%' : '0%',
+                ],
+                'userRole' => 'Comissão',
+            ]);
+        }
+        
+        // Se for RH (e não tem role Comissão), mostra todos os recursos
+        if ($isRH) {
+            $total = EvaluationRecourse::count();
+            $responded = EvaluationRecourse::where('status', 'respondido')->count();
+            $denied = EvaluationRecourse::where('status', 'indeferido')->count();
+
+            return Inertia::render('Dashboard/Recourse', [
+                'recourse' => $recourse,
+                'totals' => [
+                    'opened' => EvaluationRecourse::where('status', 'aberto')->count(),
+                    'under_analysis' => EvaluationRecourse::where('status', 'em_analise')->count(),
+                    'responded' => $responded,
+                    'denied' => $denied,
+                    'analyzed_percent' => $total > 0 ? round($responded / $total * 100) . '%' : '0%',
+                ],
+                'userRole' => 'RH',
+            ]);
+        }
     }
 
 

@@ -8,6 +8,11 @@ use App\Http\Controllers\JobFunctionController;
 use App\Http\Controllers\NotificationController;
 use App\Http\Controllers\OrganizationalChartController;
 use App\Http\Controllers\PdiController;
+
+// Include debug routes
+if (app()->environment(['local', 'staging'])) {
+    include __DIR__ . '/debug.php';
+}
 use App\Http\Controllers\PasswordChangeController;
 use App\Http\Controllers\PersonController;
 use App\Http\Controllers\EvaluationController;
@@ -37,6 +42,20 @@ Route::middleware(['auth', 'verified', EnsureCpfIsFilled::class, RedirectIfMustC
     Route::get('/calendar', [DashboardController::class, 'calendar'])->name('calendar');
 
     Route::get('/configs', [DashboardController::class, 'configs'])->name('configs');
+
+    // Debug temporário
+    Route::get('/debug-user', function() {
+        $user = Auth::user();
+        if (!$user) return 'Usuário não logado';
+        
+        return [
+            'name' => $user->name,
+            'cpf' => $user->cpf,
+            'roles' => $user->roles->pluck('name'),
+            'user_can_recourse' => user_can('recourse'),
+            'is_comissao' => $user->roles->pluck('name')->contains('Comissão'),
+        ];
+    });
 
     Route::get('/recourse', [DashboardController::class, 'recourse'])->name('recourse');
 
@@ -124,11 +143,20 @@ Route::middleware(['auth', 'verified', EnsureCpfIsFilled::class, RedirectIfMustC
     Route::get('/recourses/{recourse}/review', [EvaluationRecourseController::class, 'review'])
         ->name('recourses.review');
 
+    Route::get('/recourses/{recourse}/person-evaluations', [EvaluationRecourseController::class, 'viewPersonEvaluations'])
+        ->name('recourses.personEvaluations');
+
     Route::post('/recourses/{recourse}/mark-analyzing', [EvaluationRecourseController::class, 'markAnalyzing'])
         ->name('recourses.markAnalyzing');
 
     Route::post('/recourses/{recourse}/respond', [EvaluationRecourseController::class, 'respond'])
         ->name('recourses.respond');
+
+    Route::post('/recourses/{recourse}/assign-responsible', [EvaluationRecourseController::class, 'assignResponsible'])
+        ->name('recourses.assignResponsible');
+
+    Route::delete('/recourses/{recourse}/remove-responsible', [EvaluationRecourseController::class, 'removeResponsible'])
+        ->name('recourses.removeResponsible');
 
     Route::get('/evaluations/unanswered', [EvaluationController::class, 'unanswered'])->name('evaluations.unanswered');
 

@@ -23,4 +23,12 @@ class Question extends Model
     {
         return $this->belongsTo(GroupQuestion::class);
     }
+
+    /**
+     * Accessor para manter compatibilidade com código existente.
+     */
+    public function getTextAttribute()
+    {
+        return $this->text_content;
+    }
 }

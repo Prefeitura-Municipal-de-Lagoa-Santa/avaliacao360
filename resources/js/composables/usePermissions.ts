@@ -28,9 +28,16 @@ export function usePermissions() {
 
   /**
    * Retorna true se o usuário tiver a permissão (direta ou via role) ou for Admin
+   * Caso especial: membros da Comissão podem acessar recursos
    */
   const can = (permission: string): boolean => {
     if (hasRole('Admin')) return true
+    
+    // Permite que membros da Comissão acessem o dashboard de recursos
+    if (permission === 'recourse' && hasRole('Comissão')) {
+      return true
+    }
+    
     return allPermissions.value.includes(permission)
   }
 
