@@ -535,6 +535,7 @@ class EvaluationController extends Controller
 
         // Requisições de recursos já existentes
         $existingRecourses = \App\Models\EvaluationRecourse::where('person_id', $person->id)
+            ->with('evaluation')
             ->get()
             ->keyBy('evaluation_id');
 
@@ -586,6 +587,8 @@ class EvaluationController extends Controller
             $calcEquipe = $equipes->count() ? "Equipe (média): $notaEquipe" : '';
 
             $isGestor = $notaEquipe !== null;
+            
+            // Lógica original da nota
             if (
                 ($isGestor && ($notaAuto === 0 || $notaChefia === 0 || $notaEquipe === null)) ||
                 (!$isGestor && ($notaAuto === 0 || $notaChefia === 0))
@@ -601,11 +604,6 @@ class EvaluationController extends Controller
                     ? "($notaAuto x 25%) + ($notaChefia x 50%) + ($notaEquipe x 25%) = $notaFinal"
                     : "($notaAuto x 30%) + ($notaChefia x 70%) = $notaFinal";
             }
-
-
-            $calcFinal = $isGestor
-                ? "($notaAuto x 25%) + ($notaChefia x 50%) + ($notaEquipe x 25%) = $notaFinal"
-                : "($notaAuto x 30%) + ($notaChefia x 70%) = $notaFinal";
 
             $id = $auto?->id ?? $chefia?->id ?? $equipes->first()?->id;
 
@@ -635,6 +633,26 @@ class EvaluationController extends Controller
             }
 
             $recourse = $existingRecourses->get($id);
+            
+            // Verificar se o recurso foi DEFERIDO e calcular nova nota
+            $finalScoreAfterRecourse = null;
+            $calcFinalAfterRecourse = null;
+            $isRecourseApproved = false;
+            
+            if ($recourse && $recourse->status === 'respondido') {
+                $isRecourseApproved = true;
+                
+                // Calcular nova nota SEM a nota do chefe (deferido)
+                if ($isGestor && $notaEquipe !== null) {
+                    // Com equipe: 50% equipe + 50% auto
+                    $finalScoreAfterRecourse = round(($notaAuto * 0.5) + ($notaEquipe * 0.5), 2);
+                    $calcFinalAfterRecourse = "Recurso DEFERIDO: ($notaAuto x 50%) + ($notaEquipe x 50%) = $finalScoreAfterRecourse";
+                } else {
+                    // Sem equipe: 100% auto
+                    $finalScoreAfterRecourse = $notaAuto;
+                    $calcFinalAfterRecourse = "Recurso DEFERIDO: ($notaAuto x 100%) = $finalScoreAfterRecourse";
+                }
+            }
 
             $evaluations[] = [
                 'year' => $ano,
@@ -649,6 +667,10 @@ class EvaluationController extends Controller
                 'is_in_recourse_period' => $isInRecoursePeriod,
                 'has_recourse' => $recourse !== null,
                 'recourse_id' => $recourse?->id,
+                'recourse_status' => $recourse?->status,
+                'is_recourse_approved' => $isRecourseApproved,
+                'final_score_after_recourse' => $finalScoreAfterRecourse,
+                'calc_final_after_recourse' => $calcFinalAfterRecourse,
             ];
         }
 

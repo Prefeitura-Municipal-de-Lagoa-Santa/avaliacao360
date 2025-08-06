@@ -20,6 +20,10 @@ const props = defineProps<{
     is_in_recourse_period?: boolean;
     has_recourse?: boolean;
     recourse_id?: number;
+    recourse_status?: string;
+    is_recourse_approved?: boolean;
+    final_score_after_recourse?: number;
+    calc_final_after_recourse?: string;
   }>;
   acknowledgments?: Array<{
     year: string;
@@ -79,6 +83,11 @@ function confirmSignature() {
   const assinatura_base64 = signaturePad.toDataURL();
   const year = selectedEvaluationYear.value;
 
+  if (!year) {
+    alert('Erro: ano da avaliação não encontrado.');
+    return;
+  }
+
   router.post(route('evaluations.acknowledge', year), {
     signature_base64: assinatura_base64,
   }, {
@@ -133,11 +142,55 @@ function goBack() {
           </tr>
           <tr v-for="eva in visibleEvaluations" :key="eva.year" class="bg-white border-b hover:bg-gray-50">
             <td class="px-6 py-4">{{ eva.year }}</td>
-            <td class="px-6 py-4">{{ eva.final_score }}</td>
             <td class="px-6 py-4">
-              <div v-if="eva.calc_auto">{{ eva.calc_auto }}</div>
-              <div v-if="eva.calc_chefia">{{ eva.calc_chefia }}</div>
-              <div v-if="eva.calc_equipe">{{ eva.calc_equipe }}</div>
+              <div class="space-y-2">
+                <!-- Nota original -->
+                <div class="flex items-center" :class="{ 'opacity-50': eva.is_recourse_approved }">
+                  <span class="text-2xl font-bold mr-2" :class="eva.is_recourse_approved ? 'text-gray-400 line-through' : 'text-blue-600'">
+                    {{ eva.final_score }}
+                  </span>
+                  <span class="text-sm text-gray-500">pts</span>
+                  <span v-if="eva.is_recourse_approved" class="ml-2 text-xs text-gray-500">(original)</span>
+                </div>
+                
+                <!-- Nota após recurso (se aprovado) -->
+                <div v-if="eva.is_recourse_approved && eva.final_score_after_recourse !== null" class="flex items-center">
+                  <span class="text-2xl font-bold text-green-600 mr-2">
+                    {{ eva.final_score_after_recourse }}
+                  </span>
+                  <span class="text-sm text-gray-500">pts</span>
+                  <div class="ml-2 px-2 py-1 bg-green-100 text-green-800 text-xs rounded-full">
+                    Após Recurso
+                  </div>
+                </div>
+              </div>
+            </td>
+            <td class="px-6 py-4">
+              <div class="space-y-1">
+                <div v-if="eva.calc_auto" class="flex justify-between">
+                  <span class="text-blue-600 font-medium">Autoavaliação:</span>
+                  <span class="font-semibold">{{ eva.calc_auto }}</span>
+                </div>
+                <div v-if="eva.calc_chefia" class="flex justify-between" :class="{ 'opacity-50 line-through text-gray-400': eva.is_recourse_approved }">
+                  <span class="font-medium" :class="eva.is_recourse_approved ? 'text-gray-400' : 'text-purple-600'">Chefe:</span>
+                  <span class="font-semibold">{{ eva.calc_chefia }}</span>
+                  <span v-if="eva.is_recourse_approved" class="text-xs text-red-500 ml-1">(anulada)</span>
+                </div>
+                <div v-if="eva.calc_equipe" class="flex justify-between">
+                  <span class="text-indigo-600 font-medium">Equipe:</span>
+                  <span class="font-semibold">{{ eva.calc_equipe }}</span>
+                </div>
+                
+                <!-- Cálculo após recurso -->
+                <div v-if="eva.is_recourse_approved && eva.calc_final_after_recourse" class="mt-3 pt-2 border-t border-green-200">
+                  <div class="text-xs text-green-700 font-medium mb-1">Cálculo Após Recurso:</div>
+                  <div class="text-sm text-green-800">{{ eva.calc_final_after_recourse }}</div>
+                </div>
+                
+                <div v-if="!eva.calc_auto && !eva.calc_chefia && !eva.calc_equipe" class="text-gray-500 italic">
+                  Notas parciais não disponíveis
+                </div>
+              </div>
             </td>
             <td class="px-6 py-4">
               <template v-if="getAcknowledgment(eva.year)">
@@ -166,7 +219,7 @@ function goBack() {
             <td class="px-6 py-4 text-right">
               <template v-if="getAcknowledgment(eva.year)">
                 <Link
-                  v-if="eva.is_in_recourse_period && !eva.has_recourse"
+                  v-if="eva.is_in_recourse_period && !eva.has_recourse && eva.id"
                   :href="route('recourses.create', eva.id)"
                   class="inline-flex items-center px-3 py-1 text-sm font-medium text-rose-600 bg-rose-50 rounded hover:bg-rose-100 mr-2"
                 >
@@ -174,7 +227,7 @@ function goBack() {
                   Abrir Recurso
                 </Link>
                 <Link
-                  v-else-if="eva.has_recourse"
+                  v-else-if="eva.has_recourse && eva.recourse_id"
                   :href="route('recourses.show', eva.recourse_id)"
                   class="inline-flex items-center px-3 py-1 text-sm font-medium text-yellow-600 bg-yellow-50 rounded hover:bg-yellow-100 mr-2"
                 >

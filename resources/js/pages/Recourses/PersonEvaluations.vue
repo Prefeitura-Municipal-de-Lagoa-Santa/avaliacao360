@@ -8,6 +8,7 @@ import { route } from 'ziggy-js';
 const props = defineProps<{
   recourse: {
     id: number;
+    status: string;
     person: { name: string };
     evaluation: {
       year: string;
@@ -64,6 +65,9 @@ function getEvaluationTypeColor(type: string): string {
   
   return colors[type] || 'bg-gray-500';
 }
+
+// Verifica se o recurso foi deferido
+const isDeferido = computed(() => props.recourse.status === 'respondido');
 
 function getScoreColor(score: number | null): string {
   if (score === null) return 'text-gray-400';
@@ -290,6 +294,50 @@ function getScoreIcon(score: number | null) {
                 </div>
               </div>
             </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Seção de Média Geral Ponderada -->
+    <div v-if="media_geral !== null" class="mt-8">
+      <div class="bg-white rounded-lg shadow-md p-6 border-l-4 border-blue-500">
+        <div class="flex items-center justify-between">
+          <div>
+            <h3 class="text-lg font-semibold text-gray-800 mb-2">
+              Média Geral Ponderada
+            </h3>
+            <div v-if="isDeferido" class="mb-3 p-3 bg-green-50 border border-green-200 rounded-md">
+              <div class="flex items-center gap-2 text-green-800">
+                <icons.CheckCircle class="w-5 h-5" />
+                <span class="font-medium">Recurso DEFERIDO</span>
+              </div>
+              <p class="text-sm text-green-700 mt-1">
+                A nota do chefe foi anulada. O cálculo considera apenas a autoavaliação{{ evaluations.some(e => e.is_team_evaluation) ? ' e a avaliação da equipe' : '' }}.
+              </p>
+            </div>
+            <p class="text-sm text-gray-600">
+              {{ isDeferido 
+                ? (evaluations.some(e => e.is_team_evaluation) 
+                  ? 'Cálculo: 50% Equipe + 50% Autoavaliação' 
+                  : 'Cálculo: 100% Autoavaliação')
+                : (evaluations.some(e => e.is_team_evaluation) 
+                  ? 'Cálculo: 50% Chefe + 25% Equipe + 25% Autoavaliação' 
+                  : 'Cálculo: 70% Chefe + 30% Autoavaliação')
+              }}
+            </p>
+          </div>
+          <div class="text-right">
+            <div 
+              class="text-4xl font-bold"
+              :class="{
+                'text-blue-600': !isDeferido,
+                'text-green-600': isDeferido
+              }"
+            >
+              {{ media_geral }}
+            </div>
+            <div class="text-sm text-gray-500">Nota Final</div>
           </div>
         </div>
       </div>
