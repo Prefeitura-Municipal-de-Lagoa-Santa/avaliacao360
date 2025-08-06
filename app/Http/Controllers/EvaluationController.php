@@ -247,14 +247,14 @@ class EvaluationController extends Controller
     public function showAutoavaliacaoForm()
     {
         $user = auth()->user();
-        $cpf = '10798101610';
+       
         if (!$user || !$user->cpf) {
             return redirect()->route('evaluations')->with('error', 'CPF não encontrado para o usuário autenticado.');
         }
 
         // Carregando o relacionamento jobFunction e organizationalUnit.allParents
         $person = Person::with('jobFunction', 'organizationalUnit.allParents')
-            ->where('cpf', $cpf)
+            ->where('cpf', $user->cpf)
             ->first();
 
         if (!$person) {
@@ -309,8 +309,8 @@ class EvaluationController extends Controller
     {
         // 1. Pega os dados da pessoa logada
         $user = auth()->user();
-        $cpf = '10798101610';
-        $manager = Person::where('cpf', operator: $cpf)->first();
+        
+        $manager = Person::where('cpf', operator: $user->cpf)->first();
 
         // 2. Se não for uma pessoa ou não tiver cargo de chefia, não está disponível
         if (!$manager || is_null($manager->current_function)) {
@@ -335,8 +335,7 @@ class EvaluationController extends Controller
      */
     public function showSubordinatesList()
     {
-        $cpf = '10798101610';
-        $manager = Person::where('cpf', $cpf)->first();
+        $manager = Person::where('cpf', Auth::user()->cpf)->first();
 
         if (!$manager) {
             return redirect()->route('dashboard')
@@ -757,8 +756,8 @@ class EvaluationController extends Controller
     public function showEvaluationDetail($id)
     {
         $user = Auth::user();
-        $cpf = '10798101610';
-        $person = Person::where('cpf', $cpf)->first();
+       
+        $person = Person::where('cpf', $user->cpf)->first();
 
         $evaluationRequest = EvaluationRequest::with('evaluation.form')->findOrFail($id);
 
@@ -929,8 +928,8 @@ class EvaluationController extends Controller
         ]);
 
         $user = Auth::user();
-        $cpf = '10798101610';
-        $person = Person::where('cpf', $cpf)->first();
+        
+        $person = Person::where('cpf', $user->cpf)->first();
 
         if (!$person) {
             return back()->withErrors(['user' => 'Pessoa vinculada não encontrada.']);

@@ -114,9 +114,8 @@ class DashboardController extends Controller
         $config = Config::where('year', $year)->first();
 
         $isInAwarePeriod = $config ? $config->estaNoPeriodoDeCiencia() : false;
-        $cpf = '10798101610'; 
-        // dd(Auth::user()->cpf);
-        $people = Person::where('cpf', $cpf)->first();
+        
+        $people = Person::where('cpf', Auth::user()->cpf)->first();
         $prazo = $this->getGroupDeadline('avaliacao');
         $estaNoPrazo = false;
         if ($prazo && $prazo->term_first && $prazo->term_end) {
@@ -252,9 +251,9 @@ class DashboardController extends Controller
     $user = Auth::user();
     $pdiStatus = 'not_released'; // Status padrão
     $prazoPdi = null; // Prazo padrão
-    $cpf = '10798101610'; 
+   
         // Busca a pessoa pelo CPF do usuário logado
-    $person = Person::where('cpf', $cpf)->first();
+    $person = Person::where('cpf', $user->cpf)->first();
     
     // Verifica se é gestor (ajuste conforme sua lógica de permissão)
     $isManager = $person && $person->job_function_id; // Supondo que exista o campo is_manager
