@@ -99,7 +99,6 @@ class EvaluationRecourseController extends Controller
         return inertia('Recourses/PersonEvaluations', [
             'recourse' => [
                 'id' => $recourse->id,
-                'status' => $recourse->status,
                 'person' => [
                     'name' => $recourse->person->name,
                 ],
@@ -204,67 +203,145 @@ class EvaluationRecourseController extends Controller
                     'answered_questions' => $validScores->count(),
                 ];
             }),
-            'media_geral' => $this->calculateMediaGeral($allEvaluations, $evaluationRequests, $recourse->status),
         ]);
-    }
 
-    private function calculateMediaGeral($allEvaluations, $evaluationRequests, $recursoStatus = null)
-    {
+        // Calcular média geral ponderada
+        $evaluationsCollection = $allEvaluations->map(function ($evaluation) use ($evaluationRequests) {
+            $answers = $evaluation->answers;
+            $validScores = $answers->whereNotNull('score')->pluck('score');
+            $requests = $evaluationRequests->get($evaluation->id, collect());
+            $isTeamEvaluation = $evaluation->type === 'chefia' && $requests->count() > 0;
+            
+            return [
+                'type' => $evaluation->type,
+                'is_team_evaluation' => $isTeamEvaluation,
+                'average' => $validScores->count() > 0 ? round($validScores->avg(), 1) : null,
+            ];
+        });
+
+        // Identificar os tipos de avaliação disponíveis
         $chefeAvg = null;
         $equipeAvg = null;
         $autoAvg = null;
 
-        foreach ($allEvaluations as $evaluation) {
-            $answers = $evaluation->answers;
-            $validScores = $answers->whereNotNull('score')->pluck('score');
-            $requests = $evaluationRequests->get($evaluation->id, collect());
-            
-            if ($validScores->count() > 0) {
-                $average = round($validScores->avg(), 1);
+        foreach ($evaluationsCollection as $eval) {
+            if (in_array($eval['type'], ['gestor', 'comissionado']) && $eval['average'] !== null) {
+                $chefeAvg = $eval['average'];
+            } elseif ($eval['is_team_evaluation'] && $eval['average'] !== null) {
+                $equipeAvg = $eval['average'];
+            } elseif (in_array($eval['type'], ['auto', 'autoavaliaçãoGestor', 'autoavaliaçãoComissionado']) && $eval['average'] !== null) {
+                $autoAvg = $eval['average'];
+            }
+        }
+
+        // Calcular média geral com pesos
+        $mediaGeral = null;
+        if ($chefeAvg !== null && $autoAvg !== null) {
+            if ($equipeAvg !== null) {
+                // Tem equipe: 50% chefe + 25% equipe + 25% auto
+                $mediaGeral = round(($chefeAvg * 0.5) + ($equipeAvg * 0.25) + ($autoAvg * 0.25), 1);
+            } else {
+                // Sem equipe: 70% chefe + 30% auto
+                $mediaGeral = round(($chefeAvg * 0.7) + ($autoAvg * 0.3), 1);
+            }
+        }
+
+        return inertia('Recourses/PersonEvaluations', [
+            'recourse' => [
+                'id' => $recourse->id,
+                'person' => [
+                    'name' => $recourse->person->name,
+                ],
+                'evaluation' => [
+                    'year' => optional($recourse->evaluation->evaluation->form)->year ?? '—',
+                    'form_name' => $recourse->evaluation->evaluation->form->name ?? '—',
+                ]
+            ],
+            'evaluations' => $allEvaluations->map(function ($evaluation) use ($evaluationRequests) {
+                $answers = $evaluation->answers;
+                // Modificado: incluir score = 0 como válido
+                $validScores = $answers->whereNotNull('score')->pluck('score');
                 
-                if (in_array($evaluation->type, ['gestor', 'comissionado'])) {
-                    $chefeAvg = $average;
-                } elseif ($evaluation->type === 'chefia' && $requests->count() > 0) {
-                    $equipeAvg = $average;
-                } elseif (in_array($evaluation->type, ['auto', 'autoavaliaçãoGestor', 'autoavaliaçãoComissionado'])) {
-                    $autoAvg = $average;
+                // Busca as solicitações de avaliação para esta evaluation
+                $requests = $evaluationRequests->get($evaluation->id, collect());
+                
+                $evaluatorName = 'Sistema';
+                $average = $validScores->count() > 0 ? round($validScores->avg(), 1) : null;
+                
+                // Calcula o total score considerando os pesos das perguntas
+                $totalScore = 0;
+                $totalWeight = 0;
+                
+                if ($evaluation->form && $evaluation->form->groupQuestions) {
+                    foreach ($evaluation->form->groupQuestions as $group) {
+                        foreach ($group->questions as $question) {
+                            $answer = $answers->firstWhere('question_id', $question->id);
+                            $score = $answer ? $answer->score : null;
+                            $weight = $question->weight ?? 1;
+                            
+                            // Modificado: incluir score = 0 como válido
+                            if ($score !== null && !is_null($weight)) {
+                                $totalScore += $score * $weight;
+                                $totalWeight += $weight;
+                            }
+                        }
+                    }
                 }
-            }
-        }
-
-        // Se recurso foi DEFERIDO (status = 'respondido'), anula a nota do chefe
-        $isDeferido = $recursoStatus === 'respondido';
-        
-        if ($isDeferido) {
-            $chefeAvg = null; // Anula a nota do chefe
-        }
-
-        // Calcular média geral com pesos (considerando deferimento)
-        if ($isDeferido) {
-            // Recurso DEFERIDO: considera apenas autoavaliação e equipe (se houver)
-            if ($autoAvg !== null) {
-                if ($equipeAvg !== null) {
-                    // Tem equipe: 75% auto + 25% equipe
-                    return round(($autoAvg * 0.75) + ($equipeAvg * 0.25), 1);
+                
+                $isChefiaType = $evaluation->type === 'chefia';
+                $isTeamEvaluation = $isChefiaType && $requests->count() > 0; // Chefia sempre pode ser equipe
+                
+                
+                if ($isTeamEvaluation) {
+                    // Para avaliações de chefia/equipe
+                    $teamMembers = collect();
+                    
+                    // Coleta informações dos membros da equipe
+                    foreach ($requests as $request) {
+                        if ($request->requested) {
+                            $teamMembers->push($request->requested->name);
+                        }
+                    }
+                    
+                    // Se há membros da equipe, mostra como avaliação de equipe
+                    if ($teamMembers->count() > 0) {
+                        $evaluatorName = "Equipe de " . $teamMembers->count() . " membro(s)";
+                    }
                 } else {
-                    // Sem equipe: 100% auto
-                    return $autoAvg;
+                    // Para avaliações individuais, encontra o avaliador
+                    if ($requests->count() > 0) {
+                        $request = $requests->first();
+                        if ($request->requester) {
+                            $evaluatorName = $request->requester->name;
+                        } elseif ($request->requested) {
+                            $evaluatorName = $request->requested->name ?? 'Sistema';
+                        }
+                    } elseif ($evaluation->type === 'auto') {
+                        $evaluatorName = $evaluation->evaluatedPerson->name . ' (Autoavaliação)';
+                    }
                 }
-            }
-        } else {
-            // Recurso NÃO deferido: lógica normal
-            if ($chefeAvg !== null && $autoAvg !== null) {
-                if ($equipeAvg !== null) {
-                    // Tem equipe: 50% chefe + 25% equipe + 25% auto
-                    return round(($chefeAvg * 0.5) + ($equipeAvg * 0.25) + ($autoAvg * 0.25), 1);
-                } else {
-                    // Sem equipe: 70% chefe + 30% auto
-                    return round(($chefeAvg * 0.7) + ($autoAvg * 0.3), 1);
-                }
-            }
-        }
-
-        return null;
+                
+                return [
+                    'id' => $evaluation->id,
+                    'type' => $evaluation->type,
+                    'evaluator_name' => $evaluatorName,
+                    'is_team_evaluation' => $isTeamEvaluation,
+                    'team_members_count' => $isTeamEvaluation ? $requests->count() : null,
+                    'evidencias' => $isTeamEvaluation ? 
+                        null :  // Não mostrar evidências para avaliações de equipe
+                        ($requests->first()?->evidencias ?? ''), // Sempre retornar string, mesmo vazia
+                    'answers' => $answers->map(fn($a) => [
+                        'question' => $a->question->text ?? '',
+                        'score' => $a->score,
+                    ]),
+                    'average' => $average,
+                    'total_score' => $totalScore,
+                    'total_questions' => $answers->count(),
+                    'answered_questions' => $validScores->count(),
+                ];
+            }),
+            'media_geral' => $mediaGeral,
+        ]);
     }
 
     public function index(Request $request)

@@ -535,6 +535,7 @@ class EvaluationController extends Controller
 
         // Requisições de recursos já existentes
         $existingRecourses = \App\Models\EvaluationRecourse::where('person_id', $person->id)
+            ->with('evaluation')
             ->get()
             ->keyBy('evaluation_id');
 
@@ -575,7 +576,12 @@ class EvaluationController extends Controller
 
             $auto = $requestsAno->first(fn($r) => $r->requested_person_id == $person->id && in_array(strtolower($r->evaluation->type ?? ''), $autoTypes));
             $chefia = $requestsAno->first(fn($r) => in_array(strtolower($r->evaluation->type ?? ''), $chefiaTypes) && $r->requested_person_id == $person->direct_manager_id);
-            $equipes = $requestsAno->filter(fn($r) => str_contains(strtolower($r->evaluation->type ?? ''), 'equipe'));
+            
+            // Melhor detecção de avaliações de equipe - incluir 'chefia' que podem ser avaliações de equipe
+            $equipes = $requestsAno->filter(fn($r) => 
+                str_contains(strtolower($r->evaluation->type ?? ''), 'equipe') ||
+                (strtolower($r->evaluation->type ?? '') === 'chefia' && $r->requested_person_id !== $person->direct_manager_id)
+            );
 
             $notaAuto = $getNotaPonderada($auto);
             $notaChefia = $getNotaPonderada($chefia);
@@ -583,9 +589,12 @@ class EvaluationController extends Controller
 
             $calcAuto = $auto ? "Autoavaliação: $notaAuto" : '';
             $calcChefia = $chefia ? "Chefia: $notaChefia" : '';
-            $calcEquipe = $equipes->count() ? "Equipe (média): $notaEquipe" : '';
+            $calcEquipe = $equipes->count() ? "Equipe (média de {$equipes->count()} avaliações): $notaEquipe" : '';
 
-            $isGestor = $notaEquipe !== null;
+            // Determinar se é gestor baseado na existência de avaliações de equipe
+            $isGestor = $notaEquipe !== null && $equipes->count() > 0;
+            
+            // Lógica original da nota
             if (
                 ($isGestor && ($notaAuto === 0 || $notaChefia === 0 || $notaEquipe === null)) ||
                 (!$isGestor && ($notaAuto === 0 || $notaChefia === 0))
@@ -601,11 +610,6 @@ class EvaluationController extends Controller
                     ? "($notaAuto x 25%) + ($notaChefia x 50%) + ($notaEquipe x 25%) = $notaFinal"
                     : "($notaAuto x 30%) + ($notaChefia x 70%) = $notaFinal";
             }
-
-
-            $calcFinal = $isGestor
-                ? "($notaAuto x 25%) + ($notaChefia x 50%) + ($notaEquipe x 25%) = $notaFinal"
-                : "($notaAuto x 30%) + ($notaChefia x 70%) = $notaFinal";
 
             $id = $auto?->id ?? $chefia?->id ?? $equipes->first()?->id;
 
@@ -635,6 +639,30 @@ class EvaluationController extends Controller
             }
 
             $recourse = $existingRecourses->get($id);
+            
+            // Verificar se o recurso foi DEFERIDO e calcular nova nota
+            $finalScoreAfterRecourse = null;
+            $calcFinalAfterRecourse = null;
+            $isRecourseApproved = false;
+            
+            if ($recourse && $recourse->status === 'respondido') {
+                $isRecourseApproved = true;
+                
+                // Calcular nova nota SEM a nota do chefe (deferido)
+                if ($isGestor && $notaEquipe !== null && $equipes->count() > 0) {
+                    // Com equipe: 75% auto + 25% equipe
+                    $finalScoreAfterRecourse = round(($notaAuto * 0.75) + ($notaEquipe * 0.25), 2);
+                    $calcFinalAfterRecourse = "Recurso DEFERIDO (com equipe): ($notaAuto x 75%) + ($notaEquipe x 25%) = $finalScoreAfterRecourse";
+                } else if ($notaAuto > 0) {
+                    // Sem equipe: 100% auto
+                    $finalScoreAfterRecourse = $notaAuto;
+                    $calcFinalAfterRecourse = "Recurso DEFERIDO (sem equipe): ($notaAuto x 100%) = $finalScoreAfterRecourse";
+                } else {
+                    // Fallback se não há autoavaliação
+                    $finalScoreAfterRecourse = 0;
+                    $calcFinalAfterRecourse = "Recurso DEFERIDO: Sem dados de autoavaliação disponíveis";
+                }
+            }
 
             $evaluations[] = [
                 'year' => $ano,
@@ -649,6 +677,10 @@ class EvaluationController extends Controller
                 'is_in_recourse_period' => $isInRecoursePeriod,
                 'has_recourse' => $recourse !== null,
                 'recourse_id' => $recourse?->id,
+                'recourse_status' => $recourse?->status,
+                'is_recourse_approved' => $isRecourseApproved,
+                'final_score_after_recourse' => $finalScoreAfterRecourse,
+                'calc_final_after_recourse' => $calcFinalAfterRecourse,
             ];
         }
 

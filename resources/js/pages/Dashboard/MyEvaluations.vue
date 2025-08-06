@@ -20,6 +20,10 @@ const props = defineProps<{
     is_in_recourse_period?: boolean;
     has_recourse?: boolean;
     recourse_id?: number;
+    recourse_status?: string;
+    is_recourse_approved?: boolean;
+    final_score_after_recourse?: number;
+    calc_final_after_recourse?: string;
   }>;
   acknowledgments?: Array<{
     year: string;
@@ -79,6 +83,11 @@ function confirmSignature() {
   const assinatura_base64 = signaturePad.toDataURL();
   const year = selectedEvaluationYear.value;
 
+  if (!year) {
+    alert('Erro: ano da avaliação não encontrado.');
+    return;
+  }
+
   router.post(route('evaluations.acknowledge', year), {
     signature_base64: assinatura_base64,
   }, {
@@ -106,9 +115,12 @@ function goBack() {
 <template>
   <Head title="Minhas Avaliações Anuais" />
   <DashboardLayout page-title="Minhas Avaliações Anuais">
-      <div class="detail-page-header">
+      <div class="flex justify-between items-center mb-6">
         <h2 class="text-2xl font-bold text-gray-800">Minhas Avaliações</h2>
-        <button @click="goBack" class="back-btn">
+        <button 
+          @click="goBack" 
+          class="inline-flex items-center px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md shadow-sm hover:bg-gray-50 transition-colors"
+        >
           <icons.ArrowLeftIcon class="size-4 mr-2" />
           Voltar
         </button>
@@ -120,24 +132,40 @@ function goBack() {
           <tr>
             <th class="px-6 py-3">Ano</th>
             <th class="px-6 py-3">Nota Final</th>
-            <th class="px-6 py-3">Notas Parciais</th>
             <th class="px-6 py-3">Assinatura</th>
             <th class="px-6 py-3"></th>
           </tr>
         </thead>
         <tbody>
           <tr v-if="visibleEvaluations.length === 0">
-            <td colspan="5" class="px-6 py-8 text-center text-gray-500">
+            <td colspan="4" class="px-6 py-8 text-center text-gray-500">
               Nenhuma avaliação anual disponível para visualização neste momento.
             </td>
           </tr>
           <tr v-for="eva in visibleEvaluations" :key="eva.year" class="bg-white border-b hover:bg-gray-50">
             <td class="px-6 py-4">{{ eva.year }}</td>
-            <td class="px-6 py-4">{{ eva.final_score }}</td>
             <td class="px-6 py-4">
-              <div v-if="eva.calc_auto">{{ eva.calc_auto }}</div>
-              <div v-if="eva.calc_chefia">{{ eva.calc_chefia }}</div>
-              <div v-if="eva.calc_equipe">{{ eva.calc_equipe }}</div>
+              <div class="space-y-2">
+                <!-- Nota original -->
+                <div class="flex items-center" :class="{ 'opacity-50': eva.is_recourse_approved }">
+                  <span class="text-2xl font-bold mr-2" :class="eva.is_recourse_approved ? 'text-gray-400 line-through' : 'text-blue-600'">
+                    {{ eva.final_score }}
+                  </span>
+                  <span class="text-sm text-gray-500">pts</span>
+                  <span v-if="eva.is_recourse_approved" class="ml-2 text-xs text-gray-500">(original)</span>
+                </div>
+                
+                <!-- Nota após recurso (se aprovado) -->
+                <div v-if="eva.is_recourse_approved && eva.final_score_after_recourse !== null" class="flex items-center">
+                  <span class="text-2xl font-bold text-green-600 mr-2">
+                    {{ eva.final_score_after_recourse }}
+                  </span>
+                  <span class="text-sm text-gray-500">pts</span>
+                  <div class="ml-2 px-2 py-1 bg-green-100 text-green-800 text-xs rounded-full">
+                    Após Recurso
+                  </div>
+                </div>
+              </div>
             </td>
             <td class="px-6 py-4">
               <template v-if="getAcknowledgment(eva.year)">
@@ -156,7 +184,7 @@ function goBack() {
               <template v-else>
                 <button
                   @click="openSignatureModal(eva)"
-                  class="inline-flex items-center px-3 py-1 text-sm font-medium text-green-700 bg-green-50 rounded hover:bg-green-100"
+                  class="inline-flex items-center px-3 py-2 text-sm font-medium text-green-700 bg-green-50 rounded-md hover:bg-green-100 transition-colors"
                 >
                   <icons.PenLineIcon class="size-4 mr-1" />
                   Assinar Ciência
@@ -164,32 +192,36 @@ function goBack() {
               </template>
             </td>
             <td class="px-6 py-4 text-right">
-              <template v-if="getAcknowledgment(eva.year)">
+              <div class="flex flex-col gap-2 items-end">
+                <template v-if="getAcknowledgment(eva.year)">
+                  <div class="flex gap-2">
+                    <Link
+                      v-if="eva.is_in_recourse_period && !eva.has_recourse && eva.id"
+                      :href="route('recourses.create', eva.id)"
+                      class="inline-flex items-center px-3 py-2 text-sm font-medium text-rose-700 bg-rose-50 rounded-md hover:bg-rose-100 transition-colors"
+                    >
+                      <icons.FileTextIcon class="size-4 mr-1" />
+                      Abrir Recurso
+                    </Link>
+                    <Link
+                      v-else-if="eva.has_recourse && eva.recourse_id"
+                      :href="route('recourses.show', eva.recourse_id)"
+                      class="inline-flex items-center px-3 py-2 text-sm font-medium text-amber-700 bg-amber-50 rounded-md hover:bg-amber-100 transition-colors"
+                    >
+                      <icons.MessageSquareIcon class="size-4 mr-1" />
+                      Acompanhar Recurso
+                    </Link>
+                  </div>
+                </template>
                 <Link
-                  v-if="eva.is_in_recourse_period && !eva.has_recourse"
-                  :href="route('recourses.create', eva.id)"
-                  class="inline-flex items-center px-3 py-1 text-sm font-medium text-rose-600 bg-rose-50 rounded hover:bg-rose-100 mr-2"
+                  v-if="eva.id"
+                  :href="route('evaluations.details', eva.id)"
+                  class="inline-flex items-center px-3 py-2 text-sm font-medium text-indigo-700 bg-indigo-50 rounded-md hover:bg-indigo-100 transition-colors"
                 >
                   <icons.FileTextIcon class="size-4 mr-1" />
-                  Abrir Recurso
+                  Ver Detalhes
                 </Link>
-                <Link
-                  v-else-if="eva.has_recourse"
-                  :href="route('recourses.show', eva.recourse_id)"
-                  class="inline-flex items-center px-3 py-1 text-sm font-medium text-yellow-600 bg-yellow-50 rounded hover:bg-yellow-100 mr-2"
-                >
-                  <icons.MessageSquareIcon class="size-4 mr-1" />
-                  Acompanhar Recurso
-                </Link>
-              </template>
-              <Link
-                v-if="eva.id"
-                :href="route('evaluations.details', eva.id)"
-                class="inline-flex items-center px-3 py-1 text-sm font-medium text-indigo-600 bg-indigo-50 rounded hover:bg-indigo-100"
-              >
-                <icons.FileTextIcon class="size-4 mr-1" />
-                Ver mais
-              </Link>
+              </div>
             </td>
           </tr>
         </tbody>
@@ -205,11 +237,26 @@ function goBack() {
         <canvas ref="canvas" class="border border-gray-400 rounded-md w-full h-48 bg-white"></canvas>
         <p class="text-center text-gray-700 mt-2">Assinatura do Servidor</p>
 
-        <div class="flex justify-between mt-4">
-          <button @click="clearSignature" class="text-sm text-red-600 hover:underline">Limpar Assinatura</button>
-          <div class="flex gap-2">
-            <button @click="closeModal" class="px-4 py-2 text-sm bg-gray-100 rounded hover:bg-gray-200">Cancelar</button>
-            <button @click="confirmSignature" class="px-4 py-2 text-sm bg-green-600 text-white rounded hover:bg-green-700">
+        <div class="flex justify-between items-center mt-6">
+          <button 
+            @click="clearSignature" 
+            class="inline-flex items-center px-3 py-2 text-sm font-medium text-red-600 bg-red-50 rounded-md hover:bg-red-100 transition-colors"
+          >
+            <icons.Trash2Icon class="size-4 mr-1" />
+            Limpar Assinatura
+          </button>
+          <div class="flex gap-3">
+            <button 
+              @click="closeModal" 
+              class="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-md hover:bg-gray-200 transition-colors"
+            >
+              Cancelar
+            </button>
+            <button 
+              @click="confirmSignature" 
+              class="inline-flex items-center px-4 py-2 text-sm font-medium bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors"
+            >
+              <icons.CheckIcon class="size-4 mr-1" />
               Confirmar Assinatura
             </button>
           </div>
