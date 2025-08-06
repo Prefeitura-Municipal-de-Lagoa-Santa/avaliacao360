@@ -244,8 +244,8 @@ class EvaluationRecourseController extends Controller
             // Recurso DEFERIDO: considera apenas autoavaliação e equipe (se houver)
             if ($autoAvg !== null) {
                 if ($equipeAvg !== null) {
-                    // Tem equipe: 50% equipe + 50% auto
-                    return round(($equipeAvg * 0.5) + ($autoAvg * 0.5), 1);
+                    // Tem equipe: 75% auto + 25% equipe
+                    return round(($autoAvg * 0.75) + ($equipeAvg * 0.25), 1);
                 } else {
                     // Sem equipe: 100% auto
                     return $autoAvg;

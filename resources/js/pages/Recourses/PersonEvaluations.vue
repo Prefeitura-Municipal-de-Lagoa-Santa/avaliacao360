@@ -319,7 +319,7 @@ function getScoreIcon(score: number | null) {
             <p class="text-sm text-gray-600">
               {{ isDeferido 
                 ? (evaluations.some(e => e.is_team_evaluation) 
-                  ? 'Cálculo: 50% Equipe + 50% Autoavaliação' 
+                  ? 'Cálculo: 75% Autoavaliação + 25% Equipe' 
                   : 'Cálculo: 100% Autoavaliação')
                 : (evaluations.some(e => e.is_team_evaluation) 
                   ? 'Cálculo: 50% Chefe + 25% Equipe + 25% Autoavaliação' 
