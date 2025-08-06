@@ -203,7 +203,6 @@ class EvaluationRecourseController extends Controller
                     'answered_questions' => $validScores->count(),
                 ];
             }),
-            'media_geral' => $this->calculateMediaGeral($allEvaluations, $evaluationRequests),
         ]);
 
         // Calcular média geral ponderada
@@ -343,44 +342,6 @@ class EvaluationRecourseController extends Controller
             }),
             'media_geral' => $mediaGeral,
         ]);
-    }
-
-    private function calculateMediaGeral($allEvaluations, $evaluationRequests)
-    {
-        $chefeAvg = null;
-        $equipeAvg = null;
-        $autoAvg = null;
-
-        foreach ($allEvaluations as $evaluation) {
-            $answers = $evaluation->answers;
-            $validScores = $answers->whereNotNull('score')->pluck('score');
-            $requests = $evaluationRequests->get($evaluation->id, collect());
-            
-            if ($validScores->count() > 0) {
-                $average = round($validScores->avg(), 1);
-                
-                if (in_array($evaluation->type, ['gestor', 'comissionado'])) {
-                    $chefeAvg = $average;
-                } elseif ($evaluation->type === 'chefia' && $requests->count() > 0) {
-                    $equipeAvg = $average;
-                } elseif (in_array($evaluation->type, ['auto', 'autoavaliaçãoGestor', 'autoavaliaçãoComissionado'])) {
-                    $autoAvg = $average;
-                }
-            }
-        }
-
-        // Calcular média geral com pesos
-        if ($chefeAvg !== null && $autoAvg !== null) {
-            if ($equipeAvg !== null) {
-                // Tem equipe: 50% chefe + 25% equipe + 25% auto
-                return round(($chefeAvg * 0.5) + ($equipeAvg * 0.25) + ($autoAvg * 0.25), 1);
-            } else {
-                // Sem equipe: 70% chefe + 30% auto
-                return round(($chefeAvg * 0.7) + ($autoAvg * 0.3), 1);
-            }
-        }
-
-        return null;
     }
 
     public function index(Request $request)

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { Head, router } from '@inertiajs/vue3';
+import { computed } from 'vue';
 import DashboardLayout from '@/layouts/DashboardLayout.vue';
 import * as icons from 'lucide-vue-next';
 import { route } from 'ziggy-js';
@@ -19,12 +20,14 @@ const props = defineProps<{
     evaluator_name: string;
     is_team_evaluation?: boolean;
     team_members_count?: number;
+    evidencias?: string;
     answers: Array<{ question: string; score: number | null }>;
     average: number | null;
     total_score?: number;
     total_questions: number;
     answered_questions: number;
   }>;
+  media_geral?: number | null;
 }>();
 
 function goBack() {
@@ -126,15 +129,10 @@ function getScoreIcon(score: number | null) {
               <div class="text-sm text-gray-600">Avaliações Completas</div>
             </div>
             <div class="text-center">
-              <div class="text-2xl font-bold text-gray-800">
-                {{ 
-                  evaluations.filter(e => e.average !== null).length > 0 
-                    ? (evaluations.filter(e => e.average !== null).reduce((sum, e) => sum + (e.average || 0), 0) / 
-                       evaluations.filter(e => e.average !== null).length).toFixed(1)
-                    : '—'
-                }}
+              <div class="text-2xl font-bold text-blue-600">
+                {{ media_geral !== null && media_geral !== undefined ? media_geral.toFixed(1) : '—' }}
               </div>
-              <div class="text-sm text-gray-600">Média Geral</div>
+              <div class="text-sm text-gray-600">Média Geral Ponderada</div>
             </div>
           </div>
         </div>
@@ -274,133 +272,21 @@ function getScoreIcon(score: number | null) {
                   </div>
                 </div>
               </div>
-            </div>
-          </div>
-        </div>
-      </div>
 
-      <!-- Análise comparativa -->
-      <div v-if="evaluations.filter(e => e.average !== null).length > 1" class="bg-white rounded-lg shadow-sm border">
-        <div class="bg-gray-800 text-white p-4 rounded-t-lg">
-          <h2 class="text-lg font-semibold flex items-center gap-2">
-            <icons.BarChart3 class="w-5 h-5" />
-            Análise Comparativa
-          </h2>
-          <p class="text-sm text-gray-300 mt-1">
-            Comparação entre diferentes tipos de avaliação
-          </p>
-        </div>
-        
-        <div class="p-6">
-          <!-- Gráfico comparativo simples -->
-          <div class="space-y-4">
-            <div 
-              v-for="evaluation in evaluations.filter(e => e.average !== null).sort((a, b) => (b.average || 0) - (a.average || 0))" 
-              :key="evaluation.id"
-              class="flex items-center gap-4"
-            >
-              <div class="w-32 text-sm font-medium text-gray-700">
-                {{ getEvaluationTypeLabel(evaluation.type) }}
-              </div>
-              <div class="flex-1 bg-gray-200 rounded-full h-6 relative">
-                <div 
-                  class="h-6 rounded-full flex items-center justify-end pr-2 text-white text-sm font-medium"
-                  :class="getEvaluationTypeColor(evaluation.type)"
-                  :style="{ width: ((evaluation.average || 0) / 5) * 100 + '%' }"
-                >
-                  {{ evaluation.average }}
-                </div>
-              </div>
-              <div class="w-16 text-right text-sm text-gray-600">
-                {{ evaluation.answered_questions }}/{{ evaluation.total_questions }}
-              </div>
-            </div>
-          </div>
-
-          <!-- Insights -->
-          <div class="mt-6 p-4 bg-blue-50 rounded-lg border border-blue-200">
-            <h3 class="font-medium text-blue-900 mb-2 flex items-center gap-2">
-              <icons.Lightbulb class="w-4 h-4" />
-              Insights da Análise
-            </h3>
-            <div class="text-sm text-blue-800 space-y-1">
-              <p v-if="evaluations.filter(e => e.average !== null).length > 0">
-                • Maior nota: {{ Math.max(...evaluations.filter(e => e.average !== null).map(e => e.average || 0)).toFixed(1) }} 
-                ({{ getEvaluationTypeLabel(evaluations.filter(e => e.average !== null).sort((a, b) => (b.average || 0) - (a.average || 0))[0].type) }})
-              </p>
-              <p v-if="evaluations.filter(e => e.average !== null).length > 0">
-                • Menor nota: {{ Math.min(...evaluations.filter(e => e.average !== null).map(e => e.average || 0)).toFixed(1) }} 
-                ({{ getEvaluationTypeLabel(evaluations.filter(e => e.average !== null).sort((a, b) => (a.average || 0) - (b.average || 0))[0].type) }})
-              </p>
-              <p v-if="evaluations.filter(e => e.average !== null).length > 1">
-                • Variação: {{ (Math.max(...evaluations.filter(e => e.average !== null).map(e => e.average || 0)) - 
-                                Math.min(...evaluations.filter(e => e.average !== null).map(e => e.average || 0))).toFixed(1) }} pontos
-              </p>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <!-- Observações sobre inconsistências -->
-      <div v-if="evaluations.filter(e => e.average !== null).length > 1" class="bg-white rounded-lg shadow-sm border">
-        <div class="bg-yellow-600 text-white p-4 rounded-t-lg">
-          <h2 class="text-lg font-semibold flex items-center gap-2">
-            <icons.AlertTriangle class="w-5 h-5" />
-            Pontos de Atenção para Análise
-          </h2>
-        </div>
-        
-        <div class="p-6">
-          <div class="space-y-4">
-            <!-- Verifica discrepâncias significativas -->
-            <div v-if="evaluations.filter(e => e.average !== null).length > 1">
-              <div 
-                v-if="Math.max(...evaluations.filter(e => e.average !== null).map(e => e.average || 0)) - 
-                      Math.min(...evaluations.filter(e => e.average !== null).map(e => e.average || 0)) > 1.5"
-                class="p-4 bg-red-50 border border-red-200 rounded-lg"
-              >
-                <div class="flex items-start gap-2">
-                  <icons.AlertCircle class="w-5 h-5 text-red-600 mt-0.5 flex-shrink-0" />
-                  <div class="text-sm text-red-800">
-                    <p class="font-medium">Discrepância Significativa Detectada</p>
-                    <p>Há uma diferença de mais de 1,5 pontos entre as avaliações, o que pode indicar diferentes percepções sobre o desempenho.</p>
-                  </div>
-                </div>
-              </div>
-
-              <div 
-                v-else-if="Math.max(...evaluations.filter(e => e.average !== null).map(e => e.average || 0)) - 
-                           Math.min(...evaluations.filter(e => e.average !== null).map(e => e.average || 0)) > 1"
-                class="p-4 bg-yellow-50 border border-yellow-200 rounded-lg"
-              >
-                <div class="flex items-start gap-2">
-                  <icons.AlertTriangle class="w-5 h-5 text-yellow-600 mt-0.5 flex-shrink-0" />
-                  <div class="text-sm text-yellow-800">
-                    <p class="font-medium">Variação Moderada nas Avaliações</p>
-                    <p>Existe alguma diferença nas percepções, mas dentro de um range aceitável.</p>
-                  </div>
-                </div>
-              </div>
-
-              <div v-else class="p-4 bg-green-50 border border-green-200 rounded-lg">
-                <div class="flex items-start gap-2">
-                  <icons.CheckCircle class="w-5 h-5 text-green-600 mt-0.5 flex-shrink-0" />
-                  <div class="text-sm text-green-800">
-                    <p class="font-medium">Avaliações Consistentes</p>
-                    <p>As diferentes avaliações apresentam resultados similares, indicando consistência na percepção do desempenho.</p>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <!-- Verificar avaliações incompletas -->
-            <div v-if="evaluations.some(e => e.answered_questions < e.total_questions)" 
-                 class="p-4 bg-gray-50 border border-gray-200 rounded-lg">
-              <div class="flex items-start gap-2">
-                <icons.Info class="w-5 h-5 text-gray-600 mt-0.5 flex-shrink-0" />
-                <div class="text-sm text-gray-700">
-                  <p class="font-medium">Avaliações Incompletas</p>
-                  <p>Algumas avaliações não foram totalmente respondidas, o que pode afetar a análise comparativa.</p>
+              <!-- Evidências -->
+              <div v-if="!evaluation.is_team_evaluation" class="mt-4 pt-4 border-t border-gray-200">
+                <h4 class="font-medium text-gray-800 flex items-center gap-2 mb-3">
+                  <icons.FileText class="w-4 h-4" />
+                  Evidências
+                </h4>
+                <div class="bg-gray-50 rounded-lg p-3 border">
+                  <p v-if="evaluation.evidencias && evaluation.evidencias.trim()" 
+                     class="text-sm text-gray-700 leading-relaxed whitespace-pre-line">
+                    {{ evaluation.evidencias }}
+                  </p>
+                  <p v-else class="text-sm text-gray-500 italic">
+                    Nenhuma evidência fornecida.
+                  </p>
                 </div>
               </div>
             </div>
