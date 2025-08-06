@@ -70,7 +70,7 @@ class EvaluationRecourseController extends Controller
                 'answers' => function($query) {
                     $query->with('question');
                 },
-                'form',
+                'form.groupQuestions.questions',
                 'evaluatedPerson'
             ])
             ->orderByRaw("
@@ -113,31 +113,54 @@ class EvaluationRecourseController extends Controller
                 
                 $evaluatorName = 'Sistema';
                 $average = $validScores->count() > 0 ? round($validScores->avg(), 1) : null;
-                $isTeamEvaluation = strtolower($evaluation->type ?? '') === 'chefia' && $requests->count() > 1;
                 
-                if ($isTeamEvaluation && $requests->count() > 1) {
-                    // Para avaliações de equipe, calcula a média das notas de todos os membros
-                    $teamMembers = collect();
-                    $teamScores = collect();
-                    
-                    foreach ($requests as $request) {
-                        if ($request->requested) {
-                            $teamMembers->push($request->requested->name);
+                // Calcula o total score considerando os pesos das perguntas
+                $totalScore = 0;
+                $totalWeight = 0;
+                
+                if ($evaluation->form && $evaluation->form->groupQuestions) {
+                    foreach ($evaluation->form->groupQuestions as $group) {
+                        foreach ($group->questions as $question) {
+                            $answer = $answers->firstWhere('question_id', $question->id);
+                            $score = $answer ? $answer->score : null;
+                            $weight = $question->weight ?? 1;
                             
-                            // Para equipe, cada request representa um membro que está sendo avaliado
-                            // As respostas são as notas que esse membro recebeu
-                            if ($validScores->count() > 0) {
-                                $memberAverage = $validScores->avg();
-                                $teamScores->push($memberAverage);
+                            if ($score !== null && !is_null($weight)) {
+                                $totalScore += $score * $weight;
+                                $totalWeight += $weight;
                             }
                         }
                     }
+                }
+                
+                // Se houver pesos, calcula a média ponderada; senão, usa a soma simples
+                if ($totalWeight > 0) {
+                    $totalScore = round($totalScore / $totalWeight);
+                } else {
+                    $totalScore = $validScores->sum();
+                }
+                
+                // Verifica se é avaliação de chefia (pode ser individual ou de equipe)
+                $isChefiaType = strtolower($evaluation->type ?? '') === 'chefia';
+                $isTeamEvaluation = $isChefiaType && $requests->count() >= 1; // Chefia sempre pode ser equipe
+                
+                if ($isTeamEvaluation) {
+                    // Para avaliações de chefia/equipe
+                    $teamMembers = collect();
                     
-                    if ($teamScores->count() > 0) {
-                        $average = round($teamScores->avg(), 1);
+                    // Coleta informações dos membros da equipe
+                    foreach ($requests as $request) {
+                        if ($request->requested) {
+                            $teamMembers->push($request->requested->name);
+                        }
                     }
                     
-                    $evaluatorName = "Equipe (" . $teamMembers->count() . " membros)";
+                    // Se há membros da equipe, mostra como avaliação de equipe
+                    if ($teamMembers->count() > 0) {
+                        $evaluatorName = "Equipe de " . $teamMembers->count() . " membro(s)";
+                    } else {
+                        $evaluatorName = "Avaliação da Chefia";
+                    }
                     
                 } else {
                     // Para avaliações individuais
@@ -166,6 +189,7 @@ class EvaluationRecourseController extends Controller
                         'score' => $a->score,
                     ]),
                     'average' => $average,
+                    'total_score' => $totalScore,
                     'total_questions' => $answers->count(),
                     'answered_questions' => $validScores->count(),
                 ];

@@ -21,6 +21,7 @@ const props = defineProps<{
     team_members_count?: number;
     answers: Array<{ question: string; score: number | null }>;
     average: number | null;
+    total_score?: number;
     total_questions: number;
     answered_questions: number;
   }>;
@@ -249,7 +250,7 @@ function getScoreIcon(score: number | null) {
 
               <!-- Estatísticas da avaliação -->
               <div v-if="evaluation.average !== null" class="mt-4 pt-4 border-t border-gray-200">
-                <div class="grid grid-cols-2 gap-4 text-sm">
+                <div class="grid grid-cols-3 gap-4 text-sm">
                   <div class="text-center">
                     <div 
                       class="text-xl font-bold"
@@ -258,6 +259,12 @@ function getScoreIcon(score: number | null) {
                       {{ evaluation.average }}
                     </div>
                     <div class="text-gray-600">Média</div>
+                  </div>
+                  <div class="text-center">
+                    <div class="text-xl font-bold text-blue-600">
+                      {{ evaluation.total_score || 0 }}
+                    </div>
+                    <div class="text-gray-600">Total</div>
                   </div>
                   <div class="text-center">
                     <div class="text-xl font-bold text-gray-800">
