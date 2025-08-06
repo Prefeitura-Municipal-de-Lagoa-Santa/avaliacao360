@@ -265,11 +265,11 @@ function goBack() {
             <!-- Link para ver detalhes completos -->
             <div class="text-center">
               <a
-                :href="route('evaluations.details', recourse.evaluation.id)"
+                :href="route('recourses.personEvaluations', recourse.id)"
                 class="inline-flex items-center px-4 py-2 bg-gray-700 text-white text-sm rounded-lg hover:bg-gray-800 transition-colors"
               >
                 <icons.ExternalLink class="w-4 h-4 mr-2" />
-                Ver Avaliação Completa
+                Análise Completa das Avaliações
               </a>
             </div>
           </div>

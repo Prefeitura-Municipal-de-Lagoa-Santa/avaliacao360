@@ -12,6 +12,7 @@ use App\Models\Person;
 use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 
 class EvaluationRecourseController extends Controller
@@ -41,6 +42,135 @@ class EvaluationRecourseController extends Controller
     private function canAccessRecourse(EvaluationRecourse $recourse): bool
     {
         return $this->isRH() || $this->isResponsibleForRecourse($recourse);
+    }
+
+    /**
+     * Exibe todas as avaliações de uma pessoa para análise completa do recurso
+     */
+    public function viewPersonEvaluations(EvaluationRecourse $recourse)
+    {
+        // Verifica se a pessoa tem permissão (RH ou é responsável pelo recurso)
+        if (!$this->canAccessRecourse($recourse)) {
+            return redirect()->route('dashboard')->with('error', 'Você não tem permissão para acessar este recurso.');
+        }
+
+        $recourse->load([
+            'evaluation.evaluation.evaluatedPerson',
+            'evaluation.evaluation.form',
+            'person'
+        ]);
+
+        $evaluatedPersonId = $recourse->evaluation->evaluation->evaluated_person_id;
+        $formId = $recourse->evaluation->evaluation->form_id;
+
+        // Busca todas as avaliações desta pessoa para este formulário/ano
+        $allEvaluations = Evaluation::where('evaluated_person_id', $evaluatedPersonId)
+            ->where('form_id', $formId)
+            ->with([
+                'answers' => function($query) {
+                    $query->with('question');
+                },
+                'form',
+                'evaluatedPerson'
+            ])
+            ->orderByRaw("
+                CASE type 
+                    WHEN 'auto' THEN 1
+                    WHEN 'gestor' THEN 2
+                    WHEN 'comissionado' THEN 3
+                    WHEN 'servidor' THEN 4
+                    WHEN 'par' THEN 5
+                    WHEN 'subordinado' THEN 6
+                    ELSE 7
+                END
+            ")
+            ->get();
+
+        // Busca os avaliadores para todas as avaliações de uma vez
+        $evaluationIds = $allEvaluations->pluck('id');
+        $evaluationRequests = EvaluationRequest::whereIn('evaluation_id', $evaluationIds)
+            ->with(['requester', 'requested'])
+            ->get()
+            ->groupBy('evaluation_id');
+
+        return inertia('Recourses/PersonEvaluations', [
+            'recourse' => [
+                'id' => $recourse->id,
+                'person' => [
+                    'name' => $recourse->person->name,
+                ],
+                'evaluation' => [
+                    'year' => optional($recourse->evaluation->evaluation->form)->year ?? '—',
+                    'form_name' => $recourse->evaluation->evaluation->form->name ?? '—',
+                ]
+            ],
+            'evaluations' => $allEvaluations->map(function ($evaluation) use ($evaluationRequests) {
+                $answers = $evaluation->answers;
+                $validScores = $answers->where('score', '!=', null)->pluck('score');
+                
+                // Busca as solicitações de avaliação para esta evaluation
+                $requests = $evaluationRequests->get($evaluation->id, collect());
+                
+                $evaluatorName = 'Sistema';
+                $average = $validScores->count() > 0 ? round($validScores->avg(), 1) : null;
+                $isTeamEvaluation = str_contains(strtolower($evaluation->type ?? ''), 'equipe');
+                
+                if ($isTeamEvaluation && $requests->count() > 1) {
+                    // Para avaliações de equipe, calcula a média das notas de todos os membros
+                    $teamMembers = collect();
+                    $teamScores = collect();
+                    
+                    foreach ($requests as $request) {
+                        if ($request->requested) {
+                            $teamMembers->push($request->requested->name);
+                            
+                            // Para equipe, cada request representa um membro que está sendo avaliado
+                            // As respostas são as notas que esse membro recebeu
+                            if ($validScores->count() > 0) {
+                                $memberAverage = $validScores->avg();
+                                $teamScores->push($memberAverage);
+                            }
+                        }
+                    }
+                    
+                    if ($teamScores->count() > 0) {
+                        $average = round($teamScores->avg(), 1);
+                    }
+                    
+                    $evaluatorName = "Equipe (" . $teamMembers->count() . " membros)";
+                    
+                } else {
+                    // Para avaliações individuais
+                    $request = $requests->first();
+                    
+                    if ($request) {
+                        if ($evaluation->type === 'auto') {
+                            $evaluatorName = $request->requested->name . ' (Autoavaliação)';
+                        } else {
+                            // Inverte a lógica: mostra o requested (avaliado) como avaliador
+                            $evaluatorName = $request->requested->name ?? 'Sistema';
+                        }
+                    } elseif ($evaluation->type === 'auto') {
+                        $evaluatorName = $evaluation->evaluatedPerson->name . ' (Autoavaliação)';
+                    }
+                }
+                
+                return [
+                    'id' => $evaluation->id,
+                    'type' => $evaluation->type,
+                    'evaluator_name' => $evaluatorName,
+                    'is_team_evaluation' => $isTeamEvaluation,
+                    'team_members_count' => $isTeamEvaluation ? $requests->count() : null,
+                    'answers' => $answers->map(fn($a) => [
+                        'question' => $a->question->text ?? '',
+                        'score' => $a->score,
+                    ]),
+                    'average' => $average,
+                    'total_questions' => $answers->count(),
+                    'answered_questions' => $validScores->count(),
+                ];
+            }),
+        ]);
     }
 
     public function index(Request $request)

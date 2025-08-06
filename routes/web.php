@@ -143,6 +143,9 @@ Route::middleware(['auth', 'verified', EnsureCpfIsFilled::class, RedirectIfMustC
     Route::get('/recourses/{recourse}/review', [EvaluationRecourseController::class, 'review'])
         ->name('recourses.review');
 
+    Route::get('/recourses/{recourse}/person-evaluations', [EvaluationRecourseController::class, 'viewPersonEvaluations'])
+        ->name('recourses.personEvaluations');
+
     Route::post('/recourses/{recourse}/mark-analyzing', [EvaluationRecourseController::class, 'markAnalyzing'])
         ->name('recourses.markAnalyzing');
 
