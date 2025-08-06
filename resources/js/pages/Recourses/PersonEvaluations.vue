@@ -136,7 +136,7 @@ function getScoreIcon(score: number | null) {
               <div class="text-2xl font-bold text-blue-600">
                 {{ media_geral !== null && media_geral !== undefined ? media_geral.toFixed(1) : '—' }}
               </div>
-              <div class="text-sm text-gray-600">Média Geral Ponderada</div>
+              <div class="text-sm text-gray-600">Nota Final</div>
             </div>
           </div>
         </div>
@@ -305,27 +305,14 @@ function getScoreIcon(score: number | null) {
         <div class="flex items-center justify-between">
           <div>
             <h3 class="text-lg font-semibold text-gray-800 mb-2">
-              Média Geral Ponderada
+              Nota Final
             </h3>
             <div v-if="isDeferido" class="mb-3 p-3 bg-green-50 border border-green-200 rounded-md">
               <div class="flex items-center gap-2 text-green-800">
                 <icons.CheckCircle class="w-5 h-5" />
                 <span class="font-medium">Recurso DEFERIDO</span>
               </div>
-              <p class="text-sm text-green-700 mt-1">
-                A nota do chefe foi anulada. O cálculo considera apenas a autoavaliação{{ evaluations.some(e => e.is_team_evaluation) ? ' e a avaliação da equipe' : '' }}.
-              </p>
             </div>
-            <p class="text-sm text-gray-600">
-              {{ isDeferido 
-                ? (evaluations.some(e => e.is_team_evaluation) 
-                  ? 'Cálculo: 75% Autoavaliação + 25% Equipe' 
-                  : 'Cálculo: 100% Autoavaliação')
-                : (evaluations.some(e => e.is_team_evaluation) 
-                  ? 'Cálculo: 50% Chefe + 25% Equipe + 25% Autoavaliação' 
-                  : 'Cálculo: 70% Chefe + 30% Autoavaliação')
-              }}
-            </p>
           </div>
           <div class="text-right">
             <div 
