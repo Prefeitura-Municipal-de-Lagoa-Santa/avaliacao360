@@ -80,7 +80,7 @@ class EvaluationRecourseController extends Controller
                     WHEN 'comissionado' THEN 3
                     WHEN 'servidor' THEN 4
                     WHEN 'par' THEN 5
-                    WHEN 'subordinado' THEN 6
+                    WHEN 'chefia' THEN 6
                     ELSE 7
                 END
             ")
