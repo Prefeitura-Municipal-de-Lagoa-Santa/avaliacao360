@@ -113,7 +113,7 @@ class EvaluationRecourseController extends Controller
                 
                 $evaluatorName = 'Sistema';
                 $average = $validScores->count() > 0 ? round($validScores->avg(), 1) : null;
-                $isTeamEvaluation = str_contains(strtolower($evaluation->type ?? ''), 'equipe');
+                $isTeamEvaluation = strtolower($evaluation->type ?? '') === 'chefia' && $requests->count() > 1;
                 
                 if ($isTeamEvaluation && $requests->count() > 1) {
                     // Para avaliações de equipe, calcula a média das notas de todos os membros

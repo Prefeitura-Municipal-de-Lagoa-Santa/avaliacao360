@@ -32,19 +32,16 @@ function goBack() {
 
 function getEvaluationTypeLabel(type: string): string {
   const types: Record<string, string> = {
+    'autoavaliaçãoGestor': 'Autoavaliação Gestor',
+    'autoavaliaçãoComissionado': 'Autoavaliação Comissionado',
     'auto': 'Autoavaliação',
-    'gestor': 'Avaliação do Gestor',
-    'comissionado': 'Avaliação do Comissionado',
+    'gestor': 'Avaliação do Chefe',
+    'comissionado': 'Avaliação do Chefe',
     'servidor': 'Avaliação do Servidor',
     'par': 'Avaliação entre Pares',
-    'subordinado': 'Avaliação de Subordinado',
+    'chefia': 'Avaliação da Equipe',
     'equipe': 'Avaliação da Equipe',
   };
-  
-  // Verifica se contém "equipe" no tipo
-  if (type.toLowerCase().includes('equipe')) {
-    return 'Avaliação da Equipe';
-  }
   
   return types[type] || type.charAt(0).toUpperCase() + type.slice(1);
 }
@@ -57,13 +54,9 @@ function getEvaluationTypeColor(type: string): string {
     'servidor': 'bg-orange-500',
     'par': 'bg-teal-500',
     'subordinado': 'bg-pink-500',
+    'chefia': 'bg-indigo-500',
     'equipe': 'bg-indigo-500',
   };
-  
-  // Verifica se contém "equipe" no tipo
-  if (type.toLowerCase().includes('equipe')) {
-    return 'bg-indigo-500';
-  }
   
   return colors[type] || 'bg-gray-500';
 }
