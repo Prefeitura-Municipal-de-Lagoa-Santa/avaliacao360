@@ -106,7 +106,8 @@ class EvaluationRecourseController extends Controller
             ],
             'evaluations' => $allEvaluations->map(function ($evaluation) use ($evaluationRequests) {
                 $answers = $evaluation->answers;
-                $validScores = $answers->where('score', '!=', null)->pluck('score');
+                // Modificado: incluir score = 0 como válido
+                $validScores = $answers->whereNotNull('score')->pluck('score');
                 
                 // Busca as solicitações de avaliação para esta evaluation
                 $requests = $evaluationRequests->get($evaluation->id, collect());
@@ -125,6 +126,7 @@ class EvaluationRecourseController extends Controller
                             $score = $answer ? $answer->score : null;
                             $weight = $question->weight ?? 1;
                             
+                            // Modificado: incluir score = 0 como válido
                             if ($score !== null && !is_null($weight)) {
                                 $totalScore += $score * $weight;
                                 $totalWeight += $weight;
@@ -142,7 +144,8 @@ class EvaluationRecourseController extends Controller
                 
                 // Verifica se é avaliação de chefia (pode ser individual ou de equipe)
                 $isChefiaType = strtolower($evaluation->type ?? '') === 'chefia';
-                $isTeamEvaluation = $isChefiaType && $requests->count() >= 1; // Chefia sempre pode ser equipe
+                $isTeamEvaluation = $isChefiaType && $requests->count() > 0; // Chefia sempre pode ser equipe
+                
                 
                 if ($isTeamEvaluation) {
                     // Para avaliações de chefia/equipe

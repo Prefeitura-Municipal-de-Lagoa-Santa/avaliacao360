@@ -36,6 +36,11 @@ class Evaluation extends Model
         return $this->hasMany(Answer::class);
     }
 
+    public function evaluationRequests(): HasMany
+    {
+        return $this->hasMany(EvaluationRequest::class);
+    }
+
     public function evaluatedPerson()
     {
         return $this->belongsTo(Person::class, 'evaluated_person_id');
