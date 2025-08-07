@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Traits\LogsActivity;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -9,7 +10,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Evaluation extends Model
 {
-    use HasFactory;
+    use HasFactory, LogsActivity;
 
     // Apenas os campos que a avaliação representa
     protected $fillable = [
@@ -46,4 +47,37 @@ class Evaluation extends Model
         return $this->belongsTo(Person::class, 'evaluated_person_id');
     }
 
+    /**
+     * Customizar as informações do log de atividade
+     */
+    public function customizeActivityLog($logData, $action)
+    {
+        // Adicionar informações específicas da avaliação
+        $description = $logData['description'];
+        
+        switch ($action) {
+            case 'created':
+                $description = "Nova avaliação criada para {$this->evaluatedPerson?->name} (Tipo: {$this->type})";
+                break;
+            case 'updated':
+                $description = "Avaliação de {$this->evaluatedPerson?->name} foi atualizada";
+                break;
+            case 'deleted':
+                $description = "Avaliação de {$this->evaluatedPerson?->name} foi excluída";
+                break;
+        }
+
+        $logData['description'] = $description;
+        
+        return $logData;
+    }
+
+    /**
+     * Determinar se deve registrar a atividade
+     */
+    public function shouldLogActivity($action)
+    {
+        // Por exemplo, talvez não queremos logar certas atualizações automáticas
+        return true;
+    }
 }

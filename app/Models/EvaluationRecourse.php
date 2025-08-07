@@ -2,10 +2,12 @@
 
 namespace App\Models;
 
+use App\Traits\LogsActivity;
 use Illuminate\Database\Eloquent\Model;
 
 class EvaluationRecourse extends Model
 {
+    use LogsActivity;
     protected $fillable = [
         'evaluation_id',
         'person_id',

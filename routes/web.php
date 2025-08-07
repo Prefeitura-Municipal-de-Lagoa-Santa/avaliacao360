@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\ActivityLogController;
 use App\Http\Controllers\AdminController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\FormController;
@@ -95,6 +96,11 @@ Route::middleware(['auth', 'verified', EnsureCpfIsFilled::class, RedirectIfMustC
     Route::post('/persons/preview', [PersonController::class, 'previewUpload'])->name('persons.preview');
     Route::post('/persons/confirm', [PersonController::class, 'confirmUpload'])->name('persons.confirm');
     Route::resource('people', PersonController::class)->except(['create', 'store', 'show', 'destroy']);
+
+    // Rotas do sistema de logs de atividade
+    Route::get('/activity-logs', [ActivityLogController::class, 'index'])->name('activity-logs.index');
+    Route::get('/activity-logs/{activityLog}', [ActivityLogController::class, 'show'])->name('activity-logs.show');
+    Route::delete('/activity-logs/cleanup', [ActivityLogController::class, 'cleanup'])->name('activity-logs.cleanup');
 
     Route::get('/profile/cpf', [PersonController::class, 'cpf'])->name('profile.cpf');
 
