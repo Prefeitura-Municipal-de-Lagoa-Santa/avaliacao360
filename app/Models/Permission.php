@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Traits\LogsActivity;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;  // Utiliza o trait HasUuids para permitir a geração de UUIDs para o modelo
 use Illuminate\Database\Eloquent\Factories\HasFactory; // Permite o uso de fábricas de modelo
 use Illuminate\Database\Eloquent\Model;  // Classe base para todos os modelos Eloquent
@@ -10,7 +11,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsToMany; // Importa a relação
 class Permission extends Model
 {
     // Usa os traits HasFactory e HasUuids
-    use HasFactory, HasUuids;
+    use HasFactory, HasUuids, LogsActivity;
 
     // Campos que podem ser preenchidos diretamente no modelo
     protected $fillable = [

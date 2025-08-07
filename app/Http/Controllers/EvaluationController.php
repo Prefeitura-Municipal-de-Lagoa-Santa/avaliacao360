@@ -430,21 +430,70 @@ class EvaluationController extends Controller
     public function completed(Request $request)
     {
         $search = $request->input('search');
+        $typeFilter = $request->input('type');
+        $formFilter = $request->input('form');
 
+        // Busca todos os tipos e formulários disponíveis para os filtros
+        $availableTypesQuery = EvaluationRequest::with('evaluation')
+            ->where('status', 'completed')
+            ->whereHas('evaluation', function ($q) {
+                $q->whereNotNull('type');
+            });
+        
+        $availableTypes = $availableTypesQuery
+            ->get()
+            ->pluck('evaluation.type')
+            ->filter()
+            ->unique()
+            ->sort()
+            ->values()
+            ->toArray();
+
+        $availableFormsQuery = EvaluationRequest::with('evaluation.form')
+            ->where('status', 'completed')
+            ->whereHas('evaluation.form', function ($q) {
+                $q->whereNotNull('name');
+            });
+        
+        $availableForms = $availableFormsQuery
+            ->get()
+            ->pluck('evaluation.form.name')
+            ->filter()
+            ->unique()
+            ->sort()
+            ->values()
+            ->toArray();
+
+        // Consulta principal com filtros
         $query = EvaluationRequest::with([
             'evaluation.form',
             'evaluation.evaluatedPerson',
             'requestedPerson'
         ])->where('status', 'completed');
 
+        // Aplicar filtro de busca
         if ($search) {
             $query->where(function ($q) use ($search) {
-                $q->whereHas('evaluation.evaluatedPerson', function ($q) use ($search) {
-                    $q->where('name', 'like', "%{$search}%");
+                $q->whereHas('evaluation.evaluatedPerson', function ($subQ) use ($search) {
+                    $subQ->where('name', 'like', "%{$search}%");
                 })
-                    ->orWhereHas('requestedPerson', function ($q) use ($search) {
-                        $q->where('name', 'like', "%{$search}%");
-                    });
+                ->orWhereHas('requestedPerson', function ($subQ) use ($search) {
+                    $subQ->where('name', 'like', "%{$search}%");
+                });
+            });
+        }
+
+        // Aplicar filtro de tipo
+        if ($typeFilter) {
+            $query->whereHas('evaluation', function ($q) use ($typeFilter) {
+                $q->where('type', $typeFilter);
+            });
+        }
+
+        // Aplicar filtro de formulário
+        if ($formFilter) {
+            $query->whereHas('evaluation.form', function ($q) use ($formFilter) {
+                $q->where('name', $formFilter);
             });
         }
 
@@ -481,7 +530,11 @@ class EvaluationController extends Controller
         'completedRequests' => $completedRequests,
         'filters' => [
             'search' => $search,
+            'type' => $typeFilter,
+            'form' => $formFilter,
         ],
+        'availableTypes' => $availableTypes,
+        'availableForms' => $availableForms,
     ]);
 }
 
@@ -957,6 +1010,8 @@ class EvaluationController extends Controller
     public function unanswered(Request $request)
     {
         $search = $request->input('search');
+        $typeFilter = $request->input('type');
+        $formFilter = $request->input('form');
 
         // 1. Define o ano com regra de janeiro/fevereiro
         $currentYear = in_array(date('n'), [1, 2]) ? date('Y') - 1 : date('Y');
@@ -979,17 +1034,67 @@ class EvaluationController extends Controller
                 ->with('error', 'As avaliações ainda estão dentro do prazo.');
         }
 
-        // 5. Consulta apenas avaliações pendentes
+        // 5. Busca todos os tipos e formulários disponíveis para os filtros
+        $availableTypesQuery = EvaluationRequest::with('evaluation')
+            ->where('status', 'pending')
+            ->whereHas('evaluation', function ($q) {
+                $q->whereNotNull('type');
+            });
+        
+        $availableTypes = $availableTypesQuery
+            ->get()
+            ->pluck('evaluation.type')
+            ->filter()
+            ->unique()
+            ->sort()
+            ->values()
+            ->toArray();
+
+        $availableFormsQuery = EvaluationRequest::with('evaluation.form')
+            ->where('status', 'pending')
+            ->whereHas('evaluation.form', function ($q) {
+                $q->whereNotNull('name');
+            });
+        
+        $availableForms = $availableFormsQuery
+            ->get()
+            ->pluck('evaluation.form.name')
+            ->filter()
+            ->unique()
+            ->sort()
+            ->values()
+            ->toArray();
+
+        // 6. Consulta principal com filtros
         $query = EvaluationRequest::with([
             'evaluation.form',
             'evaluation.evaluatedPerson',
             'requestedPerson'
         ])->where('status', 'pending');
 
+        // Aplicar filtro de busca
         if ($search) {
             $query->where(function ($q) use ($search) {
-                $q->whereHas('evaluation.evaluatedPerson', fn($q) => $q->where('name', 'like', "%{$search}%"))
-                    ->orWhereHas('requestedPerson', fn($q) => $q->where('name', 'like', "%{$search}%"));
+                $q->whereHas('evaluation.evaluatedPerson', function ($subQ) use ($search) {
+                    $subQ->where('name', 'like', "%{$search}%");
+                })
+                ->orWhereHas('requestedPerson', function ($subQ) use ($search) {
+                    $subQ->where('name', 'like', "%{$search}%");
+                });
+            });
+        }
+
+        // Aplicar filtro de tipo
+        if ($typeFilter) {
+            $query->whereHas('evaluation', function ($q) use ($typeFilter) {
+                $q->where('type', $typeFilter);
+            });
+        }
+
+        // Aplicar filtro de formulário
+        if ($formFilter) {
+            $query->whereHas('evaluation.form', function ($q) use ($formFilter) {
+                $q->where('name', $formFilter);
             });
         }
 
@@ -1012,7 +1117,11 @@ class EvaluationController extends Controller
             'pendingRequests' => $pendingExpired,
             'filters' => [
                 'search' => $search,
+                'type' => $typeFilter,
+                'form' => $formFilter,
             ],
+            'availableTypes' => $availableTypes,
+            'availableForms' => $availableForms,
         ]);
     }
 
