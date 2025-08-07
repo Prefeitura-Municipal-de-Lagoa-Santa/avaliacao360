@@ -5,6 +5,15 @@ import DashboardLayout from '@/layouts/DashboardLayout.vue';
 import * as icons from 'lucide-vue-next';
 import { debounce } from 'lodash';
 import { route } from 'ziggy-js';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+  DialogClose,
+} from '@/components/ui/dialog';
 
 const props = defineProps<{
   pendingRequests: {
@@ -24,9 +33,14 @@ const props = defineProps<{
     form?: string | null
   },
   availableTypes?: string[],
-  availableForms?: string[]
+  availableForms?: string[],
+  canRelease: boolean,
 }>();
 
+const isReleaseDialogOpen = ref(false);
+const selectedRequestId = ref<number | null>(null);
+const exceptionDateFirst = ref('');
+const exceptionDateEnd = ref('');
 const search = ref(props.filters.search ?? '');
 const filterType = ref(props.filters.type ?? '');
 const filterForm = ref(props.filters.form ?? '');
@@ -58,6 +72,38 @@ const clearAllFilters = () => {
   });
 };
 
+function openReleaseDialog(requestId: number) {
+  selectedRequestId.value = requestId;
+  isReleaseDialogOpen.value = true;
+}
+
+function handleRelease() {
+  console.log('handleRelease called', {
+    requestId: selectedRequestId.value,
+    exceptionDateFirst: exceptionDateFirst.value,
+    exceptionDateEnd: exceptionDateEnd.value
+  });
+  
+  if (!selectedRequestId.value || !exceptionDateFirst.value || !exceptionDateEnd.value) {
+    console.log('Missing required fields');
+    return;
+  }
+  
+  router.post(route('evaluations.release'), {
+    requestId: selectedRequestId.value,
+    exceptionDateFirst: exceptionDateFirst.value,
+    exceptionDateEnd: exceptionDateEnd.value
+  }, {
+    onSuccess: () => {
+      console.log('Request successful');
+      isReleaseDialogOpen.value = false;
+      selectedRequestId.value = null;
+    },
+    onError: (errors) => {
+      console.error('Request failed', errors);
+    }
+  });
+}
 // Função para contar filtros ativos
 const activeFiltersCount = computed(() => {
   let count = 0;
@@ -283,6 +329,12 @@ function goBack() {
                 Formulário
               </div>
             </th>
+            <th class="table-header">
+              <div class="flex items-center gap-2">
+                <icons.SettingsIcon class="size-4" />
+                Ações
+              </div>
+            </th>
           </tr>
         </thead>
         <tbody>
@@ -307,6 +359,18 @@ function goBack() {
             </td>
             <td class="table-cell">
               <div class="text-gray-700">{{ req.form_name }}</div>
+            </td>
+            <td class="table-cell">
+              <!-- Botão de liberar avaliação -->
+              <button
+                v-if="props.canRelease"
+                @click="openReleaseDialog(req.id)"
+                class="btn btn-green btn-sm flex items-center gap-1"
+              >
+                <icons.Redo2Icon class="size-4" />
+                Liberar
+              </button>
+              <span v-else class="text-xs text-gray-400">Sem ações</span>
             </td>
           </tr>
         </tbody>
@@ -382,5 +446,57 @@ function goBack() {
         {{ activeFiltersCount === 1 ? 'filtro ativo' : 'filtros ativos' }}
       </p>
     </div>
+
+    <!-- Dialog de liberação -->
+    <Dialog :open="isReleaseDialogOpen" @update:open="isReleaseDialogOpen = $event">
+      <DialogContent class="sm:max-w-md bg-white">
+        <DialogHeader>
+          <DialogTitle class="text-lg font-semibold text-gray-900">
+            Liberar Avaliação
+          </DialogTitle>
+          <DialogDescription class="mt-2 text-sm text-gray-600">
+            Defina o período excepcional para preenchimento desta avaliação.
+          </DialogDescription>
+        </DialogHeader>
+
+        <div class="mt-4 space-y-4">
+          <div>
+            <label class="block text-sm font-medium text-gray-700">Data Inicial</label>
+            <input
+              v-model="exceptionDateFirst"
+              type="date"
+              class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
+            />
+          </div>
+
+          <div>
+            <label class="block text-sm font-medium text-gray-700">Data Final</label>
+            <input
+              v-model="exceptionDateEnd"
+              type="date"
+              class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
+            />
+          </div>
+        </div>
+
+        <DialogFooter class="mt-6 flex flex-col-reverse sm:flex-row sm:justify-end sm:space-x-2">
+          <DialogClose as-child>
+            <button
+              type="button"
+              class="mt-3 sm:mt-0 w-full sm:w-auto inline-flex justify-center rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50"
+            >
+              Cancelar
+            </button>
+          </DialogClose>
+          <button
+            @click="handleRelease"
+            type="button"
+            class="w-full sm:w-auto inline-flex justify-center rounded-md border border-transparent bg-indigo-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-indigo-700"
+          >
+            Confirmar
+          </button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   </DashboardLayout>
 </template>

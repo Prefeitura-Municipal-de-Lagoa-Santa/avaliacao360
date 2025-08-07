@@ -19,6 +19,9 @@ class EvaluationRequest extends Model
         'assinatura_base64',
         'status',
         'deleted_by',
+        'exception_date_first',
+        'exception_date_end',
+        'released_by'
     ];
 
     public function evaluation(): BelongsTo
@@ -51,5 +54,9 @@ class EvaluationRequest extends Model
     {
         return $this->belongsTo(User::class, 'deleted_by');
     }
+    public function releasedByUser()
+{
+    return $this->belongsTo(User::class, 'released_by');
+}
 
 }

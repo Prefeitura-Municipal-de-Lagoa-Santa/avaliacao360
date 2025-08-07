@@ -14,6 +14,7 @@ use Illuminate\Support\Facades\DB;
 use App\Models\EvaluationRequest;
 use App\Models\User;
 use App\Models\configs as Config; // Importar o model de configurações
+use Illuminate\Support\Facades\Log;
 
 class EvaluationController extends Controller
 {
@@ -143,7 +144,7 @@ class EvaluationController extends Controller
         }
 
         $user = User::where('id', '=', auth()->id())->first(['id', 'name', 'cpf']);
-        $cpf= '10798101610';
+        $cpf = '10798101610';
         $Person = Person::with('organizationalUnit.allParents', 'jobFunction')
             ->where('cpf', $cpf)
             ->first();
@@ -240,7 +241,7 @@ class EvaluationController extends Controller
     public function showAutoavaliacaoForm()
     {
         $user = auth()->user();
-       
+
         if (!$user || !$user->cpf) {
             return redirect()->route('evaluations')->with('error', 'CPF não encontrado para o usuário autenticado.');
         }
@@ -302,7 +303,7 @@ class EvaluationController extends Controller
     {
         // 1. Pega os dados da pessoa logada
         $user = auth()->user();
-        
+
         $manager = Person::where('cpf', operator: $user->cpf)->first();
 
         // 2. Se não for uma pessoa ou não tiver cargo de chefia, não está disponível
@@ -432,7 +433,7 @@ class EvaluationController extends Controller
             ->whereHas('evaluation', function ($q) {
                 $q->whereNotNull('type');
             });
-        
+
         $availableTypes = $availableTypesQuery
             ->get()
             ->pluck('evaluation.type')
@@ -447,7 +448,7 @@ class EvaluationController extends Controller
             ->whereHas('evaluation.form', function ($q) {
                 $q->whereNotNull('name');
             });
-        
+
         $availableForms = $availableFormsQuery
             ->get()
             ->pluck('evaluation.form.name')
@@ -470,9 +471,9 @@ class EvaluationController extends Controller
                 $q->whereHas('evaluation.evaluatedPerson', function ($subQ) use ($search) {
                     $subQ->where('name', 'like', "%{$search}%");
                 })
-                ->orWhereHas('requestedPerson', function ($subQ) use ($search) {
-                    $subQ->where('name', 'like', "%{$search}%");
-                });
+                    ->orWhereHas('requestedPerson', function ($subQ) use ($search) {
+                        $subQ->where('name', 'like', "%{$search}%");
+                    });
             });
         }
 
@@ -491,87 +492,87 @@ class EvaluationController extends Controller
         }
 
         $completedRequests = $query
-        ->orderByDesc('created_at')
-        ->paginate(20)
-        ->through(function ($request) {
-            $form = $request->evaluation->form;
-            $canDelete = false;
-            
-            if (auth()->user() && auth()->user()->roles (['Admin', 'RH']) && $form) {
+            ->orderByDesc('created_at')
+            ->paginate(20)
+            ->through(function ($request) {
+                $form = $request->evaluation->form;
+                $canDelete = false;
 
-                $now = now();
-             
-    if ($form->term_first && $form->term_end && $now->between($form->term_first, $form->term_end->endOfDay())) {
-                    $canDelete = true;
+                if (auth()->user() && auth()->user()->roles(['Admin', 'RH']) && $form) {
+
+                    $now = now();
+
+                    if ($form->term_first && $form->term_end && $now->between($form->term_first, $form->term_end->endOfDay())) {
+                        $canDelete = true;
+                    }
                 }
-            }
-           
-            return [
-                'id' => $request->id,
-                'type' => $request->evaluation->type ?? '-',
-                'form_name' => $request->evaluation->form->name ?? '-',
-                'avaliado' => $request->evaluation->evaluatedPerson->name ?? '-',
-                'avaliador' => $request->requestedPerson->name ?? '-',
-                'created_at' => $request->created_at?->format('d/m/Y H:i') ?? '',
-                'can_delete' => $canDelete,
-            ];
-        })
-        
-        ->withQueryString();
-         
-    return inertia('Evaluations/Completed', [
-        'completedRequests' => $completedRequests,
-        'filters' => [
-            'search' => $search,
-            'type' => $typeFilter,
-            'form' => $formFilter,
-        ],
-        'availableTypes' => $availableTypes,
-        'availableForms' => $availableForms,
-    ]);
-}
+
+                return [
+                    'id' => $request->id,
+                    'type' => $request->evaluation->type ?? '-',
+                    'form_name' => $request->evaluation->form->name ?? '-',
+                    'avaliado' => $request->evaluation->evaluatedPerson->name ?? '-',
+                    'avaliador' => $request->requestedPerson->name ?? '-',
+                    'created_at' => $request->created_at?->format('d/m/Y H:i') ?? '',
+                    'can_delete' => $canDelete,
+                ];
+            })
+
+            ->withQueryString();
+
+        return inertia('Evaluations/Completed', [
+            'completedRequests' => $completedRequests,
+            'filters' => [
+                'search' => $search,
+                'type' => $typeFilter,
+                'form' => $formFilter,
+            ],
+            'availableTypes' => $availableTypes,
+            'availableForms' => $availableForms,
+        ]);
+    }
 
     public function deleteCompleted($id)
-{
-    $evaluationRequest = EvaluationRequest::findOrFail($id);
+    {
+        $evaluationRequest = EvaluationRequest::findOrFail($id);
 
-    if (!auth()->user()->roles(['Admin', 'RH'])) {
-        abort(403, 'Sem permissão');
+        if (!auth()->user()->roles(['Admin', 'RH'])) {
+            abort(403, 'Sem permissão');
+        }
+
+        // Verifique se está dentro do período
+        $form = $evaluationRequest->evaluation->form;
+        $now = now();
+        if ($now->lt($form->term_first) || $now->gt($form->term_end)) {
+            return back()->withErrors(['error' => 'Fora do período de avaliação']);
+        }
+
+        DB::beginTransaction();
+        try {
+            // Registra quem fez a ação
+            $evaluationRequest->deleted_by = auth()->id();
+            $evaluationRequest->deleted_at = now();
+
+            // Volta para status pending
+            $evaluationRequest->status = 'pending';
+            $evaluationRequest->save();
+
+            // Deleta as respostas associadas
+            Answer::where('evaluation_id', $evaluationRequest->evaluation_id)->delete();
+
+            // Remove evidências e assinatura
+            $evaluationRequest->update([
+                'evidencias' => null,
+                'assinatura_base64' => null
+            ]);
+
+            DB::commit();
+            return back()->with('success', 'Avaliação retornada para pendente com sucesso!');
+        } catch (\Exception $e) {
+            DB::rollBack();
+            return back()->withErrors(['error' => 'Erro ao reverter avaliação.']);
+        }
     }
-
-    // Verifique se está dentro do período
-    $form = $evaluationRequest->evaluation->form;
-    $now = now();
-    if ($now->lt($form->term_first) || $now->gt($form->term_end)) {
-        return back()->withErrors(['error' => 'Fora do período de avaliação']);
-    }
-
-    DB::beginTransaction();
-    try {
-        // Registra quem fez a ação
-        $evaluationRequest->deleted_by = auth()->id();
-        $evaluationRequest->deleted_at = now();
-        
-        // Volta para status pending
-        $evaluationRequest->status = 'pending';
-        $evaluationRequest->save();
-
-        // Deleta as respostas associadas
-        Answer::where('evaluation_id', $evaluationRequest->evaluation_id)->delete();
-
-        // Remove evidências e assinatura
-        $evaluationRequest->update([
-            'evidencias' => null,
-            'assinatura_base64' => null
-        ]);
-
-        DB::commit();
-        return back()->with('success', 'Avaliação retornada para pendente com sucesso!');
-    } catch (\Exception $e) {
-        DB::rollBack();
-        return back()->withErrors(['error' => 'Erro ao reverter avaliação.']);
-    }
-}
 
     public function showEvaluationResult(EvaluationRequest $evaluationRequest)
     {
@@ -680,9 +681,10 @@ class EvaluationController extends Controller
 
             $auto = $requestsAno->first(fn($r) => $r->requested_person_id == $person->id && in_array(strtolower($r->evaluation->type ?? ''), $autoTypes));
             $chefia = $requestsAno->first(fn($r) => in_array(strtolower($r->evaluation->type ?? ''), $chefiaTypes) && $r->requested_person_id == $person->direct_manager_id);
-            
+
             // Melhor detecção de avaliações de equipe - incluir 'chefia' que podem ser avaliações de equipe
-            $equipes = $requestsAno->filter(fn($r) => 
+            $equipes = $requestsAno->filter(
+                fn($r) =>
                 str_contains(strtolower($r->evaluation->type ?? ''), 'equipe') ||
                 (strtolower($r->evaluation->type ?? '') === 'chefia' && $r->requested_person_id !== $person->direct_manager_id)
             );
@@ -697,7 +699,7 @@ class EvaluationController extends Controller
 
             // Determinar se é gestor baseado na existência de avaliações de equipe
             $isGestor = $notaEquipe !== null && $equipes->count() > 0;
-            
+
             // Lógica original da nota
             if (
                 ($isGestor && ($notaAuto === 0 || $notaChefia === 0 || $notaEquipe === null)) ||
@@ -743,15 +745,15 @@ class EvaluationController extends Controller
             }
 
             $recourse = $existingRecourses->get($id);
-            
+
             // Verificar se o recurso foi DEFERIDO e calcular nova nota
             $finalScoreAfterRecourse = null;
             $calcFinalAfterRecourse = null;
             $isRecourseApproved = false;
-            
+
             if ($recourse && $recourse->status === 'respondido') {
                 $isRecourseApproved = true;
-                
+
                 // Calcular nova nota SEM a nota do chefe (deferido)
                 if ($isGestor && $notaEquipe !== null && $equipes->count() > 0) {
                     // Com equipe: 75% auto + 25% equipe
@@ -797,7 +799,7 @@ class EvaluationController extends Controller
     public function showEvaluationDetail($id)
     {
         $user = Auth::user();
-       
+
         $person = Person::where('cpf', $user->cpf)->first();
 
         $evaluationRequest = EvaluationRequest::with('evaluation.form')->findOrFail($id);
@@ -969,7 +971,7 @@ class EvaluationController extends Controller
         ]);
 
         $user = Auth::user();
-        
+
         $person = Person::where('cpf', $user->cpf)->first();
 
         if (!$person) {
@@ -1028,7 +1030,7 @@ class EvaluationController extends Controller
             ->whereHas('evaluation', function ($q) {
                 $q->whereNotNull('type');
             });
-        
+
         $availableTypes = $availableTypesQuery
             ->get()
             ->pluck('evaluation.type')
@@ -1043,7 +1045,7 @@ class EvaluationController extends Controller
             ->whereHas('evaluation.form', function ($q) {
                 $q->whereNotNull('name');
             });
-        
+
         $availableForms = $availableFormsQuery
             ->get()
             ->pluck('evaluation.form.name')
@@ -1066,9 +1068,9 @@ class EvaluationController extends Controller
                 $q->whereHas('evaluation.evaluatedPerson', function ($subQ) use ($search) {
                     $subQ->where('name', 'like', "%{$search}%");
                 })
-                ->orWhereHas('requestedPerson', function ($subQ) use ($search) {
-                    $subQ->where('name', 'like', "%{$search}%");
-                });
+                    ->orWhereHas('requestedPerson', function ($subQ) use ($search) {
+                        $subQ->where('name', 'like', "%{$search}%");
+                    });
             });
         }
 
@@ -1084,6 +1086,27 @@ class EvaluationController extends Controller
             $query->whereHas('evaluation.form', function ($q) use ($formFilter) {
                 $q->where('name', $formFilter);
             });
+        }
+
+        $gradesPeriod = Config::where('year', $currentYear)
+            ->value('gradesPeriod');
+        $now = Carbon::now();
+        $canRelease = false;
+
+        if ($gradesPeriod) {
+            // Garante que a comparação seja feita contra o início do dia (00:00:00)
+            $gradesPeriodDate = Carbon::parse($gradesPeriod)->startOfDay();
+
+            // Define $canRelease como true se a data atual for estritamente MENOR que a data limite
+            $canRelease = $now->lessThan($gradesPeriodDate);
+        } else {
+            // Se não há 'gradesPeriod' definido, permite a ação por padrão
+            $canRelease = true;
+        }
+
+        // 7. Consulta as avaliações pendentes que expiraram
+        if ($gradesPeriod) {
+            $query->where('created_at', '<', Carbon::parse($gradesPeriod)->startOfDay());
         }
 
         $pendingExpired = $query
@@ -1110,7 +1133,42 @@ class EvaluationController extends Controller
             ],
             'availableTypes' => $availableTypes,
             'availableForms' => $availableForms,
+            'canRelease' => $canRelease,
         ]);
     }
+
+public function release(Request $request)
+{
+    Log::info('Release request received', [
+        'request_data' => $request->all(),
+        'user_id' => auth()->id()
+    ]);
+
+    $data = $request->validate([
+    'requestId' => 'required|exists:evaluation_requests,id',
+    'exceptionDateFirst' => 'required|date',
+    'exceptionDateEnd' => 'required|date|after_or_equal:exceptionDateFirst',
+]);
+
+    $evaluationRequest = EvaluationRequest::findOrFail($data['requestId']);
+
+    // Verifica se pode liberar
+    $config = Config::where('year', date('Y'))->first();
+    $now = now();
+    $gradesPeriodDate = $config ? Carbon::parse($config->gradesPeriod) : null;
+    
+    if (!$gradesPeriodDate || !$now->lessThanOrEqualTo($gradesPeriodDate)) {
+        return back()->withErrors(['error' => 'Não é possível liberar esta avaliação no momento.']);
+    }
+
+    // Atualiza com as datas de exceção e quem liberou
+    $evaluationRequest->update([
+        'exception_date_first' => $data['exceptionDateFirst'],
+        'exception_date_end' => $data['exceptionDateEnd'],
+        'released_by' => auth()->id(),
+    ]);
+
+    return back()->with('success', 'Avaliação liberada com sucesso!');
+}
 
 }

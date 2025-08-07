@@ -84,7 +84,9 @@ Route::middleware(['auth', 'verified', EnsureCpfIsFilled::class, RedirectIfMustC
     // Rota para deletar avaliação concluída
     Route::delete('/evaluations/completed/{id}', [EvaluationController::class, 'deleteCompleted'])
     ->name('evaluations.completed.delete');
-    //->middleware(['auth', 'can:delete-evaluation']);
+    // Rota para liberar avaliação
+    Route::post('/evaluations/release', [EvaluationController::class, 'release'])
+    ->name('evaluations.release');
     // Rotas para o PDI 
     Route::get('/pdi/list', [PdiController::class, 'index'])->name('pdi.index');
     Route::get('/pdi/{pdiRequest}', [PdiController::class, 'show'])->name('pdi.show');
@@ -218,5 +220,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('/trocar-senha', [PasswordChangeController::class, 'edit'])->name('password.change');
     Route::post('/trocar-senha', [PasswordChangeController::class, 'update'])->name('password.update');
 });
+
+
 
 require __DIR__ . '/auth.php';
