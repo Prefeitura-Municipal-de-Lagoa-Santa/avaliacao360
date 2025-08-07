@@ -12,7 +12,6 @@ use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Log;
 
 class GeneratePdiJob implements ShouldQueue
 {
@@ -27,8 +26,6 @@ class GeneratePdiJob implements ShouldQueue
 
     public function handle(): void
     {
-        Log::info("--- INICIANDO JOB: Geração de PDIs para o ano: {$this->year} ---");
-
         DB::beginTransaction();
         try {
             // Ajuste o 'type' para corresponder ao seu formulário de PDI em Configs.vue
@@ -41,7 +38,6 @@ class GeneratePdiJob implements ShouldQueue
                                         ->whereNotNull('direct_manager_id')
                                         ->get();
 
-            Log::info("Encontrados {$peopleWithManagers->count()} servidores com gestores diretos.");
 
             foreach ($peopleWithManagers as $person) {
                 // 1. Cria ou encontra o registro principal do PDI
@@ -66,15 +62,12 @@ class GeneratePdiJob implements ShouldQueue
                 );
 
                 if ($request->wasRecentlyCreated) {
-                    Log::info("PDI Request criado para: {$person->name} (Gestor: {$person->directManager->name})");
                 }
             }
 
             DB::commit();
-            Log::info("--- SUCESSO: Geração de PDIs para o ano {$this->year} concluída. ---");
         } catch (\Exception $e) {
             DB::rollBack();
-            Log::error("FALHA CRÍTICA no GeneratePdiJob: " . $e->getMessage());
         }
     }
 }

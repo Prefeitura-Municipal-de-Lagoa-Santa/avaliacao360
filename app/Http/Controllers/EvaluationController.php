@@ -10,7 +10,6 @@ use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Inertia\Inertia;
-use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\DB;
 use App\Models\EvaluationRequest;
 use App\Models\User;
@@ -65,12 +64,6 @@ class EvaluationController extends Controller
             return redirect()->route('evaluations')->with('success', 'Avaliação salva com sucesso!');
         } catch (\Exception $e) {
             DB::rollBack();
-            \Log::error('Erro ao salvar avaliação', [
-                'user_id' => auth()->id(),
-                'request_data' => $request->all(),
-                'exception' => $e->getMessage(),
-                'trace' => $e->getTraceAsString(),
-            ]);
             return back()->withErrors(['error' => 'Erro ao salvar avaliação. O erro foi registrado para análise.']);
         }
     }
@@ -576,11 +569,6 @@ class EvaluationController extends Controller
         return back()->with('success', 'Avaliação retornada para pendente com sucesso!');
     } catch (\Exception $e) {
         DB::rollBack();
-        \Log::error('Erro ao reverter avaliação:', [
-            'evaluation_id' => $id,
-            'user_id' => auth()->id(),
-            'error' => $e->getMessage()
-        ]);
         return back()->withErrors(['error' => 'Erro ao reverter avaliação.']);
     }
 }

@@ -201,7 +201,6 @@ class PersonController extends Controller
             return response()->json($result);
 
         } catch (\Exception $e) {
-            // \Log::error('Erro no previewUpload', ['exception' => $e]);
             // Exibir o erro real para debug (remova em produção)
             return response()->json([
                 'message' => 'Erro inesperado no preview.',
@@ -248,7 +247,6 @@ class PersonController extends Controller
             foreach ($rowsData as $index => $data) {
                 if ($this->shouldSkipRow($data)) {
                     $skippedCount++;
-                    // \Log::info('Linha pulada no confirmUpload:', $data);
                     continue;
                 }
                 try {
@@ -258,7 +256,6 @@ class PersonController extends Controller
                     if (!$personData['name'] || !$personData['registration_number']) {
                         $errorCount++;
                         $errorsList[] = "Linha " . ($index + 2) . ": Nome ou matrícula em branco.";
-                        // \Log::warning('Pessoa ignorada por falta de dados obrigatórios', $personData);
                         continue;
                     }
 
@@ -266,12 +263,10 @@ class PersonController extends Controller
                         ['registration_number' => $personData['registration_number']],
                         $personData
                     );
-                    // \Log::info('Pessoa criada/atualizada:', $personData);
                     $successCount++;
                 } catch (\Exception $e) {
                     $errorCount++;
                     $errorsList[] = "Linha " . ($index + 2) . ": " . $e->getMessage();
-                    // \Log::error('Erro ao importar pessoa:', ['linha' => $index + 2, 'error' => $e->getMessage(), 'dados' => $data]);
                 }
             }
 
@@ -290,7 +285,6 @@ class PersonController extends Controller
             if (isset($tempFilePath) && Storage::disk($this->tempDisk)->exists($tempFilePath)) {
                 Storage::disk($this->tempDisk)->delete($tempFilePath);
             }
-            // \Log::error('Erro inesperado ao salvar no confirmUpload', ['exception' => $e]);
             return response()->json(['message' => 'Erro inesperado ao salvar. Nenhuma alteração foi feita.', 'exception' => $e->getMessage()], 500);
         }
     }
@@ -433,9 +427,6 @@ class PersonController extends Controller
         $regime = strtoupper(trim($data['REGIME_TRABALHO'] ?? ''));
         $situacao = strtoupper(trim($data['SITUACAO'] ?? ''));
         $pular = $regime === 'ESTAGIARIO' || $situacao === 'CESSADO';
-        if ($pular) {
-            // \Log::info('PULANDO REGISTRO:', ['nome' => $data['NOME'] ?? '', 'matricula' => $data['MATRICULA'] ?? '', 'regime' => $regime, 'situacao' => $situacao]);
-        }
         return $pular;
     }
 

@@ -12,7 +12,6 @@ use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Log;
 
 class GenerateEvaluationsJob implements ShouldQueue
 {
@@ -34,9 +33,6 @@ class GenerateEvaluationsJob implements ShouldQueue
 
     public function handle(): void
     {
-        Log::info("======================================================================");
-        Log::info("INICIANDO JOB: Geração de avaliações para o ano: {$this->year}");
-        Log::info("======================================================================");
 
         DB::beginTransaction();
         try {
@@ -45,18 +41,12 @@ class GenerateEvaluationsJob implements ShouldQueue
             $this->chefiaForm       = Form::where('type', 'chefia')->where('year', '>=', $this->year)->firstOrFail();
             $this->comissionadoForm = Form::where('type', 'comissionado')->where('year', '>=', $this->year)->first();
 
-            Log::info("[Formulário Servidor] Encontrado: ID {$this->servidorForm->id}");
-            Log::info("[Formulário Gestor] Encontrado: ID {$this->gestorForm->id}");
-            Log::info("[Formulário Chefia] Encontrado: ID {$this->chefiaForm->id}");
-            Log::info("[Formulário Comissionado] Encontrado: ID " . ($this->comissionadoForm ? $this->comissionadoForm->id : 'NÃO ENCONTRADO'));
-
             // ======= APAGAR AVALIAÇÕES DO MESMO ANO OLHANDO O FORM =======
             $formsIds = Form::where('year', $this->year)->pluck('id');
             $evaluationIds = Evaluation::whereIn('form_id', $formsIds)->pluck('id');
             if ($evaluationIds->count()) {
                 EvaluationRequest::whereIn('evaluation_id', $evaluationIds)->delete();
                 Evaluation::whereIn('id', $evaluationIds)->delete();
-                Log::info("Todas as avaliações e requests do ano {$this->year} foram removidas antes da nova geração.");
             }
             // =============================================================
 
@@ -64,18 +54,11 @@ class GenerateEvaluationsJob implements ShouldQueue
             $this->generateManagerEvaluations();
             $this->generateManagerSelfIfNoSubordinates();
 
-            Log::info("[Autoavaliação] Novas autoavaliações criadas: {$this->autoCreatedCount}");
-            Log::info("[Chefia] Novas avaliações de chefia (de cima para baixo) criadas: {$this->chefiaCreatedCount}");
-            Log::info("[Gestor] Novas avaliações de gestor (de baixo para cima) criadas: {$this->servidorCreatedCount}");
-
             DB::commit();
-            Log::info("SUCESSO: Geração de avaliações para o ano {$this->year} concluída.");
 
         } catch (\Exception $e) {
             DB::rollBack();
-            Log::error("FALHA CRÍTICA no Job: " . $e->getMessage() . " na linha " . $e->getLine());
         }
-        Log::info("======================================================================");
     }
 
     private function pessoasElegiveis()
@@ -90,10 +73,8 @@ class GenerateEvaluationsJob implements ShouldQueue
 
     private function generateSelfEvaluations(): void
     {
-        Log::info("--- Etapa de Autoavaliações ---");
 
         $people = $this->pessoasElegiveis()->get();
-        Log::info("Pessoas elegíveis para autoavaliação encontradas: {$people->count()}");
 
         foreach ($people as $person) {
             $jobFunction = $person->jobFunction;
@@ -127,8 +108,6 @@ class GenerateEvaluationsJob implements ShouldQueue
 
     private function generateManagerEvaluations(): void
     {
-        Log::info("--- Etapa de Avaliações de Chefia por direct_manager_id ---");
-
         $peopleWithManagers = $this->pessoasElegiveis()
             ->whereNotNull('direct_manager_id')
             ->get();
@@ -202,7 +181,6 @@ class GenerateEvaluationsJob implements ShouldQueue
                 );
                 if ($request->wasRecentlyCreated) {
                     $this->autoCreatedCount++;
-                    Log::info("[Gestor sem subordinados] Criada avaliação individual para {$manager->name} (ID {$manager->id})");
                 }
             }
         }

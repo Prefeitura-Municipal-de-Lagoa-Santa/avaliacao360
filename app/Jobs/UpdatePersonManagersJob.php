@@ -9,7 +9,6 @@ use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
-use Illuminate\Support\Facades\Log;
 
 class UpdatePersonManagersJob implements ShouldQueue
 {
@@ -43,14 +42,12 @@ class UpdatePersonManagersJob implements ShouldQueue
                 $log .= "\n    - Sala: " . ($nomeSala !== '' ? $nomeSala : '[SEM SALA]') . ' -> Chefe: ' . ($chefe ?: '[SEM CHEFE]');
             }
         }
-        Log::info($log);
 
         // Loga o debug das atribuições
         $logDebug = "\n[UpdatePersonManagersJob] Debug das atribuições de chefia:";
         foreach ($this->debugChefias as $linha) {
             $logDebug .= "\n" . $linha;
         }
-        Log::info($logDebug);
     }
 
     private function processUnitRecursive(OrganizationalUnit $unit, ?Person $chefePai = null)
