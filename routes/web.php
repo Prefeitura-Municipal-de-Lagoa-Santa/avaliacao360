@@ -79,14 +79,14 @@ Route::middleware(['auth', 'verified', EnsureCpfIsFilled::class, RedirectIfMustC
     // ROTAS PARA AUTOAVALIAÇÃO
     Route::get('/evaluations/autoavaliacao/status', [EvaluationController::class, 'checkAutoavaliacaoFormStatus'])->name('evaluations.autoavaliacao.status');
     Route::get('/evaluations/autoavaliacao', [EvaluationController::class, 'showAutoavaliacaoForm'])->name('evaluations.autoavaliacao.show');
+    // Rota para liberar avaliação
+    Route::post('/evaluations/release', [EvaluationController::class, 'release'])
+    ->name('evaluations.release');
     // Rotas para salvar avaliação
     Route::post('/evaluations/{form}', [EvaluationController::class, 'store'])->name('evaluations.store');
     // Rota para deletar avaliação concluída
     Route::delete('/evaluations/completed/{id}', [EvaluationController::class, 'deleteCompleted'])
     ->name('evaluations.completed.delete');
-    // Rota para liberar avaliação
-    Route::post('/evaluations/release', [EvaluationController::class, 'release'])
-    ->name('evaluations.release');
     // Rotas para o PDI 
     Route::get('/pdi/list', [PdiController::class, 'index'])->name('pdi.index');
     Route::get('/pdi/{pdiRequest}', [PdiController::class, 'show'])->name('pdi.show');
