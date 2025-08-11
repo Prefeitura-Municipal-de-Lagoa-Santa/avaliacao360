@@ -1137,38 +1137,58 @@ class EvaluationController extends Controller
         ]);
     }
 
-public function release(Request $request)
-{
-    Log::info('Release request received', [
-        'request_data' => $request->all(),
-        'user_id' => auth()->id()
-    ]);
+    public function release(Request $request)
+    {
+        $data = $request->validate([
+            'requestId' => 'required|exists:evaluation_requests,id',
+            'exceptionDateFirst' => 'required|date',
+            'exceptionDateEnd' => 'required|date|after_or_equal:exceptionDateFirst',
+            'evaluationType' => 'nullable|string',
+        ]);
 
-    $data = $request->validate([
-    'requestId' => 'required|exists:evaluation_requests,id',
-    'exceptionDateFirst' => 'required|date',
-    'exceptionDateEnd' => 'required|date|after_or_equal:exceptionDateFirst',
-]);
+        $evaluationRequest = EvaluationRequest::findOrFail($data['requestId']);
+        $exceptionDateEnd = Carbon::parse($data['exceptionDateEnd']);
+        $evaluationType = strtolower($data['evaluationType'] ?? $evaluationRequest->evaluation->type);
 
-    $evaluationRequest = EvaluationRequest::findOrFail($data['requestId']);
+        // Busca a configuração do ano atual para obter a data de divulgação das notas
+        $config = Config::where('year', date('Y'))->first();
+        $gradesPeriodDate = $config ? Carbon::parse($config->gradesPeriod)->startOfDay() : null;
 
-    // Verifica se pode liberar
-    $config = Config::where('year', date('Y'))->first();
-    $now = now();
-    $gradesPeriodDate = $config ? Carbon::parse($config->gradesPeriod) : null;
-    
-    if (!$gradesPeriodDate || !$now->lessThanOrEqualTo($gradesPeriodDate)) {
-        return back()->withErrors(['error' => 'Não é possível liberar esta avaliação no momento.']);
+        // Se não houver data de divulgação de notas, não é possível fazer a validação.
+        // Você pode decidir o que fazer neste caso, como retornar um erro.
+        if (!$gradesPeriodDate) {
+            return back()->with('error', 'A data de divulgação das notas não está configurada para o ano atual.');
+        }
+
+        // Condição principal para liberar a avaliação
+        // 1. Permite liberar qualquer tipo de avaliação se o fim do novo prazo for ANTES da data de divulgação.
+        // 2. Se o fim do novo prazo for IGUAL OU DEPOIS da data de divulgação, só permite se for uma autoavaliação.
+        $allowedToRelease = false;
+
+        if ($exceptionDateEnd->lessThan($gradesPeriodDate)) {
+            // Se a data final da exceção é anterior à data de divulgação das notas, libera para qualquer tipo.
+            $allowedToRelease = true;
+        } else {
+            // Se a data final da exceção é posterior ou igual à data de divulgação,
+            // só libera se for um dos tipos de autoavaliação.
+            $autoEvaluationTypes = ['autoavaliação', 'autoavaliaçãogestor', 'autoavaliaçãocomissionado'];
+            if (in_array($evaluationType, $autoEvaluationTypes)) {
+                $allowedToRelease = true;
+            }
+        }
+
+
+        if (!$allowedToRelease) {
+            return back()->with('error', 'Não é possível liberar esta avaliação com o prazo selecionado. Fora da política de liberação.');
+        } else {
+            // Atualiza a solicitação de avaliação com as datas de exceção e o responsável pela liberação
+            $evaluationRequest->update([
+                'exception_date_first' => $data['exceptionDateFirst'],
+                'exception_date_end' => $data['exceptionDateEnd'],
+                'released_by' => auth()->id(),
+            ]);
+
+            return back()->with('success', 'Avaliação liberada com sucesso!');
+        }
     }
-
-    // Atualiza com as datas de exceção e quem liberou
-    $evaluationRequest->update([
-        'exception_date_first' => $data['exceptionDateFirst'],
-        'exception_date_end' => $data['exceptionDateEnd'],
-        'released_by' => auth()->id(),
-    ]);
-
-    return back()->with('success', 'Avaliação liberada com sucesso!');
-}
-
 }

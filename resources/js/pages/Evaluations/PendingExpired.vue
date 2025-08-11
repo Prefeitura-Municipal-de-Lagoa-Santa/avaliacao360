@@ -1,10 +1,11 @@
 <script setup lang="ts">
-import { ref, watch, computed } from 'vue';
-import { Head, Link, router } from '@inertiajs/vue3';
+import { watch, computed } from 'vue';
+import { Head, Link, router, usePage } from '@inertiajs/vue3';
 import DashboardLayout from '@/layouts/DashboardLayout.vue';
 import * as icons from 'lucide-vue-next';
 import { debounce } from 'lodash';
 import { route } from 'ziggy-js';
+import { useFlashModal } from '@/composables/useFlashModal';
 import {
   Dialog,
   DialogContent,
@@ -37,6 +38,36 @@ const props = defineProps<{
   canRelease: boolean,
 }>();
 
+const { showFlashModal } = useFlashModal();
+
+
+const page = usePage();
+
+function showFlashMessage(type: 'success' | 'error', message: string) {
+  flash.value = { show: true, type, message };
+  setTimeout(() => {
+    flash.value.show = false;
+  }, 5000);
+}
+
+// Observa mensagens de sucesso e usa o NOVO modal
+watch(() => page.props.flash.success, (newMessage) => {
+  if (newMessage) {
+    
+    showFlashModal('success', newMessage as string);
+    page.props.flash.success = null;
+  }
+}, { immediate: true });
+
+// Observa mensagens de erro e usa o NOVO modal
+watch(() => page.props.flash.error, (newMessage) => {
+  if (newMessage) {
+    
+    showFlashModal('error', newMessage as string);
+    page.props.flash.error = null;
+  }
+}, { immediate: true });
+
 const isReleaseDialogOpen = ref(false);
 const selectedRequestId = ref<number | null>(null);
 const exceptionDateFirst = ref('');
@@ -46,7 +77,6 @@ const filterType = ref(props.filters.type ?? '');
 const filterForm = ref(props.filters.form ?? '');
 const showFilters = ref(false);
 
-// Função para aplicar filtros no servidor
 const applyFilters = debounce(() => {
   const filters: any = {};
   
@@ -60,7 +90,6 @@ const applyFilters = debounce(() => {
   });
 }, 300);
 
-// Função para limpar todos os filtros
 const clearAllFilters = () => {
   search.value = '';
   filterType.value = '';
@@ -78,33 +107,49 @@ function openReleaseDialog(requestId: number) {
 }
 
 function handleRelease() {
-  console.log('handleRelease called', {
-    requestId: selectedRequestId.value,
-    exceptionDateFirst: exceptionDateFirst.value,
-    exceptionDateEnd: exceptionDateEnd.value
-  });
-  
   if (!selectedRequestId.value || !exceptionDateFirst.value || !exceptionDateEnd.value) {
-    console.log('Missing required fields');
+    showFlashMessage('error', 'Todas as datas são obrigatórias');
+    return;
+  }
+
+  if (new Date(exceptionDateEnd.value) < new Date(exceptionDateFirst.value)) {
+    showFlashMessage('error', 'A data final não pode ser menor que a data inicial');
     return;
   }
   
+  const evaluation = props.pendingRequests.data.find(req => req.id === selectedRequestId.value);
+  if (!evaluation) {
+    showFlashMessage('error', 'Avaliação não encontrada');
+    return;
+  }
+
   router.post(route('evaluations.release'), {
     requestId: selectedRequestId.value,
     exceptionDateFirst: exceptionDateFirst.value,
-    exceptionDateEnd: exceptionDateEnd.value
+    exceptionDateEnd: exceptionDateEnd.value,
+    evaluationType: evaluation.type
   }, {
     onSuccess: () => {
-      console.log('Request successful');
+      // Ações a serem feitas em caso de sucesso da requisição (mesmo com erro de flash)
       isReleaseDialogOpen.value = false;
       selectedRequestId.value = null;
+      exceptionDateFirst.value = '';
+      exceptionDateEnd.value = '';
+      
+      // MODIFICAÇÃO: Remova a linha abaixo.
+      // A mensagem de sucesso ou erro será exibida pelo watcher do page.props.flash.
+      // ANTES: showFlashMessage('success', 'Avaliação liberada com sucesso!');
     },
     onError: (errors) => {
-      console.error('Request failed', errors);
+      // Este bloco trata erros de validação do Laravel (status 422)
+      const firstError = Object.values(errors)[0];
+      if (firstError) {
+        showFlashMessage('error', firstError);
+      }
     }
   });
 }
-// Função para contar filtros ativos
+
 const activeFiltersCount = computed(() => {
   let count = 0;
   if (search.value) count++;
@@ -113,7 +158,6 @@ const activeFiltersCount = computed(() => {
   return count;
 });
 
-// Watchers para aplicar filtros quando mudarem
 watch(search, applyFilters);
 watch(filterType, applyFilters);
 watch(filterForm, applyFilters);
@@ -130,6 +174,21 @@ function goBack() {
 <template>
   <Head title="Sem Resposta" />
   <DashboardLayout pageTitle="Avaliações Sem Resposta (Fora do Prazo)">
+    <div v-if="flash.show"
+         :class="[
+           'mb-6 p-4 border rounded-lg flex justify-between items-center shadow-md transition-all duration-300',
+           { 'bg-green-100 border-green-300 text-green-800': flash.type === 'success' },
+           { 'bg-red-100 border-red-300 text-red-800': flash.type === 'error' }
+         ]">
+      <div class="flex items-center">
+        <icons.CheckCircle2Icon v-if="flash.type === 'success'" class="size-5 mr-3" />
+        <icons.AlertCircleIcon v-if="flash.type === 'error'" class="size-5 mr-3" />
+        <span>{{ flash.message }}</span>
+      </div>
+      <button @click="flash.show = false" :class="[{ 'text-green-800': flash.type === 'success' }, { 'text-red-800': flash.type === 'error' }]">
+        <icons.XIcon class="size-5" />
+      </button>
+    </div>
     <div class="detail-page-header">
       <div class="flex items-center gap-3">
         <h2 class="text-2xl font-bold text-gray-800">Avaliações Sem Resposta</h2>
@@ -498,5 +557,27 @@ function goBack() {
         </DialogFooter>
       </DialogContent>
     </Dialog>
+    <div v-if="showSuccessMessage"
+         class="mb-6 p-4 bg-green-100 border border-green-300 text-green-800 rounded-lg flex justify-between items-center shadow-md transition-all duration-300">
+      <div class="flex items-center">
+        <icons.CheckCircle2Icon class="size-5 mr-3" />
+        <span>{{ successMessageContent }}</span>
+      </div>
+      <button @click="showSuccessMessage = false" class="text-green-800 hover:text-green-900">
+        <icons.XIcon class="size-5" />
+      </button>
+    </div>
+    <div class="detail-page-header">
+      <div class="flex items-center gap-3">
+        <h2 class="text-2xl font-bold text-gray-800">Avaliações Sem Resposta</h2>
+        <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">
+          Fora do Prazo
+        </span>
+      </div>
+      <button @click="goBack" class="back-btn">
+        <icons.ArrowLeftIcon class="size-4 mr-2" />
+        Voltar
+      </button>
+    </div>
   </DashboardLayout>
 </template>
