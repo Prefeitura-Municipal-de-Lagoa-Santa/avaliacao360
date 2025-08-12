@@ -74,56 +74,61 @@ class EvaluationController extends Controller
      * Verifica a disponibilidade do formulário de chefia, incluindo a regra de prazo.
      */
     public function checkChefiaFormStatus()
-    {
-        $currentYear = date('Y');
-        $now = now(); // Pega a data e hora atuais
+{
+    $currentYear = date('Y');
+    $now = now();
+    $user = auth()->user();
 
-        // 1. Busca o formulário do ano corrente
-        $chefiaForm = Form::where('type', 'chefia')
-            ->where('year', $currentYear)
-            ->first();
+    // 1. Busca o formulário padrão do ano
+    $chefiaForm = Form::where('type', 'chefia')
+        ->where('year', $currentYear)
+        ->first();
 
-        // 2. Verifica as condições de disponibilidade
-        if (!$chefiaForm) {
-            return response()->json([
-                'available' => false,
-                'message' => 'Não há formulário de avaliação da chefia configurado para este ano.'
-            ]);
+    if (!$chefiaForm || !$chefiaForm->release || !$chefiaForm->term_first || !$chefiaForm->term_end) {
+        return response()->json([
+            'available' => false,
+            'message' => 'O formulário de avaliação da chefia não está configurado ou liberado para este ano.'
+        ]);
+    }
+
+    // 2. Verifica se está dentro do prazo PADRÃO
+    $isWithinStandardPeriod = $now->between(
+        Carbon::parse($chefiaForm->term_first),
+        Carbon::parse($chefiaForm->term_end)->endOfDay()
+    );
+
+    // 3. Verifica se o usuário tem um prazo de EXCEÇÃO
+    $isWithinExceptionPeriod = false;
+    if ($user && $user->cpf) {
+        $person = Person::where('cpf', $user->cpf)->first();
+        if ($person) {
+            $request = EvaluationRequest::where('requested_person_id', $person->id)
+                ->whereHas('evaluation', function ($q) {
+                    $q->where('type', 'chefia');
+                })->first();
+
+            if ($request && $request->exception_date_first && $request->exception_date_end) {
+                $isWithinExceptionPeriod = $now->between(
+                    Carbon::parse($request->exception_date_first),
+                    Carbon::parse($request->exception_date_end)->endOfDay()
+                );
+            }
         }
+    }
 
-        if (!$chefiaForm->release) {
-            return response()->json([
-                'available' => false,
-                'message' => 'O formulário de avaliação da chefia ainda não foi liberado pela administração.'
-            ]);
-        }
-
-        if (!$chefiaForm->term_first || !$chefiaForm->term_end) {
-            return response()->json([
-                'available' => false,
-                'message' => 'O período para preenchimento da avaliação ainda não foi definido.'
-            ]);
-        }
-
-        // 3. Verifica se a data atual está dentro do prazo
-        if (
-            !$now->between(
-                Carbon::parse($chefiaForm->term_first),
-                Carbon::parse($chefiaForm->term_end)->endOfDay()
-            )
-        ) {
-
-            $startDate = $chefiaForm->term_first->format('d/m/Y');
-            $endDate = $chefiaForm->term_end->format('d/m/Y');
-            return response()->json([
-                'available' => false,
-                'message' => "Fora do prazo. O formulário está disponível para preenchimento apenas entre {$startDate} e {$endDate}."
-            ]);
-        }
-
-        // 4. Se todas as verificações passarem, o formulário está disponível
+    // 4. Se estiver em qualquer um dos prazos, está disponível
+    if ($isWithinStandardPeriod || $isWithinExceptionPeriod) {
         return response()->json(['available' => true]);
     }
+
+    // Se não, exibe a mensagem de erro
+    $startDate = $chefiaForm->term_first->format('d/m/Y');
+    $endDate = $chefiaForm->term_end->format('d/m/Y');
+    return response()->json([
+        'available' => false,
+        'message' => "Fora do prazo. O formulário está disponível para preenchimento apenas entre {$startDate} e {$endDate}."
+    ]);
+}
 
     /**
      * Exibe o formulário de avaliação da chefia.
@@ -181,58 +186,61 @@ class EvaluationController extends Controller
      * Verifica a disponibilidade do formulário de autoavaliação, incluindo a regra de prazo.
      */
     public function checkAutoavaliacaoFormStatus()
-    {
-        $currentYear = date('Y');
-        $now = now(); // Pega a data e hora atuais
+{
+    $currentYear = date('Y');
+    $now = now();
+    $user = auth()->user();
 
-        // 1. Busca o formulário do ano corrente para o tipo 'autoavaliacao'
-        $autoavaliacaoForm = Form::where('type', 'servidor') // ALTERADO
-            ->where('year', $currentYear)
-            ->first();
+    // Busca o formulário padrão do ano
+    $autoavaliacaoForm = Form::where('type', 'servidor')
+        ->where('year', $currentYear)
+        ->first();
 
-        // 2. Verifica as condições de disponibilidade
-        if (!$autoavaliacaoForm) {
-            return response()->json([
-                'available' => false,
-                'message' => 'Não há formulário de autoavaliação configurado para este ano.'
-            ]);
+    if (!$autoavaliacaoForm || !$autoavaliacaoForm->release || !$autoavaliacaoForm->term_first || !$autoavaliacaoForm->term_end) {
+        return response()->json([
+            'available' => false,
+            'message' => 'O formulário de autoavaliação não está configurado ou liberado para este ano.'
+        ]);
+    }
+
+    // 1. Verifica se está dentro do prazo PADRÃO
+    $isWithinStandardPeriod = $now->between(
+        Carbon::parse($autoavaliacaoForm->term_first),
+        Carbon::parse($autoavaliacaoForm->term_end)->endOfDay()
+    );
+
+    // 2. Verifica se o usuário tem um prazo de EXCEÇÃO
+    $isWithinExceptionPeriod = false;
+    if ($user && $user->cpf) {
+        $person = Person::where('cpf', $user->cpf)->first();
+        if ($person) {
+            $request = EvaluationRequest::where('requested_person_id', $person->id)
+                ->whereHas('evaluation', function ($q) {
+                    $q->whereIn('type', ['autoavaliação', 'autoavaliaçãoGestor', 'autoavaliaçãoComissionado']);
+                })->first();
+
+            if ($request && $request->exception_date_first && $request->exception_date_end) {
+                $isWithinExceptionPeriod = $now->between(
+                    Carbon::parse($request->exception_date_first),
+                    Carbon::parse($request->exception_date_end)->endOfDay()
+                );
+            }
         }
+    }
 
-        if (!$autoavaliacaoForm->release) {
-            return response()->json([
-                'available' => false,
-                'message' => 'O formulário de autoavaliação ainda não foi liberado pela administração.'
-            ]);
-        }
-
-        if (!$autoavaliacaoForm->term_first || !$autoavaliacaoForm->term_end) {
-            return response()->json([
-                'available' => false,
-                'message' => 'O período para preenchimento da autoavaliação ainda não foi definido.'
-            ]);
-        }
-
-        // 3. Verifica se a data atual está dentro do prazo
-        if (
-            !$now->between(
-                Carbon::parse($autoavaliacaoForm->term_first),
-                Carbon::parse($autoavaliacaoForm->term_end)->endOfDay()
-            )
-        ) {
-
-            $startDate = $autoavaliacaoForm->term_first->format('d/m/Y');
-            $endDate = $autoavaliacaoForm->term_end->format('d/m/Y');
-            return response()->json([
-                'available' => false,
-                'message' => "Fora do prazo. O formulário está disponível para preenchimento apenas entre {$startDate} e {$endDate}."
-            ]);
-        }
-
-
-
-        // 4. Se todas as verificações passarem, o formulário está disponível
+    // 3. Se estiver em qualquer um dos prazos, está disponível
+    if ($isWithinStandardPeriod || $isWithinExceptionPeriod) {
         return response()->json(['available' => true]);
     }
+
+    // Se não, exibe a mensagem de erro com o prazo padrão
+    $startDate = $autoavaliacaoForm->term_first->format('d/m/Y');
+    $endDate = $autoavaliacaoForm->term_end->format('d/m/Y');
+    return response()->json([
+        'available' => false,
+        'message' => "Fora do prazo. O formulário está disponível para preenchimento apenas entre {$startDate} e {$endDate}."
+    ]);
+}
     // Adicione este método ao seu EvaluationController.php
 
     /**

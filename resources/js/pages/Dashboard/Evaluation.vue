@@ -2,7 +2,7 @@
 import DashboardLayout from '@/layouts/DashboardLayout.vue';
 import DashboardCard from '@/components/DashboardCard.vue';
 import { Head, router } from '@inertiajs/vue3';
-import { ref, onMounted, computed } from 'vue';
+import { ref, computed } from 'vue'; // onMounted não é mais necessário para isso
 import * as icons from 'lucide-vue-next';
 import {
   Dialog,
@@ -14,7 +14,7 @@ import {
   DialogClose,
 } from '@/components/ui/dialog';
 
-// Props recebidas do controller
+// Props recebidas do controller (agora com a lógica correta)
 const props = defineProps<{
   prazo: { term_first: string; term_end: string; } | null;
   selfEvaluationVisible: boolean;
@@ -28,7 +28,13 @@ const props = defineProps<{
   teamEvaluationRequestId?: number | null;
   recourseLink?: string | null;
 }>();
+console.log('Props recebidas:', props);
+// A lógica de `onMounted` para verificar o status dos cards foi removida,
+// pois as props já vêm corretas do backend.
 
+// Estado do diálogo de aviso
+const isDialogOpen = ref(false);
+const dialogMessage = ref('');
 
 // Computed para checar se está dentro do prazo
 const dentroDoPrazo = computed(() => {
@@ -44,41 +50,21 @@ const dentroDoPrazo = computed(() => {
   return hoje >= inicio && hoje <= fim;
 });
 
-// Estado do diálogo de aviso
-const isDialogOpen = ref(false);
-const dialogMessage = ref('');
-const isManagerCardVisible = ref(false);
-
-// Checagem para painel de gestor (opcional)
-onMounted(async () => {
-  try {
-    const response = await fetch(route('evaluations.status'));
-    const data = await response.json();
-    isManagerCardVisible.value = data.available;
-  } catch (error) {
-    console.error("Erro ao verificar status de gestor:", error);
-  }
-});
 
 // Formata o prazo para "dd/mm - dd/mm"
 function formatPrazo(prazo: { term_first: string; term_end: string; } | null): string {
   if (!prazo) return 'Não definido';
   const options: Intl.DateTimeFormatOptions = { day: '2-digit', month: '2-digit' };
 
+  // Ajuste para exibir a data correta sem subtrair um dia
   const inicio = new Date(prazo.term_first);
-  inicio.setDate(inicio.getDate() - 1);
-
   const fim = new Date(prazo.term_end);
-  fim.setDate(fim.getDate() - 1);
-
-  const inicioFmt = inicio.toLocaleDateString('pt-BR', options);
-  const fimFmt = fim.toLocaleDateString('pt-BR', options);
+  
+  // Adiciona o fuso horário para evitar problemas de conversão
+  const inicioFmt = inicio.toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo', ...options });
+  const fimFmt = fim.toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo', ...options });
 
   return `${inicioFmt} - ${fimFmt}`;
-}
-
-function goToCalendar() {
-  router.get(route('calendar'));
 }
 
 async function handleChefiaEvaluationClick() {
@@ -125,7 +111,6 @@ function showEvaluationResult(evaluationRequestId: number | null | undefined) {
   router.get(route('evaluations.autoavaliacao.result', { evaluationRequest: evaluationRequestId }));
 }
 
-
 function showDetailsForDeadline() {
   router.get(route('evaluations.history'));
 }
@@ -136,9 +121,8 @@ function showDetailsForDeadline() {
   <DashboardLayout pageTitle="Dashboard de Avaliação">
     <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 items-stretch">
 
-      <!-- Card Autoavaliação -->
       <DashboardCard
-        :label="props.selfEvaluationCompleted ? 'Autoavaliação - Concluído' : 'Autoavaliação'"
+        :label="props.selfEvaluationCompleted ? 'Autoavaliação - Concluída' : 'Autoavaliação'"
         :iconBgColor="props.selfEvaluationCompleted ? '#22c55e' : '#1d82c4'"
         :buttonBgColor="props.selfEvaluationCompleted ? '#16a34a' : '#0369a1'"
         :buttonAction="props.selfEvaluationCompleted
@@ -152,9 +136,8 @@ function showDetailsForDeadline() {
         </template>
       </DashboardCard>
 
-      <!-- Card Avaliação Chefia -->
       <DashboardCard
-        :label="props.bossEvaluationCompleted ? 'Avaliação Chefia - Concluído' : 'Avaliação Chefia'"
+        :label="props.bossEvaluationCompleted ? 'Avaliação Chefia - Concluída' : 'Avaliação Chefia'"
         :iconBgColor="props.bossEvaluationCompleted ? '#22c55e' : '#ef4444'"
         :buttonBgColor="props.bossEvaluationCompleted ? '#16a34a' : '#dc2626'"
         :buttonAction="props.bossEvaluationCompleted
@@ -168,14 +151,11 @@ function showDetailsForDeadline() {
         </template>
       </DashboardCard>
 
-      <!-- Card Avaliar Equipe -->
       <DashboardCard
         :label="props.teamEvaluationCompleted ? 'Avaliar Equipe - Concluído' : 'Avaliar Equipe'"
         :iconBgColor="props.teamEvaluationCompleted ? '#22c55e' : '#8b5cf6'"
         :buttonBgColor="props.teamEvaluationCompleted ? '#16a34a' : '#7c3aed'"
-        :buttonAction="props.teamEvaluationCompleted
-          ? () => showEvaluationResult(props.teamEvaluationRequestId)
-          : handleManagerEvaluationClick"
+        :buttonAction="handleManagerEvaluationClick"
         :buttonText="props.teamEvaluationCompleted ? 'Ver respostas' : 'Começar agora'"
         v-if="(props.teamEvaluationVisible || props.teamEvaluationCompleted)"
       >
@@ -184,7 +164,6 @@ function showDetailsForDeadline() {
         </template>
       </DashboardCard>
 
-      <!-- Card Minhas Avaliações (sempre visível) -->
       <DashboardCard
         label="Minhas Notas"
         iconBgColor="#15B2CB"
@@ -196,7 +175,6 @@ function showDetailsForDeadline() {
         </template>
       </DashboardCard>
 
-      <!-- Card Prazo da Avaliação (sempre visível) -->
       <DashboardCard
         label="Data Avaliação"
         :value="formatPrazo(props.prazo)"
@@ -220,7 +198,6 @@ function showDetailsForDeadline() {
       </DashboardCard>
 
 
-      <!-- Diálogo de aviso -->
       <Dialog v-model:open="isDialogOpen">
         <DialogContent class="sm:max-w-md bg-white">
           <DialogHeader>

@@ -61,7 +61,7 @@ class DashboardController extends Controller
         // Ano selecionado via query string (ou padrão)
         $year = $request->input('year', date('Y'));
 
-        $prazoAvaliacao = $this->getGroupDeadline('avaliacao', $year);
+        $prazoAvaliacao = $this->getGroupDeadline('avaliacao', 'Y');
         $prazoPdi = $this->getGroupDeadline('pdi', $year);
 
         $prazoTerminou = false;
@@ -106,129 +106,106 @@ class DashboardController extends Controller
     }
 
 
-    // ... (os outros métodos como evaluation(), pdi(), etc., permanecem os mesmos) ...
+    /**
+     * Exibe o dashboard de avaliação do usuário com a lógica completa.
+     * Esta função agora contém a lógica movida de EvaluationController@showDashboard.
+     */
     public function evaluation()
     {
-
-        $year = (in_array(date('n'), [1, 2])) ? date('Y') - 1 : date('Y');
-        $config = Config::where('year', $year)->first();
-
-        $isInAwarePeriod = $config ? $config->estaNoPeriodoDeCiencia() : false;
-        
-        $people = Person::where('cpf', Auth::user()->cpf)->first();
-        $prazo = $this->getGroupDeadline('avaliacao');
-        $estaNoPrazo = false;
-        if ($prazo && $prazo->term_first && $prazo->term_end) {
-            $hoje = now();
-            $inicio = $prazo->term_first;
-            $fim = Carbon::parse($prazo->term_end)->endOfDay();
-            $estaNoPrazo = $hoje->between($inicio, $fim);
+        $user = Auth::user();
+        if (!$user || !$user->cpf) {
+            abort(403, 'Usuário não autenticado ou sem CPF.');
         }
-        if (!$people) {
-            return Inertia::render('Dashboard/Evaluation', [
-                'prazo' => $prazo,
+
+        $person = Person::where('cpf', $user->cpf)->first();
+        if (!$person) {
+            // Se a pessoa não for encontrada, renderiza a página com tudo desabilitado.
+            return Inertia::render('Evaluation/Evaluation', [
+                'prazo' => null,
                 'selfEvaluationVisible' => false,
                 'bossEvaluationVisible' => false,
                 'teamEvaluationVisible' => false,
                 'selfEvaluationCompleted' => false,
                 'bossEvaluationCompleted' => false,
                 'teamEvaluationCompleted' => false,
-                // IDs para página de resultado
                 'selfEvaluationRequestId' => null,
                 'bossEvaluationRequestId' => null,
                 'teamEvaluationRequestId' => null,
-                'isInAwarePeriod' => $isInAwarePeriod,
+                'recourseLink' => null,
             ]);
         }
 
+        $now = now();
+        $currentYear = date('Y');
 
-        $recourse = EvaluationRecourse::with('evaluation.form')
-            ->where('person_id', $people->id)
-            ->latest()
+        // --- Lógica para a Autoavaliação ---
+        $selfForm = Form::where('year', $currentYear)->whereIn('type', ['servidor', 'gestor', 'comissionado'])->where('release', true)->first();
+        $isWithinSelfStandardPeriod = $selfForm && $selfForm->term_first && $selfForm->term_end && $now->between(Carbon::parse($selfForm->term_first)->startOfDay(), Carbon::parse($selfForm->term_end)->endOfDay());
+        
+        $selfEvalRequest = EvaluationRequest::where('requested_person_id', $person->id)
+            ->whereHas('evaluation', function ($q) {
+                $q->whereIn('type', ['autoavaliação', 'autoavaliaçãoGestor', 'autoavaliaçãoComissionado']);
+            })
             ->first();
 
-        // Busca pendentes normalmente (prazo + pending)
-        $selfEvaluationVisible = $estaNoPrazo && EvaluationRequest::where('requested_person_id', $people->id)
+        $selfEvaluationCompleted = $selfEvalRequest && $selfEvalRequest->status === 'completed';
+        $isSelfEvalInException = $selfEvalRequest && $selfEvalRequest->exception_date_first && $selfEvalRequest->exception_date_end && $now->between(Carbon::parse($selfEvalRequest->exception_date_first)->startOfDay(), Carbon::parse($selfEvalRequest->exception_date_end)->endOfDay());
+        
+        $selfEvaluationVisible = !$selfEvaluationCompleted && ($isWithinSelfStandardPeriod || $isSelfEvalInException);
+
+        // --- Lógica para a Avaliação da Chefia ---
+        $bossForm = Form::where('year', $currentYear)->where('type', 'chefia')->where('release', true)->first();
+        $isWithinBossStandardPeriod = $bossForm && $bossForm->term_first && $bossForm->term_end && $now->between(Carbon::parse($bossForm->term_first)->startOfDay(), Carbon::parse($bossForm->term_end)->endOfDay());
+
+        $bossEvalRequest = EvaluationRequest::where('requested_person_id', $person->id)
+            ->whereHas('evaluation', function ($q) {
+                $q->where('type', 'chefia');
+            })
+            ->first();
+
+        $bossEvaluationCompleted = $bossEvalRequest && $bossEvalRequest->status === 'completed';
+        $isBossEvalInException = $bossEvalRequest && $bossEvalRequest->exception_date_first && $bossEvalRequest->exception_date_end && $now->between(Carbon::parse($bossEvalRequest->exception_date_first)->startOfDay(), Carbon::parse($bossEvalRequest->exception_date_end)->endOfDay());
+        
+        $bossEvaluationVisible = !$bossEvaluationCompleted && ($isWithinBossStandardPeriod || $isBossEvalInException);
+        
+        // --- LÓGICA CORRIGIDA para Avaliar Equipe (se for gestor) ---
+        $pendingTeamRequests = EvaluationRequest::where('requester_person_id', $person->id)
+            ->whereHas('evaluation', function ($q) {
+                $q->whereIn('type', ['servidor', 'gestor', 'comissionado']);
+            })
             ->where('status', 'pending')
-            ->whereHas('evaluation', function ($query) {
-                $query->whereIn('type', [
-                    'autoavaliaçãoGestor',
-                    'autoavaliaçãoComissionado',
-                    'autoavaliação',
-                ]);
-            })
-            ->exists();
+            ->get();
 
-        $bossEvaluationVisible = $estaNoPrazo && EvaluationRequest::where('requested_person_id', $people->id)
-            ->where('status', 'pending')
-            ->whereHas('evaluation', function ($query) {
-                $query->where('type', 'chefia');
-            })
-            ->exists();
+        $teamEvaluationVisible = false;
+        foreach ($pendingTeamRequests as $request) {
+            $isTeamEvalInException = $request->exception_date_first &&
+                                     $request->exception_date_end &&
+                                     $now->between(
+                                         Carbon::parse($request->exception_date_first)->startOfDay(),
+                                         Carbon::parse($request->exception_date_end)->endOfDay()
+                                     );
 
-        $teamEvaluationVisible = $estaNoPrazo && EvaluationRequest::where('requested_person_id', $people->id)
-            ->where('status', 'pending')
-            ->whereHas('evaluation', function ($query) {
-                $query->whereIn('type', [
-                    'servidor',
-                    'gestor',
-                    'comissionado',
-                ]);
-            })
-            ->exists();
-
-        // Busca avaliações COMPLETAS (pega o primeiro ID de cada tipo)
-        $selfCompletedRequest = EvaluationRequest::where('requested_person_id', $people->id)
-            ->where('status', 'completed')
-            ->whereHas('evaluation', function ($query) {
-                $query->whereIn('type', [
-                    'autoavaliaçãoGestor',
-                    'autoavaliaçãoComissionado',
-                    'autoavaliação',
-                ]);
-            })
-            ->latest()
-            ->first();
-
-        $bossCompletedRequest = EvaluationRequest::where('requested_person_id', $people->id)
-            ->where('status', 'completed')
-            ->whereHas('evaluation', function ($query) {
-                $query->where('type', 'chefia');
-            })
-            ->latest()
-            ->first();
-
-        $teamCompletedRequest = EvaluationRequest::where('requested_person_id', $people->id)
-            ->where('status', 'completed')
-            ->whereHas('evaluation', function ($query) {
-                $query->where('type', 'equipe');
-            })
-            ->latest()
-            ->first();
-
-        // Flags booleanos (se tem completed)
-        $selfEvaluationCompleted = !!$selfCompletedRequest;
-        $bossEvaluationCompleted = !!$bossCompletedRequest;
-        $teamEvaluationCompleted = !!$teamCompletedRequest;
-
-        // IDs para o front abrir página de resultado correta
-        $selfEvaluationRequestId = $selfCompletedRequest?->id;
-        $bossEvaluationRequestId = $bossCompletedRequest?->id;
-        $teamEvaluationRequestId = $teamCompletedRequest?->id;
-
-        // Fora do prazo: tudo falso/nulo (opcional, mas bom para segurança)
-        if (!$estaNoPrazo) {
-            $selfEvaluationVisible = false;
-            $bossEvaluationVisible = false;
-            $teamEvaluationVisible = false;
-            $selfEvaluationCompleted = false;
-            $bossEvaluationCompleted = false;
-            $teamEvaluationCompleted = false;
-            $selfEvaluationRequestId = null;
-            $bossEvaluationRequestId = null;
-            $teamEvaluationRequestId = null;
+            if ($isWithinSelfStandardPeriod || $isTeamEvalInException) {
+                $teamEvaluationVisible = true;
+                break;
+            }
         }
+        
+        $teamEvaluationCompleted = !$teamEvaluationVisible && EvaluationRequest::where('requester_person_id', $person->id)->whereHas('evaluation', function ($q) {
+                $q->whereIn('type', ['servidor', 'gestor', 'comissionado']);
+            })->exists();
+        
+        // --- Prazo Geral (para exibição no card de data) ---
+        $mainFormForPrazo = $selfForm ?? $bossForm;
+        $prazo = $mainFormForPrazo ? ['term_first' => $mainFormForPrazo->term_first, 'term_end' => $mainFormForPrazo->term_end] : null;
 
+        // --- Lógica para Link de Recurso ---
+        $recourse = EvaluationRecourse::with('evaluation.form')
+            ->where('person_id', $person->id)
+            ->latest()
+            ->first();
+
+        // Renderiza a view de avaliação principal com todos os dados calculados.
         return Inertia::render('Dashboard/Evaluation', [
             'prazo' => $prazo,
             'selfEvaluationVisible' => $selfEvaluationVisible,
@@ -237,63 +214,61 @@ class DashboardController extends Controller
             'selfEvaluationCompleted' => $selfEvaluationCompleted,
             'bossEvaluationCompleted' => $bossEvaluationCompleted,
             'teamEvaluationCompleted' => $teamEvaluationCompleted,
-            // IDs para visualizar resultado de cada tipo
-            'selfEvaluationRequestId' => $selfEvaluationRequestId,
-            'bossEvaluationRequestId' => $bossEvaluationRequestId,
-            'teamEvaluationRequestId' => $teamEvaluationRequestId,
-            'isInAwarePeriod' => $isInAwarePeriod,
+            'selfEvaluationRequestId' => $selfEvalRequest?->id,
+            'bossEvaluationRequestId' => $bossEvalRequest?->id,
+            'teamEvaluationRequestId' => null, // Este ID pode ser aprimorado se necessário
             'recourseLink' => $recourse ? route('recourses.show', $recourse->id) : null,
         ]);
     }
 
     public function pdi()
-{
-    $user = Auth::user();
-    $pdiStatus = 'not_released'; // Status padrão
-    $prazoPdi = null; // Prazo padrão
-   
+    {
+        $user = Auth::user();
+        $pdiStatus = 'not_released'; // Status padrão
+        $prazoPdi = null; // Prazo padrão
+       
         // Busca a pessoa pelo CPF do usuário logado
-    $person = Person::where('cpf', $user->cpf)->first();
-    
-    // Verifica se é gestor (ajuste conforme sua lógica de permissão)
-    $isManager = $person && $person->job_function_id; // Supondo que exista o campo is_manager
+        $person = Person::where('cpf', $user->cpf)->first();
+        
+        // Verifica se é gestor (ajuste conforme sua lógica de permissão)
+        $isManager = $person && $person->job_function_id; // Supondo que exista o campo is_manager
 
-    // Se a pessoa existe, verificamos o status do PDI
-    if ($person) {
-        // Busca o PDI mais recente do ano corrente para o servidor
-        $pdiRequest = PdiRequest::where('person_id', $person->id)
-            ->whereHas('pdi', function ($query) {
-                $query->where('year', now()->year);
-            })
-            ->first();
+        // Se a pessoa existe, verificamos o status do PDI
+        if ($person) {
+            // Busca o PDI mais recente do ano corrente para o servidor
+            $pdiRequest = PdiRequest::where('person_id', $person->id)
+                ->whereHas('pdi', function ($query) {
+                    $query->where('year', now()->year);
+                })
+                ->first();
 
-        if ($pdiRequest) {
-            if ($pdiRequest->status === 'pending_manager_fill') {
-                $pdiStatus = 'pending_manager'; // Gestor ainda não preencheu
-            } else {
-                $pdiStatus = 'available'; // PDI disponível para o servidor
+            if ($pdiRequest) {
+                if ($pdiRequest->status === 'pending_manager_fill') {
+                    $pdiStatus = 'pending_manager'; // Gestor ainda não preencheu
+                } else {
+                    $pdiStatus = 'available'; // PDI disponível para o servidor
+                }
             }
+        } else {
+            $pdiStatus = 'user_not_found'; // Usuário sem cadastro em 'people'
         }
-    } else {
-        $pdiStatus = 'user_not_found'; // Usuário sem cadastro em 'people'
+
+        // Se for gestor, carrega a lista de servidores sob sua gestão
+        $managedServers = [];
+        if ($isManager) {
+            $managedServers = Person::where('manager_id', $person->id)->get(); // Ajuste o campo conforme seu banco
+        }
+
+        $year = (in_array(date('n'), [1, 2])) ? date('Y') - 1 : date('Y');
+        $prazoPdi = $this->getGroupDeadline('pdi', $year);
+
+        return Inertia::render('Dashboard/PDI', [
+            'pdiStatus' => $pdiStatus,
+            'prazoPdi' => $prazoPdi,
+            'managedServers' => $managedServers, // Envia a lista para o front
+            'isManager' => $isManager,
+        ]);
     }
-
-    // Se for gestor, carrega a lista de servidores sob sua gestão
-    $managedServers = [];
-    if ($isManager) {
-        $managedServers = Person::where('manager_id', $person->id)->get(); // Ajuste o campo conforme seu banco
-    }
-
-    $year = (in_array(date('n'), [1, 2])) ? date('Y') - 1 : date('Y');
-    $prazoPdi = $this->getGroupDeadline('pdi', $year);
-
-    return Inertia::render('Dashboard/PDI', [
-        'pdiStatus' => $pdiStatus,
-        'prazoPdi' => $prazoPdi,
-        'managedServers' => $managedServers, // Envia a lista para o front
-        'isManager' => $isManager,
-    ]);
-}
 
     public function recourse()
     {
