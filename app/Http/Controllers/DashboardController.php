@@ -61,7 +61,7 @@ class DashboardController extends Controller
         // Ano selecionado via query string (ou padrão)
         $year = $request->input('year', date('Y'));
 
-        $prazoAvaliacao = $this->getGroupDeadline('avaliacao', 'Y');
+        $prazoAvaliacao = $this->getGroupDeadline('avaliacao', $year);
         $prazoPdi = $this->getGroupDeadline('pdi', $year);
 
         $prazoTerminou = false;
@@ -120,7 +120,7 @@ class DashboardController extends Controller
         $person = Person::where('cpf', $user->cpf)->first();
         if (!$person) {
             // Se a pessoa não for encontrada, renderiza a página com tudo desabilitado.
-            return Inertia::render('Evaluation/Evaluation', [
+            return Inertia::render('Dashboard/Evaluation', [
                 'prazo' => null,
                 'selfEvaluationVisible' => false,
                 'bossEvaluationVisible' => false,

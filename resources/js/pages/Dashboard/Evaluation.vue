@@ -28,7 +28,7 @@ const props = defineProps<{
   teamEvaluationRequestId?: number | null;
   recourseLink?: string | null;
 }>();
-console.log('Props recebidas:', props);
+
 // A lógica de `onMounted` para verificar o status dos cards foi removida,
 // pois as props já vêm corretas do backend.
 
