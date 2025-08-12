@@ -15,10 +15,10 @@ const props = defineProps<{
     pendingAssessments: number;
     unansweredAssessments: number;
     overallProgress: string;
-     pdiExpiredVisible?: boolean;
   };
+  pdiExpiredVisible?: boolean;
 }>();
-
+console.log(props);
 const selectedYear = ref(props.selectedYear);
 const availableYears = ref(props.availableYears);
 
