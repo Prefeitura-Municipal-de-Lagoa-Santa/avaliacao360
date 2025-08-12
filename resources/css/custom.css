@@ -183,6 +183,7 @@
 .btn-green { background-color: #22c55e; color: white; } 
 .btn-blue { background-color: #3b82f6; color: white; }
 .btn-gray { background-color: #6b7280; color: white; }
+.btn-red { background-color: #e02424; color: white; }
 
 .btn-green:disabled, .btn-blue:disabled, .btn-gray:disabled {
     background-color: #9ca3af;
