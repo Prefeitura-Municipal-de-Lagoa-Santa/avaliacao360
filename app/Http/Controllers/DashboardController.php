@@ -80,6 +80,17 @@ class DashboardController extends Controller
             $pendingAssessments = 0;
         }
 
+        $now = now();
+        $currentYear = date('Y');
+
+        $pdiForm = $this->getGroupDeadline('pdi', $currentYear);
+        $pdiPrazoFinal = $pdiForm?->term_end ? Carbon::parse($pdiForm->term_end)->endOfDay() : null;
+        $pdiExpiredVisible = false;
+        if ($pdiPrazoFinal && $now->greaterThan($pdiPrazoFinal)) {
+            $pdiExpiredVisible = PdiRequest::where('status', '!=', 'completed')->exists();
+        }
+
+
         $totalAssessments = $completedAssessments + $pendingAssessments + $unansweredAssessments;
         $overallProgress = ($totalAssessments > 0)
             ? ($completedAssessments / $totalAssessments) * 100
@@ -102,6 +113,7 @@ class DashboardController extends Controller
             'prazoAvaliacao' => $prazoAvaliacao,
             'prazoPdi' => $prazoPdi,
             'dashboardStats' => $dashboardStats,
+            'pdiExpiredVisible' => $pdiExpiredVisible,
         ]);
     }
 
@@ -141,7 +153,7 @@ class DashboardController extends Controller
         // --- Lógica para a Autoavaliação ---
         $selfForm = Form::where('year', $currentYear)->whereIn('type', ['servidor', 'gestor', 'comissionado'])->where('release', true)->first();
         $isWithinSelfStandardPeriod = $selfForm && $selfForm->term_first && $selfForm->term_end && $now->between(Carbon::parse($selfForm->term_first)->startOfDay(), Carbon::parse($selfForm->term_end)->endOfDay());
-        
+
         $selfEvalRequest = EvaluationRequest::where('requested_person_id', $person->id)
             ->whereHas('evaluation', function ($q) {
                 $q->whereIn('type', ['autoavaliação', 'autoavaliaçãoGestor', 'autoavaliaçãoComissionado']);
@@ -150,7 +162,7 @@ class DashboardController extends Controller
 
         $selfEvaluationCompleted = $selfEvalRequest && $selfEvalRequest->status === 'completed';
         $isSelfEvalInException = $selfEvalRequest && $selfEvalRequest->exception_date_first && $selfEvalRequest->exception_date_end && $now->between(Carbon::parse($selfEvalRequest->exception_date_first)->startOfDay(), Carbon::parse($selfEvalRequest->exception_date_end)->endOfDay());
-        
+
         $selfEvaluationVisible = !$selfEvaluationCompleted && ($isWithinSelfStandardPeriod || $isSelfEvalInException);
 
         // --- Lógica para a Avaliação da Chefia ---
@@ -165,9 +177,9 @@ class DashboardController extends Controller
 
         $bossEvaluationCompleted = $bossEvalRequest && $bossEvalRequest->status === 'completed';
         $isBossEvalInException = $bossEvalRequest && $bossEvalRequest->exception_date_first && $bossEvalRequest->exception_date_end && $now->between(Carbon::parse($bossEvalRequest->exception_date_first)->startOfDay(), Carbon::parse($bossEvalRequest->exception_date_end)->endOfDay());
-        
+
         $bossEvaluationVisible = !$bossEvaluationCompleted && ($isWithinBossStandardPeriod || $isBossEvalInException);
-        
+
         // --- LÓGICA CORRIGIDA para Avaliar Equipe (se for gestor) ---
         $pendingTeamRequests = EvaluationRequest::where('requester_person_id', $person->id)
             ->whereHas('evaluation', function ($q) {
@@ -179,22 +191,22 @@ class DashboardController extends Controller
         $teamEvaluationVisible = false;
         foreach ($pendingTeamRequests as $request) {
             $isTeamEvalInException = $request->exception_date_first &&
-                                     $request->exception_date_end &&
-                                     $now->between(
-                                         Carbon::parse($request->exception_date_first)->startOfDay(),
-                                         Carbon::parse($request->exception_date_end)->endOfDay()
-                                     );
+                $request->exception_date_end &&
+                $now->between(
+                    Carbon::parse($request->exception_date_first)->startOfDay(),
+                    Carbon::parse($request->exception_date_end)->endOfDay()
+                );
 
             if ($isWithinSelfStandardPeriod || $isTeamEvalInException) {
                 $teamEvaluationVisible = true;
                 break;
             }
         }
-        
+
         $teamEvaluationCompleted = !$teamEvaluationVisible && EvaluationRequest::where('requester_person_id', $person->id)->whereHas('evaluation', function ($q) {
-                $q->whereIn('type', ['servidor', 'gestor', 'comissionado']);
-            })->exists();
-        
+            $q->whereIn('type', ['servidor', 'gestor', 'comissionado']);
+        })->exists();
+
         // --- Prazo Geral (para exibição no card de data) ---
         $mainFormForPrazo = $selfForm ?? $bossForm;
         $prazo = $mainFormForPrazo ? ['term_first' => $mainFormForPrazo->term_first, 'term_end' => $mainFormForPrazo->term_end] : null;
@@ -219,6 +231,7 @@ class DashboardController extends Controller
             'teamEvaluationRequestId' => null, // Este ID pode ser aprimorado se necessário
             'recourseLink' => $recourse ? route('recourses.show', $recourse->id) : null,
         ]);
+
     }
 
     public function pdi()
@@ -226,10 +239,10 @@ class DashboardController extends Controller
         $user = Auth::user();
         $pdiStatus = 'not_released'; // Status padrão
         $prazoPdi = null; // Prazo padrão
-       
+
         // Busca a pessoa pelo CPF do usuário logado
         $person = Person::where('cpf', $user->cpf)->first();
-        
+
         // Verifica se é gestor (ajuste conforme sua lógica de permissão)
         $isManager = $person && $person->job_function_id; // Supondo que exista o campo is_manager
 
@@ -274,10 +287,10 @@ class DashboardController extends Controller
     {
         $user = Auth::user();
         $isRH = user_can('recourse');
-        
+
         // Verifica se é RH ou se tem role "Comissão"
         $isComissao = $user && $user->roles->pluck('name')->contains('Comissão');
-        
+
         if (!$isRH && !$isComissao) {
             return redirect()->route('evaluations')->with('error', 'Você não tem permissão para acessar essa área.');
         }
@@ -288,13 +301,13 @@ class DashboardController extends Controller
         if ($isComissao) {
             // Se for da Comissão, mostra apenas os recursos pelos quais é responsável
             $person = Person::where('cpf', $user->cpf)->first();
-            
+
             if (!$person) {
                 return redirect()->route('evaluations')->with('error', 'Dados de pessoa não encontrados.');
             }
 
             // Busca apenas recursos onde a pessoa é responsável
-            $responsibleRecourses = EvaluationRecourse::whereHas('responsiblePersons', function($q) use ($person) {
+            $responsibleRecourses = EvaluationRecourse::whereHas('responsiblePersons', function ($q) use ($person) {
                 $q->where('person_id', $person->id);
             });
 
@@ -314,7 +327,7 @@ class DashboardController extends Controller
                 'userRole' => 'Comissão',
             ]);
         }
-        
+
         // Se for RH (e não tem role Comissão), mostra todos os recursos
         if ($isRH) {
             $total = EvaluationRecourse::count();

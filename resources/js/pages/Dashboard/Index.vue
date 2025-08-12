@@ -15,6 +15,7 @@ const props = defineProps<{
     pendingAssessments: number;
     unansweredAssessments: number;
     overallProgress: string;
+     pdiExpiredVisible?: boolean;
   };
 }>();
 
@@ -95,6 +96,18 @@ function showDetailsForUnanswered() {
       >
         <template #icon>
           <icons.CircleAlert />
+        </template>
+      </DashboardCard>
+
+      <DashboardCard
+        label="PDIs Sem Resposta"
+        iconBgColor="#f97316"
+        buttonText="Ver Lista"
+        :buttonAction="() => router.get(route('pdi.unanswered'))"
+        v-if="props.pdiExpiredVisible"
+      >
+        <template #icon>
+          <icons.FileClock />
         </template>
       </DashboardCard>
 

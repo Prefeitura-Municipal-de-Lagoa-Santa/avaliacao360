@@ -21,6 +21,9 @@ class PdiRequest extends Model
         'manager_signed_at',
         'person_signature_base64',
         'person_signed_at',
+        'exception_date_first',
+        'exception_date_end',
+        'released_by',
     ];
 
     protected $casts = [
@@ -42,8 +45,12 @@ class PdiRequest extends Model
     {
         return $this->belongsTo(Person::class, 'manager_id');
     }
-     public function answers(): HasMany
+    public function answers(): HasMany
     {
         return $this->hasMany(PdiAnswer::class);
     }
+    public function userReleased()
+{
+    return $this->belongsTo(User::class, 'released_by');
+}
 }

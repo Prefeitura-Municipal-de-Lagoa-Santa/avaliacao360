@@ -45,10 +45,11 @@ Route::middleware(['auth', 'verified', EnsureCpfIsFilled::class, RedirectIfMustC
     Route::get('/configs', [DashboardController::class, 'configs'])->name('configs');
 
     // Debug temporário
-    Route::get('/debug-user', function() {
+    Route::get('/debug-user', function () {
         $user = Auth::user();
-        if (!$user) return 'Usuário não logado';
-        
+        if (!$user)
+            return 'Usuário não logado';
+
         return [
             'name' => $user->name,
             'cpf' => $user->cpf,
@@ -81,12 +82,12 @@ Route::middleware(['auth', 'verified', EnsureCpfIsFilled::class, RedirectIfMustC
     Route::get('/evaluations/autoavaliacao', [EvaluationController::class, 'showAutoavaliacaoForm'])->name('evaluations.autoavaliacao.show');
     // Rota para liberar avaliação
     Route::post('/evaluations/release', [EvaluationController::class, 'release'])
-    ->name('evaluations.release');
+        ->name('evaluations.release');
     // Rotas para salvar avaliação
     Route::post('/evaluations/{form}', [EvaluationController::class, 'store'])->name('evaluations.store');
     // Rota para deletar avaliação concluída
     Route::delete('/evaluations/completed/{id}', [EvaluationController::class, 'deleteCompleted'])
-    ->name('evaluations.completed.delete');
+        ->name('evaluations.completed.delete');
     // Rotas para o PDI 
     Route::get('/pdi/list', [PdiController::class, 'index'])->name('pdi.index');
     Route::get('/pdi/{pdiRequest}', [PdiController::class, 'show'])->name('pdi.show');
@@ -171,7 +172,10 @@ Route::middleware(['auth', 'verified', EnsureCpfIsFilled::class, RedirectIfMustC
         ->name('recourses.removeResponsible');
 
     Route::get('/evaluations/unanswered', [EvaluationController::class, 'unanswered'])->name('evaluations.unanswered');
-
+        // Rota de PDI não respondidas
+    Route::get('/pdi/unanswered', [PdiController::class, 'unanswered'])->name('pdi.unanswered');
+        // Rota de liberação de PDI 
+    Route::post('/pdi/release', [PdiController::class, 'release'])->name('pdi.release');
     // Rotas de notificações
     Route::get('/notifications', [NotificationController::class, 'unread'])->name('notifications.unread');
     Route::get('/notifications/history', [NotificationController::class, 'index'])->name('notifications.history');
@@ -182,30 +186,30 @@ Route::middleware(['auth', 'verified', EnsureCpfIsFilled::class, RedirectIfMustC
             'notification_ids' => 'required|array',
             'notification_ids.*' => 'required|string|exists:notifications,id'
         ]);
-        
+
         $user = $request->user();
         $count = $user->notifications()
             ->whereIn('id', $validated['notification_ids'])
             ->whereNull('read_at')
             ->update(['read_at' => now()]);
-            
+
         return back()->with('success', "{$count} notificações marcadas como lidas");
     })->name('notifications.mark-selected-read');
-    
+
     Route::post('/notifications/delete-selected', function (Request $request) {
         $validated = $request->validate([
             'notification_ids' => 'required|array',
             'notification_ids.*' => 'required|string|exists:notifications,id'
         ]);
-        
+
         $user = $request->user();
         $count = $user->notifications()
             ->whereIn('id', $validated['notification_ids'])
             ->delete();
-            
+
         return back()->with('success', "{$count} notificações excluídas");
     })->name('notifications.delete-selected');
-    
+
     Route::delete('/notifications/{id}', [NotificationController::class, 'destroy'])->name('notifications.destroy');
 
 });

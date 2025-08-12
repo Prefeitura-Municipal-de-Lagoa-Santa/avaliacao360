@@ -27,6 +27,7 @@ const props = defineProps<{
   bossEvaluationRequestId?: number | null;
   teamEvaluationRequestId?: number | null;
   recourseLink?: string | null;
+ 
 }>();
 
 // A lógica de `onMounted` para verificar o status dos cards foi removida,
@@ -59,7 +60,7 @@ function formatPrazo(prazo: { term_first: string; term_end: string; } | null): s
   // Ajuste para exibir a data correta sem subtrair um dia
   const inicio = new Date(prazo.term_first);
   const fim = new Date(prazo.term_end);
-  
+
   // Adiciona o fuso horário para evitar problemas de conversão
   const inicioFmt = inicio.toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo', ...options });
   const fimFmt = fim.toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo', ...options });
@@ -117,81 +118,60 @@ function showDetailsForDeadline() {
 </script>
 
 <template>
+
   <Head title="Dashboard" />
   <DashboardLayout pageTitle="Dashboard de Avaliação">
     <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 items-stretch">
 
-      <DashboardCard
-        :label="props.selfEvaluationCompleted ? 'Autoavaliação - Concluída' : 'Autoavaliação'"
+      <DashboardCard :label="props.selfEvaluationCompleted ? 'Autoavaliação - Concluída' : 'Autoavaliação'"
         :iconBgColor="props.selfEvaluationCompleted ? '#22c55e' : '#1d82c4'"
-        :buttonBgColor="props.selfEvaluationCompleted ? '#16a34a' : '#0369a1'"
-        :buttonAction="props.selfEvaluationCompleted
+        :buttonBgColor="props.selfEvaluationCompleted ? '#16a34a' : '#0369a1'" :buttonAction="props.selfEvaluationCompleted
           ? () => showEvaluationResult(props.selfEvaluationRequestId)
-          : handleAutoavaliacaoClick"
-        :buttonText="props.selfEvaluationCompleted ? 'Ver respostas' : 'Começar agora'"
-        v-if="(props.selfEvaluationVisible || props.selfEvaluationCompleted)"
-      >
+          : handleAutoavaliacaoClick" :buttonText="props.selfEvaluationCompleted ? 'Ver respostas' : 'Começar agora'"
+        v-if="(props.selfEvaluationVisible || props.selfEvaluationCompleted)">
         <template #icon>
           <icons.ListTodo />
         </template>
       </DashboardCard>
 
-      <DashboardCard
-        :label="props.bossEvaluationCompleted ? 'Avaliação Chefia - Concluída' : 'Avaliação Chefia'"
+      <DashboardCard :label="props.bossEvaluationCompleted ? 'Avaliação Chefia - Concluída' : 'Avaliação Chefia'"
         :iconBgColor="props.bossEvaluationCompleted ? '#22c55e' : '#ef4444'"
-        :buttonBgColor="props.bossEvaluationCompleted ? '#16a34a' : '#dc2626'"
-        :buttonAction="props.bossEvaluationCompleted
+        :buttonBgColor="props.bossEvaluationCompleted ? '#16a34a' : '#dc2626'" :buttonAction="props.bossEvaluationCompleted
           ? () => showEvaluationResult(props.bossEvaluationRequestId)
           : handleChefiaEvaluationClick"
         :buttonText="props.bossEvaluationCompleted ? 'Ver respostas' : 'Começar agora'"
-        v-if="(props.bossEvaluationVisible || props.bossEvaluationCompleted)"
-      >
+        v-if="(props.bossEvaluationVisible || props.bossEvaluationCompleted)">
         <template #icon>
           <icons.ListTodo />
         </template>
       </DashboardCard>
 
-      <DashboardCard
-        :label="props.teamEvaluationCompleted ? 'Avaliar Equipe - Concluído' : 'Avaliar Equipe'"
+      <DashboardCard :label="props.teamEvaluationCompleted ? 'Avaliar Equipe - Concluído' : 'Avaliar Equipe'"
         :iconBgColor="props.teamEvaluationCompleted ? '#22c55e' : '#8b5cf6'"
         :buttonBgColor="props.teamEvaluationCompleted ? '#16a34a' : '#7c3aed'"
         :buttonAction="handleManagerEvaluationClick"
         :buttonText="props.teamEvaluationCompleted ? 'Ver respostas' : 'Começar agora'"
-        v-if="(props.teamEvaluationVisible || props.teamEvaluationCompleted)"
-      >
+        v-if="(props.teamEvaluationVisible || props.teamEvaluationCompleted)">
         <template #icon>
           <icons.Users />
         </template>
       </DashboardCard>
 
-      <DashboardCard
-        label="Minhas Notas"
-        iconBgColor="#15B2CB"
-        buttonText="Ver Resultados"
-        :buttonAction="showDetailsForDeadline"
-      >
+      <DashboardCard label="Minhas Notas" iconBgColor="#15B2CB" buttonText="Ver Resultados"
+        :buttonAction="showDetailsForDeadline">
         <template #icon>
           <icons.ListTodo />
         </template>
       </DashboardCard>
 
-      <DashboardCard
-        label="Data Avaliação"
-        :value="formatPrazo(props.prazo)"
-        iconBgColor="#ef4444"
-      >
+      <DashboardCard label="Data Avaliação" :value="formatPrazo(props.prazo)" iconBgColor="#ef4444">
         <template #icon>
           <icons.CalendarDays />
         </template>
       </DashboardCard>
 
-      <DashboardCard
-        v-if="props.recourseLink"
-        label="Acompanhar Recurso"
-        iconBgColor="#059669"
-        buttonText="Visualizar"
-        :buttonAction="() => props.recourseLink && router.get(props.recourseLink)"
-      >
+      <DashboardCard v-if="props.recourseLink" label="Acompanhar Recurso" iconBgColor="#059669" buttonText="Visualizar"
+        :buttonAction="() => props.recourseLink && router.get(props.recourseLink)">
         <template #icon>
           <icons.FileSearch />
         </template>
@@ -208,10 +188,8 @@ function showDetailsForDeadline() {
           </DialogHeader>
           <DialogFooter class="mt-6">
             <DialogClose as-child>
-              <button
-                type="button"
-                class="w-full sm:w-auto inline-flex justify-center rounded-md border border-transparent bg-blue-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
-              >
+              <button type="button"
+                class="w-full sm:w-auto inline-flex justify-center rounded-md border border-transparent bg-blue-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2">
                 Entendido
               </button>
             </DialogClose>
