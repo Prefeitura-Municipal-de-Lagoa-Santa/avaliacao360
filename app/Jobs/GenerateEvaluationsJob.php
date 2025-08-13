@@ -63,7 +63,15 @@ class GenerateEvaluationsJob implements ShouldQueue
 
     private function pessoasElegiveis()
     {
-        // Retorna apenas quem NÃO é 3 - Concursado ou tem função
+        // Retorna pessoas elegíveis para RECEBER avaliação (autoavaliação e avaliação por superiores)
+        // Exclui: 8 - Concursado (mesmo com job_function_id)
+        return Person::eligibleForEvaluation()
+            ->where('bond_type', '!=', '8 - Concursado');
+    }
+
+    private function pessoasQuePodemAvaliar()
+    {
+        // Retorna pessoas que podem FAZER avaliações (incluindo 8 - Concursado com função)
         return Person::eligibleForEvaluation()
             ->where(function ($query) {
                 $query->where('bond_type', '!=', '8 - Concursado')
@@ -108,6 +116,7 @@ class GenerateEvaluationsJob implements ShouldQueue
 
     private function generateManagerEvaluations(): void
     {
+        // Pessoas que PODEM SER AVALIADAS (excluindo 8 - Concursado)
         $peopleWithManagers = $this->pessoasElegiveis()
             ->whereNotNull('direct_manager_id')
             ->get();
@@ -129,6 +138,7 @@ class GenerateEvaluationsJob implements ShouldQueue
                 $evaluationType = 'servidor';
             }
 
+            // Avaliação da pessoa pelo seu chefe
             $evaluation = Evaluation::firstOrCreate(
                 ['form_id' => $formToUse->id, 'evaluated_person_id' => $person->id, 'type' => $evaluationType]
             );
@@ -138,6 +148,27 @@ class GenerateEvaluationsJob implements ShouldQueue
             );
             if ($request->wasRecentlyCreated) {
                 $this->chefiaCreatedCount++;
+            }
+        }
+
+        // Agora, criar avaliações de CHEFES por subordinados (incluindo 8 - Concursado que podem avaliar)
+        // MAS só para chefes que PODEM SER AVALIADOS (excluindo 8 - Concursado)
+        $peopleWhoCanEvaluate = $this->pessoasQuePodemAvaliar()
+            ->whereNotNull('direct_manager_id')
+            ->get();
+
+        foreach ($peopleWhoCanEvaluate as $person) {
+            $manager = $person->directManager;
+            if (!$manager) continue;
+
+            // IMPORTANTE: Só cria avaliação do chefe se ele PODE SER AVALIADO
+            // (ou seja, não é 8 - Concursado)
+            $managerCanBeEvaluated = $this->pessoasElegiveis()
+                ->where('id', $manager->id)
+                ->exists();
+
+            if (!$managerCanBeEvaluated) {
+                continue; // Pula se o manager é 8 - Concursado
             }
 
             // Avaliação do chefe pelos subordinados (tipo chefia)
@@ -156,6 +187,7 @@ class GenerateEvaluationsJob implements ShouldQueue
 
     private function generateManagerSelfIfNoSubordinates(): void
     {
+        // Apenas gestores que PODEM SER AVALIADOS (excluindo 8 - Concursado)
         $managers = $this->pessoasElegiveis()
             ->whereHas('jobFunction', function ($q) {
                 $q->where('is_manager', true);
@@ -163,12 +195,9 @@ class GenerateEvaluationsJob implements ShouldQueue
             ->get();
 
         foreach ($managers as $manager) {
-            $hasSubordinates = Person::where('direct_manager_id', $manager->id)
-                ->eligibleForEvaluation()
-                ->where(function ($query) {
-                    $query->where('bond_type', '!=', '3 - Concursado')
-                          ->orWhereNotNull('job_function_id');
-                })
+            // Verifica subordinados que PODEM AVALIAR (incluindo 8 - Concursado com função)
+            $hasSubordinates = $this->pessoasQuePodemAvaliar()
+                ->where('direct_manager_id', $manager->id)
                 ->exists();
 
             if (!$hasSubordinates) {
