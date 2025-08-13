@@ -66,27 +66,42 @@ class Person extends Model
     {
         $probationaryCutoffDate = Carbon::now()->subYears(3);
 
-        $query->whereIn('functional_status', ['TRABALHANDO', 'FERIAS'])
-            ->where(function (Builder $subQuery) use ($probationaryCutoffDate) {
-                // 0. Exclui "3 - Concursado" sem função
-                $subQuery->where(function (Builder $q) {
-                    $q->where('bond_type', '!=', '3 - Concursado')
-                        ->orWhereNotNull('job_function_id');
+        $query->where(function (Builder $mainQuery) use ($probationaryCutoffDate) {
+            // Pessoas em status normal de trabalho
+            $mainQuery->whereIn('functional_status', ['TRABALHANDO', 'FERIAS'])
+                ->where(function (Builder $subQuery) use ($probationaryCutoffDate) {
+                    // 0. Exclui "3 - Concursado" sem função
+                    $subQuery->where(function (Builder $q) {
+                        $q->where('bond_type', '!=', '3 - Concursado')
+                            ->orWhereNotNull('job_function_id');
+                    })
+                        // 1. O tipo de vínculo NÃO ESTÁ na lista de probatório
+                        ->where(function (Builder $q) use ($probationaryCutoffDate) {
+                        $q->whereNotIn('bond_type', ['1 - Efetivo', '8 - Concursado'])
+                            // OU 2. Já passou do período probatório de 3 anos.
+                            ->orWhere('admission_date', '<=', $probationaryCutoffDate)
+                            // OU 3. TEM uma função de chefia (mesmo que esteja em probatório)
+                            ->orWhere(function (Builder $bossQuery) {
+                                $bossQuery->whereNotNull('job_function_id');
+                            });
+                    });
                 })
-                    // 1. O tipo de vínculo NÃO ESTÁ na lista de probatório
-                    ->where(function (Builder $q) use ($probationaryCutoffDate) {
-                    $q->whereNotIn('bond_type', ['1 - Efetivo', '8 - Concursado'])
-                        // OU 2. Já passou do período probatório de 3 anos.
-                        ->orWhere('admission_date', '<=', $probationaryCutoffDate)
-                        // OU 3. TEM uma função de chefia (mesmo que esteja em probatório)
-                        ->orWhere(function (Builder $bossQuery) {
-                            $bossQuery->whereNotNull('job_function_id');
+                // OU pessoas AFASTADAS que tenham função (chefes podem ser avaliados pelos subordinados mesmo afastados)
+                ->orWhere(function (Builder $afastadoQuery) use ($probationaryCutoffDate) {
+                    $afastadoQuery->where('functional_status', 'AFASTADO')
+                        ->whereNotNull('job_function_id')
+                        ->where(function (Builder $q) {
+                            $q->where('bond_type', '!=', '3 - Concursado')
+                                ->orWhereNotNull('job_function_id');
+                        })
+                        ->where(function (Builder $q) use ($probationaryCutoffDate) {
+                            $q->whereNotIn('bond_type', ['1 - Efetivo', '8 - Concursado'])
+                                ->orWhere('admission_date', '<=', $probationaryCutoffDate)
+                                ->orWhereNotNull('job_function_id');
                         });
                 });
-            });
+        });
     }
-
-
 
     /**
      * Verifica se uma instância específica de Person é elegível para avaliação.
@@ -94,17 +109,27 @@ class Person extends Model
      */
     public function isEligibleForEvaluation(): bool
     {
-        // Regra 1: Precisa estar 'TRABALHANDO' para ser elegível.
-        if ($this->functional_status !== 'TRABALHANDO') {
+        // Regra 1: Precisa estar em status válido
+        if (!in_array($this->functional_status, ['TRABALHANDO', 'FERIAS', 'AFASTADO'])) {
             return false;
         }
 
-        // Regra 2: Se tem uma função de chefia, é sempre elegível.
-        if (!is_null($this->current_function) || $this->current_position === '380-SECRETARIO MUNICIPAL') {
+        // Regra 2: Se está AFASTADO, só é elegível se tiver função de chefia
+        if ($this->functional_status === 'AFASTADO' && is_null($this->job_function_id)) {
+            return false;
+        }
+
+        // Regra 3: Exclui "3 - Concursado" sem função
+        if ($this->bond_type === '3 - Concursado' && is_null($this->job_function_id)) {
+            return false;
+        }
+
+        // Regra 4: Se tem uma função de chefia, é sempre elegível.
+        if (!is_null($this->job_function_id) || $this->current_position === '380-SECRETARIO MUNICIPAL') {
             return true;
         }
 
-        // Regra 3: Verifica o estágio probatório.
+        // Regra 5: Verifica o estágio probatório.
         $probationaryCutoffDate = Carbon::now()->subYears(3);
         $isProbationaryBond = in_array($this->bond_type, ['1 - Efetivo', '8 - Concursado']);
         $isWithin3Years = $this->admission_date > $probationaryCutoffDate;
