@@ -67,8 +67,8 @@ class Person extends Model
         $probationaryCutoffDate = Carbon::now()->subYears(3);
 
         $query->where(function (Builder $mainQuery) use ($probationaryCutoffDate) {
-            // Pessoas em status normal de trabalho
-            $mainQuery->whereIn('functional_status', ['TRABALHANDO', 'FERIAS'])
+            // Pessoas em status normal de trabalho (incluindo CEDIDO como TRABALHANDO)
+            $mainQuery->whereIn('functional_status', ['TRABALHANDO', 'FERIAS', 'CEDIDO'])
                 ->where(function (Builder $subQuery) use ($probationaryCutoffDate) {
                     // 0. Exclui "3 - Concursado" sem função
                     $subQuery->where(function (Builder $q) {
@@ -109,13 +109,13 @@ class Person extends Model
      */
     public function isEligibleForEvaluation(): bool
     {
-        // Regra 1: Precisa estar em status válido
-        if (!in_array($this->functional_status, ['TRABALHANDO', 'FERIAS', 'AFASTADO'])) {
+        // Regra 1: Precisa estar em status válido (CEDIDO tratado como TRABALHANDO)
+        if (!in_array($this->functional_status, ['TRABALHANDO', 'FERIAS', 'CEDIDO', 'AFASTADO'])) {
             return false;
         }
 
-        // Regra 2: Se está AFASTADO, só é elegível se tiver função de chefia
-        if ($this->functional_status === 'AFASTADO' && is_null($this->job_function_id)) {
+        // Regra 2: Se está AFASTADO ou em FERIAS, só é elegível se tiver função de chefia
+        if (in_array($this->functional_status, ['AFASTADO', 'FERIAS']) && is_null($this->job_function_id)) {
             return false;
         }
 

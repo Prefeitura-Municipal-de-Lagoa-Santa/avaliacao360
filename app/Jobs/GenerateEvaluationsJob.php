@@ -72,6 +72,19 @@ class GenerateEvaluationsJob implements ShouldQueue
     private function pessoasQuePodemAvaliar()
     {
         // Retorna pessoas que podem FAZER avaliações (incluindo 8 - Concursado com função)
+        // EXCLUINDO pessoas AFASTADAS e em FERIAS (elas não avaliam subordinados, mas podem avaliar o chefe)
+        return Person::eligibleForEvaluation()
+            ->whereNotIn('functional_status', ['AFASTADO', 'FERIAS']) // NOVA REGRA
+            ->where(function ($query) {
+                $query->where('bond_type', '!=', '8 - Concursado')
+                      ->orWhereNotNull('job_function_id');
+            });
+    }
+
+    private function pessoasQuePodemAvaliarChefe()
+    {
+        // Retorna pessoas que podem avaliar o CHEFE (incluindo AFASTADAS e em FERIAS)
+        // Esta função permite que até pessoas afastadas e em férias avaliem seus chefes
         return Person::eligibleForEvaluation()
             ->where(function ($query) {
                 $query->where('bond_type', '!=', '8 - Concursado')
@@ -138,12 +151,34 @@ class GenerateEvaluationsJob implements ShouldQueue
                 $evaluationType = 'servidor';
             }
 
-            // Avaliação da pessoa pelo seu chefe
+            // NOVA LÓGICA: Se o chefe direto está AFASTADO ou em FERIAS, busca o chefe do chefe
+            $evaluatingManager = $manager;
+            if (in_array($manager->functional_status, ['AFASTADO', 'FERIAS']) && $manager->direct_manager_id) {
+                $potentialEvaluator = $manager->directManager;
+                
+                // Verifica se o chefe do chefe pode avaliar (não está afastado/férias e é elegível)
+                if ($potentialEvaluator && 
+                    !in_array($potentialEvaluator->functional_status, ['AFASTADO', 'FERIAS']) &&
+                    $this->pessoasQuePodemAvaliar()->where('id', $potentialEvaluator->id)->exists()) {
+                    $evaluatingManager = $potentialEvaluator;
+                }
+                // Se não encontrou um chefe do chefe válido, não cria a avaliação
+                else if (in_array($manager->functional_status, ['AFASTADO', 'FERIAS'])) {
+                    continue; // Pula esta avaliação
+                }
+            }
+
+            // Verifica se o avaliador final pode avaliar
+            if (!$this->pessoasQuePodemAvaliar()->where('id', $evaluatingManager->id)->exists()) {
+                continue; // Pula se o avaliador não pode avaliar
+            }
+
+            // Avaliação da pessoa pelo seu chefe (ou chefe do chefe se estiver afastado)
             $evaluation = Evaluation::firstOrCreate(
                 ['form_id' => $formToUse->id, 'evaluated_person_id' => $person->id, 'type' => $evaluationType]
             );
             $request = EvaluationRequest::firstOrCreate(
-                ['evaluation_id' => $evaluation->id, 'requested_person_id' => $manager->id],
+                ['evaluation_id' => $evaluation->id, 'requested_person_id' => $evaluatingManager->id],
                 ['requester_person_id' => $person->id, 'status' => 'pending']
             );
             if ($request->wasRecentlyCreated) {
@@ -151,13 +186,13 @@ class GenerateEvaluationsJob implements ShouldQueue
             }
         }
 
-        // Agora, criar avaliações de CHEFES por subordinados (incluindo 8 - Concursado que podem avaliar)
+        // Agora, criar avaliações de CHEFES por subordinados (incluindo subordinados afastados que podem avaliar o chefe)
         // MAS só para chefes que PODEM SER AVALIADOS (excluindo 8 - Concursado)
-        $peopleWhoCanEvaluate = $this->pessoasQuePodemAvaliar()
+        $peopleWhoCanEvaluateChef = $this->pessoasQuePodemAvaliarChefe()
             ->whereNotNull('direct_manager_id')
             ->get();
 
-        foreach ($peopleWhoCanEvaluate as $person) {
+        foreach ($peopleWhoCanEvaluateChef as $person) {
             $manager = $person->directManager;
             if (!$manager) continue;
 
@@ -195,7 +230,7 @@ class GenerateEvaluationsJob implements ShouldQueue
             ->get();
 
         foreach ($managers as $manager) {
-            // Verifica subordinados que PODEM AVALIAR (incluindo 8 - Concursado com função)
+            // Verifica subordinados que PODEM AVALIAR (excluindo afastados, mas incluindo 8 - Concursado com função)
             $hasSubordinates = $this->pessoasQuePodemAvaliar()
                 ->where('direct_manager_id', $manager->id)
                 ->exists();
