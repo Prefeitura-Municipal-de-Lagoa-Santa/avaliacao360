@@ -40,32 +40,60 @@ const dialogMessage = ref('');
 // Computed para checar se está dentro do prazo
 const dentroDoPrazo = computed(() => {
   if (!props.prazo?.term_first || !props.prazo?.term_end) return false;
-  const hoje = new Date();
-  const inicio = new Date(props.prazo.term_first);
-  const fim = new Date(props.prazo.term_end);
+  
+  try {
+    const hoje = new Date();
+    const inicio = new Date(props.prazo.term_first + 'T12:00:00');
+    const fim = new Date(props.prazo.term_end + 'T12:00:00');
+    
+    // Se ainda são inválidas, retorna false
+    if (isNaN(inicio.getTime()) || isNaN(fim.getTime())) {
+      return false;
+    }
 
-  hoje.setHours(0, 0, 0, 0);
-  inicio.setHours(0, 0, 0, 0);
-  fim.setHours(0, 0, 0, 0);
+    hoje.setHours(0, 0, 0, 0);
+    inicio.setHours(0, 0, 0, 0);
+    fim.setHours(0, 0, 0, 0);
+    
+    // Adiciona 1 dia ao fim do prazo
+    fim.setDate(fim.getDate() + 1);
 
-  return hoje >= inicio && hoje <= fim;
+    return hoje >= inicio && hoje <= fim;
+  } catch (error) {
+    console.error('Erro ao verificar prazo:', error, props.prazo);
+    return false;
+  }
 });
 
 
 // Formata o prazo para "dd/mm - dd/mm"
 function formatPrazo(prazo: { term_first: string; term_end: string; } | null): string {
-  if (!prazo) return 'Não definido';
-  const options: Intl.DateTimeFormatOptions = { day: '2-digit', month: '2-digit' };
-
-  // Ajuste para exibir a data correta sem subtrair um dia
-  const inicio = new Date(prazo.term_first);
-  const fim = new Date(prazo.term_end);
-
-  // Adiciona o fuso horário para evitar problemas de conversão
-  const inicioFmt = inicio.toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo', ...options });
-  const fimFmt = fim.toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo', ...options });
-
-  return `${inicioFmt} - ${fimFmt}`;
+  if (!prazo || !prazo.term_first || !prazo.term_end) return 'Não definido';
+  
+  try {
+    // Agora que o backend está enviando formato Y-m-d, podemos usar diretamente
+    const inicio = new Date(prazo.term_first + 'T12:00:00');
+    const fim = new Date(prazo.term_end + 'T12:00:00');
+    
+    // Se ainda são inválidas, retorna erro
+    if (isNaN(inicio.getTime()) || isNaN(fim.getTime())) {
+      console.error('Datas inválidas:', { term_first: prazo.term_first, term_end: prazo.term_end });
+      return 'Data inválida';
+    }
+    
+    const options: Intl.DateTimeFormatOptions = { 
+      day: '2-digit', 
+      month: '2-digit'
+    };
+    
+    const inicioFmt = inicio.toLocaleDateString('pt-BR', options);
+    const fimFmt = fim.toLocaleDateString('pt-BR', options);
+    
+    return `${inicioFmt} - ${fimFmt}`;
+  } catch (error) {
+    console.error('Erro ao formatar prazo:', error, prazo);
+    return 'Erro na data';
+  }
 }
 
 async function handleChefiaEvaluationClick() {
@@ -128,7 +156,7 @@ function showDetailsForDeadline() {
         :buttonBgColor="props.selfEvaluationCompleted ? '#16a34a' : '#0369a1'" :buttonAction="props.selfEvaluationCompleted
           ? () => showEvaluationResult(props.selfEvaluationRequestId)
           : handleAutoavaliacaoClick" :buttonText="props.selfEvaluationCompleted ? 'Ver respostas' : 'Começar agora'"
-        v-if="(props.selfEvaluationVisible || props.selfEvaluationCompleted)">
+        v-if="dentroDoPrazo && (props.selfEvaluationVisible || props.selfEvaluationCompleted)">
         <template #icon>
           <icons.ListTodo />
         </template>
@@ -140,7 +168,7 @@ function showDetailsForDeadline() {
           ? () => showEvaluationResult(props.bossEvaluationRequestId)
           : handleChefiaEvaluationClick"
         :buttonText="props.bossEvaluationCompleted ? 'Ver respostas' : 'Começar agora'"
-        v-if="(props.bossEvaluationVisible || props.bossEvaluationCompleted)">
+        v-if="dentroDoPrazo && (props.bossEvaluationVisible || props.bossEvaluationCompleted)">
         <template #icon>
           <icons.ListTodo />
         </template>
@@ -151,7 +179,7 @@ function showDetailsForDeadline() {
         :buttonBgColor="props.teamEvaluationCompleted ? '#16a34a' : '#7c3aed'"
         :buttonAction="handleManagerEvaluationClick"
         :buttonText="props.teamEvaluationCompleted ? 'Ver respostas' : 'Começar agora'"
-        v-if="(props.teamEvaluationVisible || props.teamEvaluationCompleted)">
+        v-if="dentroDoPrazo && (props.teamEvaluationVisible || props.teamEvaluationCompleted)">
         <template #icon>
           <icons.Users />
         </template>

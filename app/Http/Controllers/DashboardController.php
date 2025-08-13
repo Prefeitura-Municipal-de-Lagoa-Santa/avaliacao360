@@ -209,7 +209,13 @@ class DashboardController extends Controller
 
         // --- Prazo Geral (para exibição no card de data) ---
         $mainFormForPrazo = $selfForm ?? $bossForm;
-        $prazo = $mainFormForPrazo ? ['term_first' => $mainFormForPrazo->term_first, 'term_end' => $mainFormForPrazo->term_end] : null;
+        $prazo = null;
+        if ($mainFormForPrazo) {
+            $prazo = [
+                'term_first' => $mainFormForPrazo->term_first ? Carbon::parse($mainFormForPrazo->term_first)->format('Y-m-d') : null,
+                'term_end' => $mainFormForPrazo->term_end ? Carbon::parse($mainFormForPrazo->term_end)->format('Y-m-d') : null
+            ];
+        }
 
         // --- Lógica para Link de Recurso ---
         $recourse = EvaluationRecourse::with('evaluation.form')
