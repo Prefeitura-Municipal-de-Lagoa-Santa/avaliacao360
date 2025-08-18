@@ -6,6 +6,7 @@ use App\Models\Evaluation;
 use App\Models\EvaluationRequest;
 use App\Models\Form;
 use App\Models\Person;
+use Carbon\Carbon;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
@@ -71,24 +72,30 @@ class GenerateEvaluationsJob implements ShouldQueue
 
     private function pessoasQuePodemAvaliar()
     {
-        // Retorna pessoas que podem FAZER avaliações (incluindo 8 - Concursado com função)
+        // Retorna pessoas que podem FAZER avaliações de SUBORDINADOS 
+        // INCLUINDO "8 - Concursado" (mesmo sem função, pois podem avaliar)
         // EXCLUINDO pessoas AFASTADAS e em FERIAS (elas não avaliam subordinados, mas podem avaliar o chefe)
         return Person::eligibleForEvaluation()
-            ->whereNotIn('functional_status', ['AFASTADO', 'FERIAS']) // NOVA REGRA
-            ->where(function ($query) {
-                $query->where('bond_type', '!=', '8 - Concursado')
-                      ->orWhereNotNull('job_function_id');
-            });
+            ->whereNotIn('functional_status', ['AFASTADO', 'FERIAS']);
+            // Removida a exclusão de "8 - Concursado" - agora eles podem avaliar
     }
 
     private function pessoasQuePodemAvaliarChefe()
     {
-        // Retorna pessoas que podem avaliar o CHEFE (incluindo AFASTADAS e em FERIAS)
-        // Esta função permite que até pessoas afastadas e em férias avaliem seus chefes
-        return Person::eligibleForEvaluation()
-            ->where(function ($query) {
-                $query->where('bond_type', '!=', '8 - Concursado')
-                      ->orWhereNotNull('job_function_id');
+        // Retorna pessoas que podem avaliar o CHEFE 
+        // INCLUINDO "8 - Concursado", pessoas AFASTADAS, em FERIAS e em estágio probatório
+        // Todas as pessoas podem avaliar seus chefes
+        return Person::where(function ($query) {
+                // Todas as pessoas em qualquer status funcional válido
+                $query->whereIn('functional_status', ['TRABALHANDO', 'FERIAS', 'CEDIDO', 'AFASTADO'])
+                    ->where(function ($subQuery) {
+                        // Exclui apenas "3 - Concursado" sem função
+                        $subQuery->where(function ($q) {
+                            $q->where('bond_type', '!=', '3 - Concursado')
+                                ->orWhereNotNull('job_function_id');
+                        });
+                    });
+                    // Removida a exclusão de "8 - Concursado" - agora eles podem avaliar chefes
             });
     }
 

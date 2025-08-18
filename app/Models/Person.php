@@ -64,41 +64,27 @@ class Person extends Model
      */
     public function scopeEligibleForEvaluation(Builder $query): void
     {
-        $probationaryCutoffDate = Carbon::now()->subYears(3);
-
-        $query->where(function (Builder $mainQuery) use ($probationaryCutoffDate) {
+        $query->where(function (Builder $mainQuery) {
             // Pessoas em status normal de trabalho (incluindo CEDIDO como TRABALHANDO)
             $mainQuery->whereIn('functional_status', ['TRABALHANDO', 'FERIAS', 'CEDIDO'])
-                ->where(function (Builder $subQuery) use ($probationaryCutoffDate) {
-                    // 0. Exclui "3 - Concursado" sem função
+                ->where(function (Builder $subQuery) {
+                    // Exclui apenas "3 - Concursado" sem função
                     $subQuery->where(function (Builder $q) {
                         $q->where('bond_type', '!=', '3 - Concursado')
                             ->orWhereNotNull('job_function_id');
-                    })
-                        // 1. O tipo de vínculo NÃO ESTÁ na lista de probatório
-                        ->where(function (Builder $q) use ($probationaryCutoffDate) {
-                        $q->whereNotIn('bond_type', ['1 - Efetivo', '8 - Concursado'])
-                            // OU 2. Já passou do período probatório de 3 anos.
-                            ->orWhere('admission_date', '<=', $probationaryCutoffDate)
-                            // OU 3. TEM uma função de chefia (mesmo que esteja em probatório)
-                            ->orWhere(function (Builder $bossQuery) {
-                                $bossQuery->whereNotNull('job_function_id');
-                            });
                     });
+                    // NOVA REGRA: Pessoas em estágio probatório são tratadas igualmente
+                    // (removida a exclusão do período probatório)
                 })
                 // OU pessoas AFASTADAS que tenham função (chefes podem ser avaliados pelos subordinados mesmo afastados)
-                ->orWhere(function (Builder $afastadoQuery) use ($probationaryCutoffDate) {
+                ->orWhere(function (Builder $afastadoQuery) {
                     $afastadoQuery->where('functional_status', 'AFASTADO')
                         ->whereNotNull('job_function_id')
                         ->where(function (Builder $q) {
                             $q->where('bond_type', '!=', '3 - Concursado')
                                 ->orWhereNotNull('job_function_id');
-                        })
-                        ->where(function (Builder $q) use ($probationaryCutoffDate) {
-                            $q->whereNotIn('bond_type', ['1 - Efetivo', '8 - Concursado'])
-                                ->orWhere('admission_date', '<=', $probationaryCutoffDate)
-                                ->orWhereNotNull('job_function_id');
                         });
+                    // NOVA REGRA: Pessoas AFASTADAS em estágio probatório também são elegíveis se têm função
                 });
         });
     }
@@ -129,16 +115,9 @@ class Person extends Model
             return true;
         }
 
-        // Regra 5: Verifica o estágio probatório.
-        $probationaryCutoffDate = Carbon::now()->subYears(3);
-        $isProbationaryBond = in_array($this->bond_type, ['1 - Efetivo', '8 - Concursado']);
-        $isWithin3Years = $this->admission_date > $probationaryCutoffDate;
-
-        // Se está em estágio probatório E não tem função (já checado acima), não é elegível.
-        if ($isProbationaryBond && $isWithin3Years) {
-            return false;
-        }
-
+        // Regra 5: NOVA LÓGICA - Pessoas em estágio probatório são tratadas igualmente
+        // (removida a exclusão do período probatório)
+        
         // Se passou por todas as verificações, é elegível.
         return true;
     }
