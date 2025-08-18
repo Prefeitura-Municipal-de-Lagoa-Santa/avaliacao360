@@ -696,6 +696,132 @@ class PersonController extends Controller
         ]);
     }
 
+    public function regenerateEvaluations(Request $request, Person $person)
+    {
+        $request->validate([
+            'old_manager_id' => 'nullable|exists:people,id',
+            'new_manager_id' => 'nullable|exists:people,id',
+        ]);
+
+        $oldManagerId = $request->old_manager_id;
+        $newManagerId = $request->new_manager_id;
+
+        DB::beginTransaction();
+        try {
+            // 1. Apagar todas as avaliações entre a pessoa e o chefe antigo
+            if ($oldManagerId) {
+                // Apagar avaliações onde a pessoa é avaliada pelo chefe antigo
+                $evaluationsFromOldManager = \App\Models\EvaluationRequest::whereHas('evaluation', function ($query) use ($person) {
+                    $query->where('evaluated_person_id', $person->id);
+                })->where('requested_person_id', $oldManagerId)->get();
+
+                foreach ($evaluationsFromOldManager as $request) {
+                    // Verificar se há outras pessoas avaliando a mesma evaluation
+                    $otherRequests = \App\Models\EvaluationRequest::where('evaluation_id', $request->evaluation_id)
+                        ->where('id', '!=', $request->id)
+                        ->exists();
+
+                    // Deletar o request
+                    $request->delete();
+
+                    // Se não há outros requests, deletar a evaluation também
+                    if (!$otherRequests) {
+                        $evaluation = \App\Models\Evaluation::find($request->evaluation_id);
+                        if ($evaluation) {
+                            // Deletar também as respostas se existirem
+                            \App\Models\Answer::where('evaluation_id', $evaluation->id)->delete();
+                            $evaluation->delete();
+                        }
+                    }
+                }
+
+                // Apagar avaliações onde a pessoa avalia o chefe antigo
+                $evaluationsToOldManager = \App\Models\EvaluationRequest::whereHas('evaluation', function ($query) use ($oldManagerId) {
+                    $query->where('evaluated_person_id', $oldManagerId);
+                })->where('requested_person_id', $person->id)->get();
+
+                foreach ($evaluationsToOldManager as $request) {
+                    // Verificar se há outras pessoas avaliando a mesma evaluation
+                    $otherRequests = \App\Models\EvaluationRequest::where('evaluation_id', $request->evaluation_id)
+                        ->where('id', '!=', $request->id)
+                        ->exists();
+
+                    // Deletar o request
+                    $request->delete();
+
+                    // Se não há outros requests, deletar a evaluation também
+                    if (!$otherRequests) {
+                        $evaluation = \App\Models\Evaluation::find($request->evaluation_id);
+                        if ($evaluation) {
+                            // Deletar também as respostas se existirem
+                            \App\Models\Answer::where('evaluation_id', $evaluation->id)->delete();
+                            $evaluation->delete();
+                        }
+                    }
+                }
+            }
+
+            // 2. Criar novas avaliações com o novo chefe (se houver)
+            if ($newManagerId) {
+                // Verificar se já existe uma avaliação do novo chefe
+                $existingEvaluation = \App\Models\Evaluation::where('evaluated_person_id', $newManagerId)
+                    ->where('type', 'chefia')
+                    ->whereHas('form', function ($query) {
+                        $query->where('year', now()->year);
+                    })
+                    ->first();
+
+                if ($existingEvaluation) {
+                    // Criar request para a pessoa avaliar o novo chefe
+                    \App\Models\EvaluationRequest::firstOrCreate([
+                        'evaluation_id' => $existingEvaluation->id,
+                        'requested_person_id' => $person->id,
+                    ], [
+                        'requester_person_id' => $newManagerId,
+                        'status' => 'pending'
+                    ]);
+                }
+
+                // Criar avaliação da pessoa pelo novo chefe
+                $personJobFunction = $person->jobFunction;
+                if ($personJobFunction && $personJobFunction->is_manager) {
+                    $formType = 'gestor';
+                } elseif ($personJobFunction && !$personJobFunction->is_manager) {
+                    $formType = 'comissionado';
+                } else {
+                    $formType = 'servidor';
+                }
+
+                $form = \App\Models\Form::where('type', $formType)
+                    ->where('year', now()->year)
+                    ->first();
+
+                if ($form) {
+                    $evaluation = \App\Models\Evaluation::firstOrCreate([
+                        'form_id' => $form->id,
+                        'evaluated_person_id' => $person->id,
+                        'type' => $formType
+                    ]);
+
+                    \App\Models\EvaluationRequest::firstOrCreate([
+                        'evaluation_id' => $evaluation->id,
+                        'requested_person_id' => $newManagerId,
+                    ], [
+                        'requester_person_id' => $person->id,
+                        'status' => 'pending'
+                    ]);
+                }
+            }
+
+            DB::commit();
+            return back()->with('success', 'Avaliações regeneradas com sucesso!');
+
+        } catch (\Exception $e) {
+            DB::rollBack();
+            return back()->with('error', 'Erro ao regerar avaliações: ' . $e->getMessage());
+        }
+    }
+
     public function createManual()
     {
         return Inertia::render('People/CreateManual');

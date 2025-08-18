@@ -2,6 +2,7 @@
 import { Head, Link, useForm } from '@inertiajs/vue3';
 import DashboardLayout from '@/layouts/DashboardLayout.vue';
 import { route } from 'ziggy-js';
+import { ref, computed } from 'vue';
 
 const props = defineProps<{
   person: {
@@ -43,8 +44,50 @@ const form = useForm({
   direct_manager_id: props.person.direct_manager_id,
 });
 
+// Armazena o chefe original para detectar mudanças
+const originalManagerId = ref(props.person.direct_manager_id);
+// Controla se está regenerando avaliações
+const regeneratingEvaluations = ref(false);
+
+// Computed para verificar se o chefe foi alterado mas ainda não foi salvo
+const managerChangedUnsaved = computed(() => {
+  return form.direct_manager_id !== originalManagerId.value;
+});
+
+// Função para regerar avaliações automaticamente
+const regenerateEvaluationsAuto = (oldManagerId: number | null, newManagerId: number | null) => {
+  regeneratingEvaluations.value = true;
+  
+  const regenerateForm = useForm({
+    old_manager_id: oldManagerId,
+    new_manager_id: newManagerId,
+  });
+  
+  regenerateForm.post(route('people.regenerate-evaluations', props.person.id), {
+    onSuccess: () => {
+      regeneratingEvaluations.value = false;
+      // Atualiza o chefe original após sucesso
+      originalManagerId.value = newManagerId;
+    },
+    onError: () => {
+      regeneratingEvaluations.value = false;
+    }
+  });
+};
+
 const submit = () => {
-  form.put(route('people.update', props.person.id));
+  const oldManagerId = originalManagerId.value;
+  const newManagerId = form.direct_manager_id;
+  const managerWasChanged = newManagerId !== oldManagerId;
+  
+  form.put(route('people.update', props.person.id), {
+    onSuccess: () => {
+      // Se o chefe foi alterado, regenera automaticamente as avaliações
+      if (managerWasChanged) {
+        regenerateEvaluationsAuto(oldManagerId, newManagerId);
+      }
+    }
+  });
 };
 </script>
 
@@ -163,6 +206,33 @@ const submit = () => {
                 </option>
               </select>
               <div v-if="form.errors.direct_manager_id" class="text-sm text-red-600 mt-1">{{ form.errors.direct_manager_id }}</div>
+              
+              <!-- Aviso quando o chefe foi alterado -->
+              <div v-if="managerChangedUnsaved" class="mt-3 p-3 bg-blue-50 border border-blue-200 rounded-md">
+                <div class="flex">
+                  <svg class="w-5 h-5 text-blue-400 mr-2" viewBox="0 0 20 20" fill="currentColor">
+                    <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd" />
+                  </svg>
+                  <div>
+                    <p class="text-sm font-medium text-blue-800">Chefe alterado!</p>
+                    <p class="text-sm text-blue-700">As avaliações serão regeneradas automaticamente após salvar.</p>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Status de regeneração das avaliações -->
+              <div v-if="regeneratingEvaluations" class="mt-3 p-3 bg-green-50 border border-green-200 rounded-md">
+                <div class="flex">
+                  <svg class="w-5 h-5 text-green-400 mr-2 animate-spin" fill="none" viewBox="0 0 24 24">
+                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                  </svg>
+                  <div>
+                    <p class="text-sm font-medium text-green-800">Regenerando avaliações...</p>
+                    <p class="text-sm text-green-700">Transferindo avaliações para o novo chefe.</p>
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
         </div>

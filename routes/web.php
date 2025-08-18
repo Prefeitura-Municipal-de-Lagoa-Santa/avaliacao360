@@ -102,6 +102,9 @@ Route::middleware(['auth', 'verified', EnsureCpfIsFilled::class, RedirectIfMustC
     
     // Rota para ver todas as avaliações de uma pessoa específica
     Route::get('/people/{person}/evaluations', [PersonController::class, 'evaluations'])->name('people.evaluations');
+    
+    // Rota para regerar avaliações individuais quando trocar chefe
+    Route::post('/people/{person}/regenerate-evaluations', [PersonController::class, 'regenerateEvaluations'])->name('people.regenerate-evaluations');
 
     // Rotas do sistema de logs de atividade
     Route::get('/activity-logs', [ActivityLogController::class, 'index'])->name('activity-logs.index');
