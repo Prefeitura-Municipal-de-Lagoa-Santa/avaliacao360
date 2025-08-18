@@ -99,6 +99,9 @@ Route::middleware(['auth', 'verified', EnsureCpfIsFilled::class, RedirectIfMustC
     Route::post('/persons/preview', [PersonController::class, 'previewUpload'])->name('persons.preview');
     Route::post('/persons/confirm', [PersonController::class, 'confirmUpload'])->name('persons.confirm');
     Route::resource('people', PersonController::class)->except(['create', 'store', 'show', 'destroy']);
+    
+    // Rota para ver todas as avaliações de uma pessoa específica
+    Route::get('/people/{person}/evaluations', [PersonController::class, 'evaluations'])->name('people.evaluations');
 
     // Rotas do sistema de logs de atividade
     Route::get('/activity-logs', [ActivityLogController::class, 'index'])->name('activity-logs.index');

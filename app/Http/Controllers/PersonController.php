@@ -643,6 +643,59 @@ class PersonController extends Controller
         return redirect()->route('configs')->with('success', 'Pessoa manual criada com sucesso.');
     }
 
+    public function evaluations(Person $person)
+    {
+        // Buscar todas as avaliações onde a pessoa foi avaliada
+        $evaluatedEvaluations = \App\Models\Evaluation::where('evaluated_person_id', $person->id)
+            ->with(['form', 'evaluationRequests.requestedPerson'])
+            ->get();
+
+        // Buscar todas as avaliações que a pessoa deve fazer (evaluation requests)
+        $evaluationRequestsToMake = \App\Models\EvaluationRequest::where('requested_person_id', $person->id)
+            ->with(['evaluation.evaluatedPerson', 'evaluation.form'])
+            ->get();
+
+        // Transformar dados para o frontend
+        $evaluatedData = $evaluatedEvaluations->map(function ($evaluation) {
+            return [
+                'id' => $evaluation->id,
+                'type' => $evaluation->type,
+                'form_name' => $evaluation->form->name,
+                'form_year' => $evaluation->form->year,
+                'requests' => $evaluation->evaluationRequests->map(function ($request) {
+                    return [
+                        'id' => $request->id,
+                        'status' => $request->status,
+                        'evaluator_name' => $request->requestedPerson->name,
+                        'completed_at' => $request->completed_at,
+                    ];
+                }),
+            ];
+        });
+
+        $toEvaluateData = $evaluationRequestsToMake->map(function ($request) {
+            return [
+                'id' => $request->id,
+                'status' => $request->status,
+                'type' => $request->evaluation->type,
+                'form_name' => $request->evaluation->form->name,
+                'form_year' => $request->evaluation->form->year,
+                'evaluated_person_name' => $request->evaluation->evaluatedPerson->name,
+                'completed_at' => $request->completed_at,
+            ];
+        });
+
+        return Inertia::render('People/Evaluations', [
+            'person' => [
+                'id' => $person->id,
+                'name' => $person->name,
+                'registration_number' => $person->registration_number,
+            ],
+            'evaluatedEvaluations' => $evaluatedData,
+            'evaluationsToMake' => $toEvaluateData,
+        ]);
+    }
+
     public function createManual()
     {
         return Inertia::render('People/CreateManual');

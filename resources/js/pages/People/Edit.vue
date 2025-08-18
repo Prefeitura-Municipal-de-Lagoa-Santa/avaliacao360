@@ -169,6 +169,13 @@ const submit = () => {
 
         <!-- Ações -->
         <div class="mt-8 flex justify-end gap-4 border-t pt-5">
+          <Link :href="route('people.evaluations', person.id)"
+            class="inline-flex justify-center items-center px-4 py-2 border text-sm font-medium rounded-md shadow-sm bg-blue-600 border-blue-600 text-white hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500">
+            <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
+            </svg>
+            Ver Avaliações
+          </Link>
           <Link :href="route('people.index')"
             class="inline-flex justify-center items-center px-4 py-2 border text-sm font-medium rounded-md shadow-sm bg-white border-gray-300 text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
             Cancelar
