@@ -163,7 +163,8 @@ class DashboardController extends Controller
         $selfEvaluationCompleted = $selfEvalRequest && $selfEvalRequest->status === 'completed';
         $isSelfEvalInException = $selfEvalRequest && $selfEvalRequest->exception_date_first && $selfEvalRequest->exception_date_end && $now->between(Carbon::parse($selfEvalRequest->exception_date_first)->startOfDay(), Carbon::parse($selfEvalRequest->exception_date_end)->endOfDay());
 
-        $selfEvaluationVisible = !$selfEvaluationCompleted && ($isWithinSelfStandardPeriod || $isSelfEvalInException);
+        // CORREÇÃO: Só mostra o botão se existe uma autoavaliação para fazer E está no prazo
+        $selfEvaluationVisible = $selfEvalRequest && !$selfEvaluationCompleted && ($isWithinSelfStandardPeriod || $isSelfEvalInException);
 
         // --- Lógica para a Avaliação da Chefia ---
         $bossForm = Form::where('year', $currentYear)->where('type', 'chefia')->where('release', true)->first();
@@ -178,12 +179,18 @@ class DashboardController extends Controller
         $bossEvaluationCompleted = $bossEvalRequest && $bossEvalRequest->status === 'completed';
         $isBossEvalInException = $bossEvalRequest && $bossEvalRequest->exception_date_first && $bossEvalRequest->exception_date_end && $now->between(Carbon::parse($bossEvalRequest->exception_date_first)->startOfDay(), Carbon::parse($bossEvalRequest->exception_date_end)->endOfDay());
 
-        $bossEvaluationVisible = !$bossEvaluationCompleted && ($isWithinBossStandardPeriod || $isBossEvalInException);
+        // CORREÇÃO: Só mostra o botão se existe uma avaliação de chefia para fazer E está no prazo
+        $bossEvaluationVisible = $bossEvalRequest && !$bossEvaluationCompleted && ($isWithinBossStandardPeriod || $isBossEvalInException);
 
         // --- LÓGICA CORRIGIDA para Avaliar Equipe (se for gestor) ---
-        $pendingTeamRequests = EvaluationRequest::where('requester_person_id', $person->id)
-            ->whereHas('evaluation', function ($q) {
-                $q->whereIn('type', ['servidor', 'gestor', 'comissionado']);
+        // Só deve mostrar se a pessoa tem subordinados E tem avaliações pendentes desses subordinados
+        $subordinateIds = Person::where('direct_manager_id', $person->id)->pluck('id');
+        
+        // CORREÇÃO: A pessoa é REQUESTED (vai avaliar), não requester
+        $pendingTeamRequests = EvaluationRequest::where('requested_person_id', $person->id)
+            ->whereHas('evaluation', function ($q) use ($subordinateIds) {
+                $q->whereIn('type', ['servidor', 'gestor', 'comissionado'])
+                  ->whereIn('evaluated_person_id', $subordinateIds); // Só subordinados
             })
             ->where('status', 'pending')
             ->get();
@@ -203,9 +210,13 @@ class DashboardController extends Controller
             }
         }
 
-        $teamEvaluationCompleted = !$teamEvaluationVisible && EvaluationRequest::where('requester_person_id', $person->id)->whereHas('evaluation', function ($q) {
-            $q->whereIn('type', ['servidor', 'gestor', 'comissionado']);
-        })->exists();
+        $teamEvaluationCompleted = !$teamEvaluationVisible && 
+            $subordinateIds->count() > 0 && 
+            EvaluationRequest::where('requested_person_id', $person->id)
+                ->whereHas('evaluation', function ($q) use ($subordinateIds) {
+                    $q->whereIn('type', ['servidor', 'gestor', 'comissionado'])
+                      ->whereIn('evaluated_person_id', $subordinateIds); // Só subordinados
+                })->exists();
 
         // --- Prazo Geral (para exibição no card de data) ---
         $mainFormForPrazo = $selfForm ?? $bossForm;

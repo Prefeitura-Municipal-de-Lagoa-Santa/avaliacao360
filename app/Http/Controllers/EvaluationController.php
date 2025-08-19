@@ -149,9 +149,8 @@ class EvaluationController extends Controller
         }
 
         $user = User::where('id', '=', auth()->id())->first(['id', 'name', 'cpf']);
-        $cpf = '10798101610';
         $Person = Person::with('organizationalUnit.allParents', 'jobFunction')
-            ->where('cpf', $cpf)
+            ->where('cpf', $user->cpf)
             ->first();
 
         if (!$Person) {
