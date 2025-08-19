@@ -96,7 +96,7 @@ class Person extends Model
     public function isEligibleForEvaluation(): bool
     {
         // Regra 1: Precisa estar em status válido (CEDIDO tratado como TRABALHANDO)
-        if (!in_array($this->functional_status, ['TRABALHANDO', 'FERIAS', 'CEDIDO', 'AFASTADO'])) {
+        if (!in_array($this->functional_status, ['TRABALHANDO', 'FERIAS', 'CEDIDO', 'AFASTADO', 'SUSPENSO'])) {
             return false;
         }
 
