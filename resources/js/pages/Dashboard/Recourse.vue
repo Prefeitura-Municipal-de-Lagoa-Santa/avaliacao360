@@ -119,11 +119,6 @@ function goToDeniedRecourses() {
         </DashboardCard>
       </template>
 
-      <!-- Debug info -->
-      <div v-if="props.userRole" class="col-span-full text-center text-sm text-gray-500">
-        Debug: UserRole = {{ props.userRole }}
-      </div>
-
     </div>
   </DashboardLayout>
 </template>
