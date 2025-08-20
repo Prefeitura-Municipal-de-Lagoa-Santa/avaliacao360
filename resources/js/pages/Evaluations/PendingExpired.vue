@@ -76,7 +76,18 @@ const exceptionDateEnd = ref('');
 
 // State para o novo diálogo de informações da liberação
 const isReleasedInfoDialogOpen = ref(false);
-const selectedRequestForInfo = ref(null);
+const selectedRequestForInfo = ref<{
+  id: number,
+  type: string,
+  form_name: string,
+  avaliado: string,
+  avaliador: string,
+  created_at: string,
+  is_released: boolean,
+  exception_date_first: string | null,
+  exception_date_end: string | null,
+  released_by_name: string | null,
+} | null>(null);
 
 const search = ref(props.filters.search ?? '');
 const filterType = ref(props.filters.type ?? '');
@@ -117,6 +128,19 @@ function openReleaseDialog(requestId: number) {
 function openReleasedInfoDialog(request: any) {
   selectedRequestForInfo.value = request;
   isReleasedInfoDialogOpen.value = true;
+}
+
+function handleReleaseAgain() {
+  if (!selectedRequestForInfo.value) return;
+  
+  // Fecha o diálogo de informações
+  isReleasedInfoDialogOpen.value = false;
+  
+  // Abre o diálogo de liberação com as datas atuais
+  selectedRequestId.value = selectedRequestForInfo.value.id;
+  exceptionDateFirst.value = selectedRequestForInfo.value.exception_date_first || '';
+  exceptionDateEnd.value = selectedRequestForInfo.value.exception_date_end || '';
+  isReleaseDialogOpen.value = true;
 }
 
 function handleRelease() {
@@ -385,13 +409,21 @@ function goBack() {
             <label class="block text-sm font-medium text-gray-500">
               <icons.UserCheckIcon class="size-4 inline mr-1.5" />Autorizado Por
             </label>
-            <p class="mt-1 text-sm text-gray-900 ml-5.5">{{ selectedRequestForInfo.released_by_name }}</p>
+            <p class="mt-1 text-sm text-gray-900 ml-5.5">{{ selectedRequestForInfo.released_by_name || 'Não informado' }}</p>
           </div>
         </div>
-        <DialogFooter class="mt-6 flex justify-center sm:justify-center">
+        <DialogFooter class="mt-6 flex justify-between items-center">
+          <button 
+            v-if="props.canRelease" 
+            @click="handleReleaseAgain" 
+            type="button"
+            class="inline-flex items-center rounded-lg bg-green-500 px-4 py-2 text-sm font-medium text-white hover:bg-green-700">
+            <icons.Redo2Icon class="size-4 mr-2" />
+            Liberar Novamente
+          </button>
           <DialogClose as-child>
             <button type="button"
-              class="inline-flex items-center rounded-lg bg-red-500 px-4 py-2 text-sm font-medium text-white hover:bg-red-700">
+              class="inline-flex items-center rounded-lg bg-gray-500 px-4 py-2 text-sm font-medium text-white hover:bg-gray-700">
               Fechar
             </button>
           </DialogClose>

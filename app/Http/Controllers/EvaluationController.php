@@ -1066,7 +1066,8 @@ class EvaluationController extends Controller
         $query = EvaluationRequest::with([
             'evaluation.form',
             'evaluation.evaluatedPerson',
-            'requestedPerson'
+            'requestedPerson',
+            'releasedByUser'
         ])->where('status', 'pending');
 
         // Aplicar filtro de busca
@@ -1127,6 +1128,10 @@ class EvaluationController extends Controller
                     'avaliado' => $request->evaluation->evaluatedPerson->name ?? '-',
                     'avaliador' => $request->requestedPerson->name ?? '-',
                     'created_at' => $request->created_at ? $request->created_at->format('d/m/Y H:i') : '',
+                    'is_released' => !is_null($request->exception_date_first) && !is_null($request->exception_date_end),
+                    'exception_date_first' => $request->exception_date_first ? Carbon::parse($request->exception_date_first)->format('d/m/Y') : null,
+                    'exception_date_end' => $request->exception_date_end ? Carbon::parse($request->exception_date_end)->format('d/m/Y') : null,
+                    'released_by_name' => $request->releasedByUser->name ?? null,
                 ];
             })
             ->withQueryString();
