@@ -237,7 +237,64 @@ function goToNotificationUrl(notification: any) {
     <div v-if="isMobileMenuOpen" class="fixed inset-0 z-40 flex sm:hidden" role="dialog" aria-modal="true">
       <div class="fixed inset-0 bg-black/30 backdrop-blur-sm" @click="closeMobileMenu"></div>
       <div class="fixed top-0 left-0 h-full w-3/4 max-w-xs bg-white shadow-xl p-6 z-50 flex flex-col">
-        <!-- Conteúdo mobile omitido por brevidade -->
+        <!-- Header do menu mobile -->
+        <div class="flex items-center justify-between mb-6 pb-4 border-b border-gray-200">
+          <div class="flex items-center gap-2">
+            <img src="/images/logo.png" alt="Logo" class="w-8 h-8" />
+            <span class="text-lg font-semibold text-gray-800">Menu</span>
+          </div>
+          <button @click="closeMobileMenu" class="p-2 text-gray-400 hover:text-gray-600">
+            <XIcon class="w-6 h-6" />
+          </button>
+        </div>
+
+        <!-- Navegação mobile -->
+        <nav class="flex-1 space-y-2">
+          <template v-for="(item) in navItems" :key="item.routeName">
+            <Link
+              v-if="can(item.routeName)"
+              :href="item.href"
+              @click="closeMobileMenu"
+              class="block px-4 py-3 rounded-lg font-medium text-gray-700 hover:bg-gray-100 hover:text-indigo-600 transition-colors"
+              :class="{
+                'bg-indigo-50 text-indigo-600 border-l-4 border-indigo-600': isActive(item.routeName, item.href),
+                'text-gray-700': !isActive(item.routeName, item.href)
+              }"
+            >
+              {{ item.label }}
+            </Link>
+          </template>
+        </nav>
+
+        <!-- Botão de logout no menu mobile -->
+        <div class="pt-4 mt-4 border-t border-gray-200">
+          <Dialog>
+            <DialogTrigger as-child>
+              <button class="w-full px-4 py-3 bg-red-500 text-white rounded-lg font-medium hover:bg-red-600 transition-colors flex items-center justify-center gap-2">
+                Sair
+                <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0013.5 3h-6a2.25 2.25 0 00-2.25 2.25v13.5A2.25 2.25 0 007.5 21h6a2.25 2.25 0 002.25-2.25V15m3 0l3-3m0 0l-3-3m3 3H9" />
+                </svg>
+              </button>
+            </DialogTrigger>
+            <DialogContent class="sm:max-w-md bg-white">
+              <DialogHeader>
+                <DialogTitle class="text-lg font-semibold text-gray-900">Confirmar</DialogTitle>
+                <DialogDescription class="mt-2 text-sm text-gray-600">Tem certeza que deseja sair do sistema?</DialogDescription>
+              </DialogHeader>
+              <DialogFooter class="mt-6 flex flex-col-reverse sm:flex-row sm:justify-end sm:space-x-2">
+                <DialogClose as-child>
+                  <button type="button" class="w-full sm:w-auto inline-flex justify-center rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50">
+                    Cancelar
+                  </button>
+                </DialogClose>
+                <button @click="executeLogout" type="button" class="w-full sm:w-auto inline-flex justify-center rounded-md border border-transparent bg-red-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-red-700">
+                  Sim, Sair
+                </button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+        </div>
       </div>
     </div>
 
