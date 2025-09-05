@@ -151,10 +151,27 @@ const dataEnvio = computed(() => {
 
 const isFormReadyToSubmit = computed(() => {
     const allQuestionsAnswered = Object.values(evaluationForm.answers).every(answer => answer !== null);
-    return allQuestionsAnswered && isSigned.value;
+    const evidenciasValid = !isEvidenciaRequired.value; // Se evidências são obrigatórias, devem estar preenchidas
+    return allQuestionsAnswered && isSigned.value && evidenciasValid;
+});
+
+// Verifica se a pontuação total é inferior a 70
+const hasLowTotalScore = computed(() => {
+    return grandTotal.value < 70;
+});
+
+// Validação de evidências obrigatórias para pontuação total baixa
+const isEvidenciaRequired = computed(() => {
+    return hasLowTotalScore.value && (!evaluationForm.evidencias || evaluationForm.evidencias.trim() === '');
 });
 
 const submitEvaluation = () => {
+    // Validação de evidências para pontuação total abaixo de 70
+    if (hasLowTotalScore.value && (!evaluationForm.evidencias || evaluationForm.evidencias.trim() === '')) {
+        alert('Evidências são obrigatórias para avaliações com pontuação total abaixo de 70.');
+        return;
+    }
+
     if (signaturePad && !signaturePad.isEmpty()) {
         evaluationForm.assinatura_base64 = signaturePad.toDataURL();
     } else if (!props.assinatura_base64) {
@@ -174,7 +191,13 @@ const submitEvaluation = () => {
         onSuccess: () => {},
         onError: (errors) => {
             console.error('Erros de validação:', errors);
-            alert('Ocorreram erros de validação. Verifique o console.');
+            
+            // Mostrar erro específico de evidências se houver
+            if (errors.evidencias) {
+                alert(errors.evidencias);
+            } else {
+                alert('Ocorreram erros de validação. Verifique os campos preenchidos.');
+            }
         }
     });
 };
@@ -297,9 +320,29 @@ const scoreOptions = [0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100];
                     <div class="font-bold text-2xl text-gray-800">Pontuação Total: <span id="grand-total" class="text-blue-600">{{ grandTotal }}</span></div>
                 </div>
                 <div class="form-section">
-                    <h3 class="section-title">4 - EVIDÊNCIAS</h3>
-                    <textarea v-model="evaluationForm.evidencias" class="form-input w-full" rows="5"
-                        placeholder="Descreva aqui as evidências observadas durante o período de avaliação..."></textarea>
+                    <h3 class="section-title">
+                        4 - EVIDÊNCIAS
+                        <span v-if="hasLowTotalScore" class="text-red-500 text-sm font-normal ml-2">
+                            (Obrigatório para pontuação total abaixo de 70)
+                        </span>
+                    </h3>
+                    <div v-if="hasLowTotalScore && isEvidenciaRequired" class="mb-3 p-3 bg-red-50 border border-red-200 rounded-md">
+                        <p class="text-red-700 text-sm">
+                            ⚠️ O campo Evidências é de preenchimento obrigatório pois a pontuação total é inferior a 70.
+                        </p>
+                    </div>
+                    <textarea 
+                        v-model="evaluationForm.evidencias" 
+                        :class="[
+                            'form-input w-full',
+                            { 'border-red-500 focus:border-red-500 focus:ring-red-500': isEvidenciaRequired }
+                        ]"
+                        rows="5"
+                        :placeholder="hasLowTotalScore ? 
+                            'Evidências são obrigatórias. Descreva aqui as evidências observadas durante o período de avaliação...' : 
+                            'Descreva aqui as evidências observadas durante o período de avaliação...'"
+                    ></textarea>
+                    
                 </div>
                 <div class="form-section">
                     <h3 class="section-title">5 - ASSINATURAS</h3>

@@ -32,6 +32,15 @@ class EvaluationController extends Controller
             'assinatura_base64' => 'required|string',
         ]);
 
+        // Verificar se a pontuação total é inferior a 70
+        $totalScore = collect($data['answers'])->sum('score');
+        
+        if ($totalScore < 70 && (empty($data['evidencias']) || trim($data['evidencias']) === '')) {
+            return back()->withErrors([
+                'evidencias' => 'Evidências são obrigatórias para avaliações com pontuação total abaixo de 70.'
+            ]);
+        }
+
         DB::beginTransaction();
         try {
             $evaluationRequest = EvaluationRequest::findOrFail($data['evaluation_request_id']);
