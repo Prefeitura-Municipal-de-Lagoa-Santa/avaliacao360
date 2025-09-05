@@ -286,7 +286,7 @@ class DashboardController extends Controller
         // Se for gestor, carrega a lista de servidores sob sua gestão
         $managedServers = [];
         if ($isManager) {
-            $managedServers = Person::where('manager_id', $person->id)->get(); // Ajuste o campo conforme seu banco
+            $managedServers = Person::where('direct_manager_id', $person->id)->get(); // Ajuste o campo conforme seu banco
         }
 
         $year = (in_array(date('n'), [1, 2])) ? date('Y') - 1 : date('Y');
