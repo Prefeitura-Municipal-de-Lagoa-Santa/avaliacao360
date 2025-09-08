@@ -514,7 +514,7 @@ class EvaluationController extends Controller
                 $form = $request->evaluation->form;
                 $canDelete = false;
 
-                if (auth()->user() && auth()->user()->roles(['Admin', 'RH']) && $form) {
+                if (auth()->user() && auth()->user()->roles()->whereIn('name', ['Admin', 'RH'])->exists() && $form) {
 
                     $now = now();
 
@@ -523,6 +523,9 @@ class EvaluationController extends Controller
                     }
                 }
 
+                // Calcular a nota ponderada da avaliação
+                $score = $this->calculateEvaluationScore($request);
+
                 return [
                     'id' => $request->id,
                     'type' => $request->evaluation->type ?? '-',
@@ -530,6 +533,7 @@ class EvaluationController extends Controller
                     'avaliado' => $request->evaluation->evaluatedPerson->name ?? '-',
                     'avaliador' => $request->requestedPerson->name ?? '-',
                     'created_at' => $request->created_at?->format('d/m/Y H:i') ?? '',
+                    'score' => $score,
                     'can_delete' => $canDelete,
                 ];
             })
@@ -552,7 +556,7 @@ class EvaluationController extends Controller
     {
         $evaluationRequest = EvaluationRequest::findOrFail($id);
 
-        if (!auth()->user()->roles(['Admin', 'RH'])) {
+        if (!auth()->user()->roles()->whereIn('name', ['Admin', 'RH'])->exists()) {
             abort(403, 'Sem permissão');
         }
 
@@ -1210,6 +1214,38 @@ class EvaluationController extends Controller
             ]);
 
             return back()->with('success', 'Avaliação liberada com sucesso!');
+        }
+    }
+
+    /**
+     * Calcula a nota ponderada de uma avaliação concluída
+     */
+    private function calculateEvaluationScore($evaluationRequest)
+    {
+        try {
+            // Carrega as respostas com as perguntas e pesos
+            $answers = Answer::where('evaluation_id', $evaluationRequest->evaluation_id)
+                ->with('question')
+                ->get();
+
+            if ($answers->isEmpty()) {
+                return '-';
+            }
+
+            $somaNotas = 0;
+            $somaPesos = 0;
+
+            foreach ($answers as $answer) {
+                if ($answer->question && $answer->score !== null) {
+                    $peso = $answer->question->weight ?? 1;
+                    $somaNotas += intval($answer->score) * $peso;
+                    $somaPesos += $peso;
+                }
+            }
+
+            return $somaPesos > 0 ? round($somaNotas / $somaPesos, 1) : '-';
+        } catch (\Exception $e) {
+            return '-';
         }
     }
 }
