@@ -45,15 +45,20 @@ const props = defineProps<{
     pdiAnswers: {
         question_id: number;
         response_content: string;
-    }[] | null; // Defina como um array ou nulo
-    // A prop pdiAnswers foi removida deste exemplo para simplificar,
-    // pois a lógica de popular já estava comentada ou com erro.
-    // Se você a usa, descomente as linhas relacionadas.
+    }[] | null;
+    loggedPerson: {
+        id: number;
+        name: string;
+        cpf: string;
+    } | null;
 }>();
+
 const page = usePage();
-// Corrigido para buscar o person_id do usuário logado a partir do objeto auth.
-// const loggedInPersonId = computed(() => (page.props.auth as any).person.id);
-const loggedInPersonId = computed(() => (props.pdiRequest as any).person_id);
+
+// ID da pessoa logada (corrigido para usar a pessoa do backend)
+const loggedInPersonId = computed(() => {
+    return props.loggedPerson?.id;
+});
 // --- CORREÇÃO: Refs e instâncias de assinatura separadas ---
 const managerSignatureCanvas = ref<HTMLCanvasElement | null>(null);
 const employeeSignatureCanvas = ref<HTMLCanvasElement | null>(null);
@@ -101,17 +106,20 @@ watch(() => props.pdiRequest.id, (newId) => {
     }
 });
 
-const isManagerFilling = computed(() =>
-    props.pdiRequest.status === 'pending_manager_fill' &&
-    props.pdiRequest.manager_id === loggedInPersonId.value
-);
+const isManagerFilling = computed(() => {
+    return props.pdiRequest.status === 'pending_manager_fill' &&
+           props.pdiRequest.manager_id === loggedInPersonId.value;
+});
 
-const isEmployeeSigning = computed(() =>
-    props.pdiRequest.status === 'pending_employee_signature' &&
-    props.pdiRequest.person_id === loggedInPersonId.value
-);
+const isEmployeeSigning = computed(() => {
+    return props.pdiRequest.status === 'pending_employee_signature' &&
+           props.pdiRequest.person_id === loggedInPersonId.value;
+});
+
 const isCompleted = computed(() => props.pdiRequest.status === 'completed');
-const isReadOnly = computed(() => !isManagerFilling.value && !isEmployeeSigning.value);
+const isReadOnly = computed(() => {
+    return !isManagerFilling.value && !isEmployeeSigning.value;
+});
 
 
 function setupSignaturePad(canvas: HTMLCanvasElement): SignaturePad {
@@ -132,7 +140,7 @@ onMounted(() => {
     if (props.pdiAnswers) {
         props.pdiRequest.pdi.form.group_questions.forEach(group => {
             group.questions.forEach(question => {
-                const answer = props.pdiAnswers.find(a => a.question_id === question.id);
+                const answer = props.pdiAnswers?.find(a => a.question_id === question.id);
                 if (answer) {
                     form.answers[`question-${question.id}`] = answer.response_content;
                 }
