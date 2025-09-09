@@ -777,11 +777,14 @@ class EvaluationController extends Controller
 
             $notaAuto = $auto ? $getNotaPonderada($auto) : null;
             $notaChefia = $chefia ? $getNotaPonderada($chefia) : null;
-            $notaEquipe = $equipes->count() > 0 ? round($equipes->avg(fn($r) => $getNotaPonderada($r)), 2) : null;
+            
+            // CORREÇÃO: Só calcular nota de equipe se há avaliações COMPLETED
+            $equipesCompleted = $equipes->filter(fn($r) => $r->status === 'completed');
+            $notaEquipe = $equipesCompleted->count() > 0 ? round($equipesCompleted->avg(fn($r) => $getNotaPonderada($r)), 2) : null;
 
             $calcAuto = $auto ? "Autoavaliação: $notaAuto" : '';
             $calcChefia = $chefia ? "Chefia: $notaChefia" : '';
-            $calcEquipe = $equipes->count() ? "Equipe (média de {$equipes->count()} avaliações): $notaEquipe" : '';
+            $calcEquipe = $equipesCompleted->count() ? "Equipe (média de {$equipesCompleted->count()} avaliações): $notaEquipe" : '';
 
             // Determinar se é gestor baseado na função organizacional da pessoa
             $isGestor = $person->jobFunction && $person->jobFunction->is_manager;
@@ -871,10 +874,9 @@ class EvaluationController extends Controller
             // Informações sobre avaliação de equipe
             $teamInfo = null;
             if ($deveTeravaliacaoEquipe) {
-                $equipesCompletas = $equipes->filter(fn($r) => $r->status === 'completed');
                 $teamInfo = [
                     'total_members' => $todasEquipes->count(),
-                    'completed_members' => $equipesCompletas->count(),
+                    'completed_members' => $equipesCompleted->count(),
                     'has_team_evaluation' => $deveTeravaliacaoEquipe,
                 ];
             }

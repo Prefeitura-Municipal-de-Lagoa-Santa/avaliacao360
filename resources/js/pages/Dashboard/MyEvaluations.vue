@@ -178,21 +178,6 @@ function goBack() {
                     Após Recurso
                   </div>
                 </div>
-
-                <!-- Informações da equipe (se aplicável) -->
-                <div v-if="eva.team_info && eva.team_info.has_team_evaluation" class="mt-2 flex items-center text-xs">
-                  <icons.Users class="w-3 h-3 text-blue-500 mr-1" />
-                  <span class="text-gray-600">
-                    Equipe: {{ eva.team_info.completed_members }}/{{ eva.team_info.total_members }} avaliações
-                  </span>
-                  <div class="ml-2 w-16 bg-gray-200 rounded-full h-1.5">
-                    <div 
-                      class="h-1.5 rounded-full transition-all"
-                      :class="eva.team_info.completed_members === eva.team_info.total_members ? 'bg-green-500' : 'bg-yellow-500'"
-                      :style="{ width: eva.team_info.total_members > 0 ? (eva.team_info.completed_members / eva.team_info.total_members) * 100 + '%' : '0%' }"
-                    ></div>
-                  </div>
-                </div>
               </div>
             </td>
             <td class="px-6 py-4">
