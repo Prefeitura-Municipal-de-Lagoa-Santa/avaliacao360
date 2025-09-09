@@ -120,6 +120,8 @@ class PersonController extends Controller
                 'job_function_id' => $person->job_function_id,
                 'organizational_unit_id' => $person->organizational_unit_id,
                 'direct_manager_id' => $person->direct_manager_id, // ✅ novo
+                'sala' => $person->sala,
+                'descricao_sala' => $person->descricao_sala,
             ],
             'organizationalUnits' => $organizationalUnits,
             'functionalStatuses' => $functionalStatuses,
@@ -162,6 +164,8 @@ class PersonController extends Controller
             'dismissal_date' => 'nullable|date',
             'direct_manager_id' => ['nullable', 'exists:people,id'],
             'job_function_id' => 'nullable|exists:job_functions,id',
+            'sala' => 'nullable|string|max:255',
+            'descricao_sala' => 'nullable|string|max:255',
         ]);
 
         $person->update($validatedData);
