@@ -626,13 +626,16 @@ class PersonController extends Controller
             ]);
         }
 
+        // Senha padrão
+        $defaultPassword = 'Abc@1234';
+
         // Cria o usuário com senha padrão
         $user = User::create([
             'name' => $data['name'],
             'email' => $data['email'],
             'username' => $cpf,
             'cpf' => $cpf,
-            'password' => Hash::make('Abc@1234'),
+            'password' => Hash::make($defaultPassword),
             'must_change_password' => true,
         ]);
 
@@ -644,7 +647,10 @@ class PersonController extends Controller
             'user_id' => $user->id,
         ]);
 
-        return redirect()->route('configs')->with('success', 'Pessoa manual criada com sucesso.');
+        // Envia email com as credenciais
+        \App\Jobs\SendWelcomeEmailJob::dispatch($user, $defaultPassword);
+
+        return redirect()->route('configs')->with('success', 'Pessoa manual criada com sucesso. Um email com as credenciais foi enviado.');
     }
 
     public function evaluations(Person $person)

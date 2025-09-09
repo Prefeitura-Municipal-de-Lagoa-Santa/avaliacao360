@@ -20,10 +20,11 @@ class SystemNotification extends Notification
 
     public function toMail($notifiable)
     {
+        $appUrl = config('app.url');
         return (new MailMessage)
             ->subject($this->title)
             ->line($this->content)
-            ->action('Acessar sistema', $this->url ?? url('/'));
+            ->action('Acessar sistema', $this->url ?? $appUrl);
     }
 
     public function toArray($notifiable)
