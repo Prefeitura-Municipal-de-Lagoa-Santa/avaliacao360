@@ -25,6 +25,7 @@ const props = defineProps<{
       avaliado: string,
       avaliador: string,
       created_at: string,
+      score: string | number,
       can_delete: boolean,
     }>,
     links: Array<any>
@@ -302,6 +303,12 @@ function goBack() {
               </div>
             </th>
             <th class="table-header">
+              <div class="flex items-center gap-0">
+                <icons.TrendingUpIcon class="size-4" />
+                Nota   
+              </div>
+            </th>
+            <th class="table-header">
               <div class="flex items-center gap-2">
                 <icons.SettingsIcon class="size-4" />
                 Ações
@@ -407,6 +414,18 @@ function goBack() {
             <div>
               <span class="text-xs font-medium text-gray-500 uppercase tracking-wide">Formulário:</span>
               <span class="text-sm text-gray-900 ml-2">{{ req.form_name }}</span>
+            </div>
+            <div>
+              <span class="text-xs font-medium text-gray-500 uppercase tracking-wide">Nota:</span>
+              <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold ml-2"
+                    :class="{
+                      'bg-red-100 text-red-800': typeof req.score === 'number' && req.score < 60,
+                      'bg-yellow-100 text-yellow-800': typeof req.score === 'number' && req.score >= 60 && req.score < 80,
+                      'bg-green-100 text-green-800': typeof req.score === 'number' && req.score >= 80,
+                      'bg-gray-100 text-gray-600': req.score === '-' || req.score === null
+                    }">
+                {{ req.score === '-' || req.score === null ? 'N/A' : req.score }}
+              </span>
             </div>
           </div>
         </div>

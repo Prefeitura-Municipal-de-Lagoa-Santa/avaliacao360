@@ -42,6 +42,12 @@ class PdiController extends Controller
             ->where('status', 'pending_employee_signature')
             ->get();
 
+        // PDIs preenchidos pelo gestor (aguardando assinatura do servidor)
+        $pdisPendingEmployeeSignature = PdiRequest::with('person', 'pdi.form')
+            ->where('manager_id', $person->id)
+            ->where('status', 'pending_employee_signature')
+            ->get();
+
         // PDIs concluídos
         $pdisCompleted = PdiRequest::with('manager', 'person', 'pdi.form')
             ->where(function ($query) use ($person) {
@@ -55,6 +61,7 @@ class PdiController extends Controller
         return Inertia::render('PDI/PdiList', [
             'pdisToFill' => $pdisToFill,
             'pdisToSign' => $pdisToSign,
+            'pdisPendingEmployeeSignature' => $pdisPendingEmployeeSignature,
             'pdisCompleted' => $pdisCompleted,
         ]);
     }
@@ -70,10 +77,17 @@ class PdiController extends Controller
             'manager.jobFunction'
         ]);
 
+        // Busca a pessoa logada pelo CPF para usar no frontend
+        $user = Auth::user();
+        $loggedPerson = null;
+        if ($user && $user->cpf) {
+            $loggedPerson = Person::where('cpf', $user->cpf)->first();
+        }
 
         return Inertia::render('PDI/PdiFormPage', [
             'pdiRequest' => $pdiRequest,
             'pdiAnswers' => $pdiRequest->answers,
+            'loggedPerson' => $loggedPerson,
         ]);
     }
 
