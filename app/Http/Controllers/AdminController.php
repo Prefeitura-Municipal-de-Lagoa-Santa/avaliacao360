@@ -4,7 +4,9 @@ namespace App\Http\Controllers;
 
 use App\Models\Permission;
 use App\Models\Role;
+use App\Models\User;
 use Illuminate\Http\Request;
+use Illuminate\Validation\Rule;
 
 class AdminController extends Controller
 {
@@ -81,6 +83,62 @@ class AdminController extends Controller
         }
 
         return back();
+    }
+
+    /**
+     * Página para gerenciamento de CPF de usuários
+     */
+    public function manageUserCpf()
+    {
+        if (!user_can('admin')) {
+            return redirect()->back()->with('error', 'Você não tem permissão para acessar essa área.');
+        }
+
+        $users = User::orderBy('name')->get(['id', 'name', 'email', 'cpf', 'username']);
+        
+        return inertia('Admin/ManageUserCpf', [
+            'users' => $users,
+        ]);
+    }
+
+    /**
+     * Atualiza o CPF de um usuário específico
+     */
+    public function updateUserCpf(Request $request, User $user)
+    {
+        if (!user_can('admin')) {
+            return redirect()->back()->with('error', 'Você não tem permissão para realizar essa ação.');
+        }
+
+        $validated = $request->validate([
+            'cpf' => [
+                'required',
+                'string',
+                'digits:11',
+                Rule::unique('users', 'cpf')->ignore($user->id),
+            ],
+        ], [
+            'cpf.required' => 'O CPF é obrigatório.',
+            'cpf.digits' => 'O CPF deve ter exatamente 11 dígitos.',
+            'cpf.unique' => 'Este CPF já está sendo usado por outro usuário.',
+        ]);
+
+        $oldCpf = $user->cpf;
+        $user->forceFill(['cpf' => $validated['cpf']])->save();
+
+        // Log da atividade
+        $user->logCustomActivity(
+            'cpf_updated_by_admin',
+            "CPF do usuário '{$user->name}' foi alterado por um administrador",
+            [
+                'old_cpf' => $oldCpf,
+                'new_cpf' => $validated['cpf'],
+                'admin_user_id' => auth()->id(),
+                'admin_user_name' => auth()->user()->name,
+            ]
+        );
+
+        return back()->with('success', 'CPF do usuário atualizado com sucesso!');
     }
 
 

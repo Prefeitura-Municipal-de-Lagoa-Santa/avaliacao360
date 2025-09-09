@@ -115,6 +115,12 @@ Route::middleware(['auth', 'verified', EnsureCpfIsFilled::class, RedirectIfMustC
 
     Route::put('/admin/roles/{role}/permissions', [AdminController::class, 'updatePermissions'])
         ->name('admin.roles.permissions.update');
+    
+    // Rotas para gerenciamento de CPF de usuários
+    Route::get('/admin/manage-user-cpf', [AdminController::class, 'manageUserCpf'])
+        ->name('admin.manage-user-cpf');
+    Route::put('/admin/users/{user}/cpf', [AdminController::class, 'updateUserCpf'])
+        ->name('admin.users.update-cpf');
 
     Route::get('/funcoes', [JobFunctionController::class, 'index'])->name('funcoes.index');
     Route::patch('/funcoes/{id}/type', [JobFunctionController::class, 'updateType'])->name('funcoes.updateType');
@@ -124,6 +130,9 @@ Route::middleware(['auth', 'verified', EnsureCpfIsFilled::class, RedirectIfMustC
 
     Route::get('/evaluations/completed', [EvaluationController::class, 'completed'])
         ->name('evaluations.completed');
+    
+    Route::get('/evaluations/completed/{id}/pdf', [EvaluationController::class, 'generatePDF'])
+        ->name('evaluations.completed.pdf');
 
     Route::get('/organizational-chart', [OrganizationalChartController::class, 'index'])
         ->name('organizational-chart.index');

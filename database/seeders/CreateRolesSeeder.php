@@ -35,6 +35,7 @@ class CreateRolesSeeder extends Seeder
             'configs.update',
             'dashboard',
             'evaluations.completed',
+            'evaluations.completed.pdf',
             'evaluations.pending',
             'funcoes.index',
             'funcoes.updateType',

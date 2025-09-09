@@ -15,6 +15,7 @@ use App\Models\EvaluationRequest;
 use App\Models\User;
 use App\Models\configs as Config; // Importar o model de configurações
 use Illuminate\Support\Facades\Log;
+use Barryvdh\DomPDF\Facade\Pdf;
 
 class EvaluationController extends Controller
 {
@@ -50,8 +51,10 @@ class EvaluationController extends Controller
                 throw new \Exception('Avaliação não encontrada para esta solicitação.');
             }
 
-            // Opcional: Deletar respostas antigas para sobrescrever (ou atualize, se preferir)
-            $evaluation->answers()->delete();
+            // CORREÇÃO: Deletar apenas as respostas do avaliador específico, não todas
+            $evaluation->answers()
+                ->where('subject_person_id', $evaluationRequest->requested_person_id)
+                ->delete();
 
             // Salva as novas respostas
             foreach ($data['answers'] as $answer) {
@@ -514,13 +517,10 @@ class EvaluationController extends Controller
                 $form = $request->evaluation->form;
                 $canDelete = false;
 
-                if (auth()->user() && auth()->user()->roles()->whereIn('name', ['Admin', 'RH'])->exists() && $form) {
 
-                    $now = now();
-
-                    if ($form->term_first && $form->term_end && $now->between($form->term_first, $form->term_end->endOfDay())) {
-                        $canDelete = true;
-                    }
+                if (auth()->user() && user_can('evaluations.completed')) {
+                    // Usuários com permissão podem excluir sempre
+                    $canDelete = true;
                 }
 
                 // Calcular a nota ponderada da avaliação
@@ -552,19 +552,82 @@ class EvaluationController extends Controller
         ]);
     }
 
+    public function generatePDF($id)
+    {
+        $evaluationRequest = EvaluationRequest::with([
+            'evaluation.form.groupQuestions.questions',
+            'evaluation.evaluatedPerson',
+            'requestedPerson',
+            'evaluation.answers'
+        ])->findOrFail($id);
+
+
+        // Verificar permissões (apenas usuários com permissão específica podem gerar PDF)
+        if (!user_can('evaluations.completed.pdf')) {
+            abort(403, 'Acesso negado. Apenas administradores e RH podem gerar PDFs.');
+        }
+
+        // CORREÇÃO: Buscar apenas as respostas específicas deste avaliador
+        $answers = Answer::where('evaluation_id', $evaluationRequest->evaluation_id)
+            ->where('subject_person_id', $evaluationRequest->requested_person_id)
+            ->get();
+        $form = $evaluationRequest->evaluation->form;
+        $groupQuestions = $form->groupQuestions ?? [];
+        
+        $questionAnswers = [];
+        $totalScore = 0;
+        $totalWeight = 0;
+        
+        foreach ($groupQuestions as $group) {
+            foreach ($group->questions as $question) {
+                $answer = $answers->firstWhere('question_id', $question->id);
+                $score = $answer ? (int)$answer->score : null;
+                
+                $questionAnswers[] = [
+                    'question' => $question->text_content,
+                    'score' => $score,
+                    'weight' => $question->weight,
+                ];
+                
+                if ($score !== null) {
+                    $totalScore += $score * $question->weight;
+                    $totalWeight += $question->weight;
+                }
+            }
+        }
+        
+        $averageScore = $totalWeight > 0 ? round($totalScore / $totalWeight, 2) : 0;
+
+        $data = [
+            'evaluation' => $evaluationRequest->evaluation,
+            'evaluatedPerson' => $evaluationRequest->evaluation->evaluatedPerson,
+            'evaluatorPerson' => $evaluationRequest->requestedPerson,
+            'form' => $form,
+            'questionAnswers' => $questionAnswers,
+            'averageScore' => $averageScore,
+            'evidencias' => $evaluationRequest->evidencias,
+            'assinatura_base64' => $evaluationRequest->assinatura_base64,
+            'completedAt' => $evaluationRequest->updated_at,
+        ];
+
+        $pdf = Pdf::loadView('pdf.evaluation-report', $data);
+        
+        $fileName = sprintf(
+            'avaliacao_%s_%s_%s.pdf',
+            str_replace(' ', '_', $evaluationRequest->evaluation->evaluatedPerson->name ?? 'avaliado'),
+            str_replace(' ', '_', $evaluationRequest->requestedPerson->name ?? 'avaliador'),
+            $evaluationRequest->updated_at?->format('Y-m-d') ?? date('Y-m-d')
+        );
+
+        return $pdf->download($fileName);
+    }
+
     public function deleteCompleted($id)
     {
         $evaluationRequest = EvaluationRequest::findOrFail($id);
 
-        if (!auth()->user()->roles()->whereIn('name', ['Admin', 'RH'])->exists()) {
+        if (!user_can('evaluations.completed')) {
             abort(403, 'Sem permissão');
-        }
-
-        // Verifique se está dentro do período
-        $form = $evaluationRequest->evaluation->form;
-        $now = now();
-        if ($now->lt($form->term_first) || $now->gt($form->term_end)) {
-            return back()->withErrors(['error' => 'Fora do período de avaliação']);
         }
 
         DB::beginTransaction();
@@ -577,8 +640,10 @@ class EvaluationController extends Controller
             $evaluationRequest->status = 'pending';
             $evaluationRequest->save();
 
-            // Deleta as respostas associadas
-            Answer::where('evaluation_id', $evaluationRequest->evaluation_id)->delete();
+            // Deleta as respostas associadas específicas deste avaliador
+            Answer::where('evaluation_id', $evaluationRequest->evaluation_id)
+                ->where('subject_person_id', $evaluationRequest->requested_person_id)
+                ->delete();
 
             // Remove evidências e assinatura
             $evaluationRequest->update([
@@ -598,11 +663,15 @@ class EvaluationController extends Controller
     {
         // Carrega todos os relacionamentos necessários para a tela de resultado
         $evaluationRequest->load([
-            'evaluation.answers',
             'evaluation.form.groupQuestions.questions',
             'evaluation.evaluated.jobFunction', // função/cargo do avaliado
             'evaluation.evaluated.organizationalUnit.allParents'
         ]);
+
+        // CORREÇÃO: Buscar apenas as respostas específicas deste avaliador
+        $answers = Answer::where('evaluation_id', $evaluationRequest->evaluation_id)
+            ->where('subject_person_id', $evaluationRequest->requested_person_id)
+            ->get();
 
         // Pode ser necessário ajustar para pegar campos default, caso estejam nulos.
         $evaluated = $evaluationRequest->evaluation->evaluated;
@@ -612,7 +681,7 @@ class EvaluationController extends Controller
             'person' => $evaluated,
             'type' => $evaluationRequest->evaluation->type,
             'evaluation' => [
-                'answers' => $evaluationRequest->evaluation->answers,
+                'answers' => $answers,
                 'evidencias' => $evaluationRequest->evidencias,
                 'assinatura_base64' => $evaluationRequest->assinatura_base64,
                 'updated_at' => $evaluationRequest->updated_at,
@@ -623,7 +692,7 @@ class EvaluationController extends Controller
     public function myEvaluationsHistory()
     {
         $user = Auth::user();
-        $person = Person::where('cpf', $user->cpf)->first();
+        $person = Person::with('jobFunction')->where('cpf', $user->cpf)->first();
 
         if (!$person) {
             return inertia('Dashboard/MyEvaluations', [
@@ -679,11 +748,13 @@ class EvaluationController extends Controller
             $chefiaTypes = ['servidor', 'gestor', 'comissionado'];
 
             $getNotaPonderada = function ($request) {
-                if (!$request)
-                    return 0;
+                if (!$request || $request->status !== 'completed')
+                    return null;
                 $form = $request->evaluation?->form;
                 $groups = $form?->groupQuestions ?? [];
-                $answers = Answer::where('evaluation_id', $request->evaluation_id)->get();
+                $answers = Answer::where('evaluation_id', $request->evaluation_id)
+                    ->where('subject_person_id', $request->requested_person_id)
+                    ->get();
 
                 $somaNotas = 0;
                 $somaPesos = 0;
@@ -709,32 +780,60 @@ class EvaluationController extends Controller
                 (strtolower($r->evaluation->type ?? '') === 'chefia' && $r->requested_person_id !== $person->direct_manager_id)
             );
 
-            $notaAuto = $getNotaPonderada($auto);
-            $notaChefia = $getNotaPonderada($chefia);
-            $notaEquipe = $equipes->count() > 0 ? round($equipes->avg(fn($r) => $getNotaPonderada($r)), 2) : null;
+            // Para verificar se DEVERIA ter avaliação de equipe, buscar TODAS as requisições (incluindo pending)
+            $todasRequestsAno = $requests->filter(function ($req) use ($ano) {
+                $form = $req->evaluation?->form;
+                $year = $form?->year ?? ($form?->period ? \Carbon\Carbon::parse($form->period)->format('Y') : null);
+                return $year == $ano;
+            });
+            
+            $todasEquipes = $todasRequestsAno->filter(
+                fn($r) =>
+                str_contains(strtolower($r->evaluation->type ?? ''), 'equipe') ||
+                (strtolower($r->evaluation->type ?? '') === 'chefia' && $r->requested_person_id !== $person->direct_manager_id)
+            );
+
+            $notaAuto = $auto ? $getNotaPonderada($auto) : null;
+            $notaChefia = $chefia ? $getNotaPonderada($chefia) : null;
+            
+            // CORREÇÃO: Só calcular nota de equipe se há avaliações COMPLETED
+            $equipesCompleted = $equipes->filter(fn($r) => $r->status === 'completed');
+            $notaEquipe = $equipesCompleted->count() > 0 ? round($equipesCompleted->avg(fn($r) => $getNotaPonderada($r)), 2) : null;
 
             $calcAuto = $auto ? "Autoavaliação: $notaAuto" : '';
             $calcChefia = $chefia ? "Chefia: $notaChefia" : '';
-            $calcEquipe = $equipes->count() ? "Equipe (média de {$equipes->count()} avaliações): $notaEquipe" : '';
+            $calcEquipe = $equipesCompleted->count() ? "Equipe (média de {$equipesCompleted->count()} avaliações): $notaEquipe" : '';
 
-            // Determinar se é gestor baseado na existência de avaliações de equipe
-            $isGestor = $notaEquipe !== null && $equipes->count() > 0;
+            // Determinar se é gestor baseado na função organizacional da pessoa
+            $isGestor = $person->jobFunction && $person->jobFunction->is_manager;
 
-            // Lógica original da nota
-            if (
-                ($isGestor && ($notaAuto === 0 || $notaChefia === 0 || $notaEquipe === null)) ||
-                (!$isGestor && ($notaAuto === 0 || $notaChefia === 0))
-            ) {
-                $notaFinal = 0;
-                $calcFinal = 'Nota zerada por ausência de preenchimento de uma ou mais partes.';
+            // Lógica da nota final
+            if ($isGestor) {
+                // Para gestores: todas as três avaliações são obrigatórias
+                // Verificar se DEVERIA ter avaliação de equipe (mesmo que pending)
+                $deveTeravaliacaoEquipe = $todasEquipes->count() > 0;
+                
+                if ($notaAuto === null || $notaChefia === null || ($deveTeravaliacaoEquipe && $notaEquipe === null)) {
+                    $notaFinal = 0;
+                    if ($deveTeravaliacaoEquipe && $notaEquipe === null) {
+                        $calcFinal = 'Nota zerada por ausência de avaliação de equipe (obrigatória para gestores).';
+                    } else {
+                        $calcFinal = 'Nota zerada por ausência de autoavaliação ou avaliação de chefia.';
+                    }
+                } else {
+                    // Gestor com todas as avaliações: 25% + 50% + 25%
+                    $notaFinal = round(($notaAuto * 0.25) + ($notaChefia * 0.5) + ($notaEquipe * 0.25), 2);
+                    $calcFinal = "($notaAuto x 25%) + ($notaChefia x 50%) + ($notaEquipe x 25%) = $notaFinal";
+                }
             } else {
-                $notaFinal = $isGestor
-                    ? round(($notaAuto * 0.25) + ($notaChefia * 0.5) + ($notaEquipe * 0.25), 2)
-                    : round(($notaAuto * 0.3) + ($notaChefia * 0.7), 2);
-
-                $calcFinal = $isGestor
-                    ? "($notaAuto x 25%) + ($notaChefia x 50%) + ($notaEquipe x 25%) = $notaFinal"
-                    : "($notaAuto x 30%) + ($notaChefia x 70%) = $notaFinal";
+                // Para não-gestores: lógica original (autoavaliação + chefia)
+                if ($notaAuto === null || $notaChefia === null) {
+                    $notaFinal = 0;
+                    $calcFinal = 'Nota zerada por ausência de preenchimento de uma ou mais partes.';
+                } else {
+                    $notaFinal = round(($notaAuto * 0.3) + ($notaChefia * 0.7), 2);
+                    $calcFinal = "($notaAuto x 30%) + ($notaChefia x 70%) = $notaFinal";
+                }
             }
 
             $id = $auto?->id ?? $chefia?->id ?? $equipes->first()?->id;
@@ -790,6 +889,16 @@ class EvaluationController extends Controller
                 }
             }
 
+            // Informações sobre avaliação de equipe
+            $teamInfo = null;
+            if ($deveTeravaliacaoEquipe) {
+                $teamInfo = [
+                    'total_members' => $todasEquipes->count(),
+                    'completed_members' => $equipesCompleted->count(),
+                    'has_team_evaluation' => $deveTeravaliacaoEquipe,
+                ];
+            }
+
             $evaluations[] = [
                 'year' => $ano,
                 'user' => $person->name,
@@ -798,6 +907,7 @@ class EvaluationController extends Controller
                 'calc_auto' => $calcAuto,
                 'calc_chefia' => $calcChefia,
                 'calc_equipe' => $calcEquipe,
+                'team_info' => $teamInfo,
                 'id' => $id,
                 'is_in_aware_period' => $isInAwarePeriod,
                 'is_in_recourse_period' => $isInRecoursePeriod,
@@ -824,9 +934,9 @@ class EvaluationController extends Controller
 
         $evaluationRequest = EvaluationRequest::with('evaluation.form')->findOrFail($id);
 
-        // ✅ Se não for comissão, só pode ver se foi o avaliador
+        // ✅ Se não for comissão, só pode ver se foi avaliado ou avaliador
         if (!user_can('recourse')) {
-            if (!$person || $evaluationRequest->requester_person_id !== $person->id) {
+            if (!$person || ($evaluationRequest->requester_person_id !== $person->id && $evaluationRequest->evaluation->evaluated_person_id !== $person->id)) {
                 abort(403, 'Você não pode acessar esta avaliação.');
             }
         }
@@ -854,33 +964,72 @@ class EvaluationController extends Controller
             }
         }
 
-        // Filtra todas as requisições no mesmo ano feitas pelo avaliador
+        // Busca TODAS as avaliações da pessoa avaliada no mesmo ano (apenas completed)
+        $evaluatedPersonId = $evaluation->evaluated_person_id;
+        $evaluatedPerson = Person::with('jobFunction')->find($evaluatedPersonId);
+        
         $requestsAno = EvaluationRequest::with([
             'evaluation.form.groupQuestions.questions',
             'requested',
             'requester',
         ])
-            ->where('evaluation_id', $evaluation->id)
+            ->whereHas('evaluation', function($query) use ($evaluatedPersonId, $year) {
+                $query->where('evaluated_person_id', $evaluatedPersonId)
+                      ->whereHas('form', function($formQuery) use ($year) {
+                          $formQuery->where('year', $year);
+                      });
+            })
+            ->where('status', 'completed')
             ->get();
 
-        $formGroups = $form->groupQuestions ?? [];
+        // Busca TODAS as requisições (incluindo pending) para verificar se deveria ter avaliação de equipe
+        $todasRequestsAno = EvaluationRequest::with([
+            'evaluation.form.groupQuestions.questions',
+            'requested',
+            'requester',
+        ])
+            ->whereHas('evaluation', function($query) use ($evaluatedPersonId, $year) {
+                $query->where('evaluated_person_id', $evaluatedPersonId)
+                      ->whereHas('form', function($formQuery) use ($year) {
+                          $formQuery->where('year', $year);
+                      });
+            })
+            ->get();
+
+        // Obter o formulário de qualquer uma das avaliações (todos do mesmo ano devem ter formulários similares)
+        $formGroups = [];
+        if ($requestsAno->isNotEmpty()) {
+            $firstForm = $requestsAno->first()->evaluation->form;
+            $formGroups = $firstForm->groupQuestions ?? [];
+        }
 
         $blocos = [];
         $equipes = [];
 
         foreach ($requestsAno as $r) {
             $type = strtolower($r->evaluation->type ?? '');
-            if (str_contains($type, 'equipe')) {
+            
+            // Identificar avaliações de equipe
+            // Equipe = avaliações do tipo 'chefia' feitas por pessoas que não são o chefe direto
+            $isEquipeEvaluation = str_contains($type, 'equipe') || 
+                                  ($type === 'chefia' && $r->requested_person_id !== $evaluatedPerson->direct_manager_id);
+            
+            if ($isEquipeEvaluation) {
                 $equipes[] = $r;
                 continue;
             }
 
-            $answers = Answer::where('evaluation_id', $r->evaluation_id)->get();
+            $answers = Answer::where('evaluation_id', $r->evaluation_id)
+                ->where('subject_person_id', $r->requested_person_id)
+                ->get();
+            $requestForm = $r->evaluation->form;
+            $requestFormGroups = $requestForm->groupQuestions ?? [];
+            
             $byQuestion = [];
             $somaNotas = 0;
             $somaPesos = 0;
 
-            foreach ($formGroups as $group) {
+            foreach ($requestFormGroups as $group) {
                 foreach ($group->questions as $question) {
                     $answer = $answers->firstWhere('question_id', $question->id);
                     $score = $answer ? intval($answer->score) : null;
@@ -898,19 +1047,48 @@ class EvaluationController extends Controller
 
             $nota = $somaPesos > 0 ? round($somaNotas / $somaPesos, 2) : null;
 
+            $evaluatorName = $r->requestedPerson->name ?? 'Não informado';
+            
+            // Se é autoavaliação, mostrar como tal
+            if (in_array($type, ['autoavaliação', 'autoavaliaçãogestor', 'autoavaliaçãocomissionado'])) {
+                $evaluatorName = $r->evaluation->evaluatedPerson->name . ' (Autoavaliação)';
+            }
+
             $blocos[] = [
                 'tipo' => $r->evaluation->type ?? '-',
                 'nota' => $nota,
                 'answers' => $byQuestion,
                 'evidencias' => $r->evidencias ?? null,
+                'evaluator_name' => $evaluatorName,
             ];
         }
 
         // Bloco Equipe
         $blocoEquipe = null;
+        $teamInfo = null;
+        
+        // Verificar se deveria ter avaliação de equipe (buscar todas as requisições, não só completed)
+        $todasEquipesDetail = $todasRequestsAno->filter(function($r) use ($evaluatedPerson) {
+            $type = strtolower($r->evaluation->type ?? '');
+            return str_contains($type, 'equipe') ||
+                   ($type === 'chefia' && $r->requested_person_id !== $evaluatedPerson->direct_manager_id);
+        });
+        
+        if ($todasEquipesDetail->count() > 0) {
+            $teamInfo = [
+                'total_members' => $todasEquipesDetail->count(),
+                'completed_members' => count($equipes),
+                'has_team_evaluation' => true,
+            ];
+        }
+        
         if (count($equipes)) {
+            // Usar o formulário da primeira avaliação de equipe para obter as questões
+            $firstEquipeForm = $equipes[0]->evaluation->form;
+            $equipeFormGroups = $firstEquipeForm->groupQuestions ?? [];
+            
             $questionsById = [];
-            foreach ($formGroups as $group) {
+            foreach ($equipeFormGroups as $group) {
                 foreach ($group->questions as $question) {
                     $questionsById[$question->id] = $question;
                 }
@@ -918,9 +1096,13 @@ class EvaluationController extends Controller
 
             $allAnswers = [];
             foreach ($equipes as $reqEquipe) {
-                $answers = Answer::where('evaluation_id', $reqEquipe->evaluation_id)->get();
+                $answers = Answer::where('evaluation_id', $reqEquipe->evaluation_id)
+                    ->where('subject_person_id', $reqEquipe->requested_person_id)
+                    ->get();
                 foreach ($answers as $ans) {
-                    $allAnswers[$ans->question_id][] = intval($ans->score);
+                    if ($ans->score !== null) {
+                        $allAnswers[$ans->question_id][] = intval($ans->score);
+                    }
                 }
             }
 
@@ -935,10 +1117,12 @@ class EvaluationController extends Controller
                 ];
             }
 
-            $notaEquipe = count($answersEquipe)
+            // Calcular nota da equipe apenas com questões que têm respostas
+            $validAnswers = array_filter($answersEquipe, fn($item) => $item['score_media'] !== null);
+            $notaEquipe = count($validAnswers)
                 ? round(
-                    array_reduce($answersEquipe, fn($carry, $item) => $carry + ($item['score_media'] * $item['weight']), 0) /
-                    array_reduce($answersEquipe, fn($carry, $item) => $carry + $item['weight'], 0),
+                    array_reduce($validAnswers, fn($carry, $item) => $carry + ($item['score_media'] * $item['weight']), 0) /
+                    array_reduce($validAnswers, fn($carry, $item) => $carry + $item['weight'], 0),
                     2
                 )
                 : null;
@@ -947,29 +1131,60 @@ class EvaluationController extends Controller
                 'tipo' => 'Equipe',
                 'nota' => $notaEquipe,
                 'answers' => $answersEquipe,
+                'team_info' => $teamInfo,
+            ];
+        } elseif ($teamInfo) {
+            // Caso tenha solicitações de equipe mas nenhuma completed
+            $blocoEquipe = [
+                'tipo' => 'Equipe',
+                'nota' => null,
+                'answers' => [],
+                'team_info' => $teamInfo,
             ];
         }
 
-        // Cálculo final com lógica de nota zerada
+        // Cálculo final com lógica corrigida
         $notaAuto = optional(collect($blocos)->first(fn($b) => str_contains(strtolower($b['tipo']), 'auto')))['nota'] ?? null;
         $notaChefia = optional(collect($blocos)->first(fn($b) => in_array(strtolower($b['tipo']), ['servidor', 'gestor', 'comissionado'])))['nota'] ?? null;
         $notaEquipe = $blocoEquipe ? $blocoEquipe['nota'] : null;
 
-        $isGestor = $notaEquipe !== null;
-        if (
-            ($isGestor && ($notaAuto === null || $notaChefia === null || $notaEquipe === null)) ||
-            (!$isGestor && ($notaAuto === null || $notaChefia === null))
-        ) {
-            $notaFinal = 0;
-            $calcFinal = 'Nota zerada por ausência de preenchimento de uma ou mais partes.';
-        } else {
-            $notaFinal = $isGestor
-                ? round(($notaAuto * 0.25) + ($notaChefia * 0.5) + ($notaEquipe * 0.25), 2)
-                : round(($notaAuto * 0.3) + ($notaChefia * 0.7), 2);
+        // Determinar se é gestor baseado na função organizacional
+        $isGestor = $evaluatedPerson->jobFunction && $evaluatedPerson->jobFunction->is_manager;
 
-            $calcFinal = $isGestor
-                ? "($notaAuto x 25%) + ($notaChefia x 50%) + ($notaEquipe x 25%) = $notaFinal"
-                : "($notaAuto x 30%) + ($notaChefia x 70%) = $notaFinal";
+        // Para gestores, verificar se DEVERIA ter avaliação de equipe (mesmo que pending)
+        $deveTeravaliacaoEquipe = false;
+        if ($isGestor) {
+            $deveTeravaliacaoEquipe = $todasRequestsAno->filter(function($r) use ($evaluatedPerson) {
+                $type = strtolower($r->evaluation->type ?? '');
+                return str_contains($type, 'equipe') ||
+                       ($type === 'chefia' && $r->requested_person_id !== $evaluatedPerson->direct_manager_id);
+            })->count() > 0;
+        }
+
+        // Lógica da nota final
+        if ($isGestor) {
+            // Para gestores: todas as três avaliações são obrigatórias
+            if ($notaAuto === null || $notaChefia === null || ($deveTeravaliacaoEquipe && $notaEquipe === null)) {
+                $notaFinal = 0;
+                if ($deveTeravaliacaoEquipe && $notaEquipe === null) {
+                    $calcFinal = 'Nota zerada por ausência de avaliação de equipe (obrigatória para gestores).';
+                } else {
+                    $calcFinal = 'Nota zerada por ausência de autoavaliação ou avaliação de chefia.';
+                }
+            } else {
+                // Gestor com todas as avaliações: 25% + 50% + 25%
+                $notaFinal = round(($notaAuto * 0.25) + ($notaChefia * 0.5) + ($notaEquipe * 0.25), 2);
+                $calcFinal = "($notaAuto x 25%) + ($notaChefia x 50%) + ($notaEquipe x 25%) = $notaFinal";
+            }
+        } else {
+            // Para não-gestores: lógica original (autoavaliação + chefia)
+            if ($notaAuto === null || $notaChefia === null) {
+                $notaFinal = 0;
+                $calcFinal = 'Nota zerada por ausência de preenchimento de uma ou mais partes.';
+            } else {
+                $notaFinal = round(($notaAuto * 0.3) + ($notaChefia * 0.7), 2);
+                $calcFinal = "($notaAuto x 30%) + ($notaChefia x 70%) = $notaFinal";
+            }
         }
 
         return inertia('Dashboard/EvaluationDetail', [
@@ -979,7 +1194,6 @@ class EvaluationController extends Controller
             'blocos' => $blocos,
             'blocoEquipe' => $blocoEquipe,
             'final_score' => $notaFinal,
-            'calc_final' => $calcFinal,
             'is_commission' => user_can('recourse'),
         ]);
     }

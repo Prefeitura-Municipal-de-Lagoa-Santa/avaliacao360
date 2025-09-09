@@ -120,6 +120,8 @@ class PersonController extends Controller
                 'job_function_id' => $person->job_function_id,
                 'organizational_unit_id' => $person->organizational_unit_id,
                 'direct_manager_id' => $person->direct_manager_id, // ✅ novo
+                'sala' => $person->sala,
+                'descricao_sala' => $person->descricao_sala,
             ],
             'organizationalUnits' => $organizationalUnits,
             'functionalStatuses' => $functionalStatuses,
@@ -162,6 +164,8 @@ class PersonController extends Controller
             'dismissal_date' => 'nullable|date',
             'direct_manager_id' => ['nullable', 'exists:people,id'],
             'job_function_id' => 'nullable|exists:job_functions,id',
+            'sala' => 'nullable|string|max:255',
+            'descricao_sala' => 'nullable|string|max:255',
         ]);
 
         $person->update($validatedData);
@@ -622,13 +626,16 @@ class PersonController extends Controller
             ]);
         }
 
+        // Senha padrão
+        $defaultPassword = 'Abc@1234';
+
         // Cria o usuário com senha padrão
         $user = User::create([
             'name' => $data['name'],
             'email' => $data['email'],
             'username' => $cpf,
             'cpf' => $cpf,
-            'password' => Hash::make('Abc@1234'),
+            'password' => Hash::make($defaultPassword),
             'must_change_password' => true,
         ]);
 
@@ -640,7 +647,10 @@ class PersonController extends Controller
             'user_id' => $user->id,
         ]);
 
-        return redirect()->route('configs')->with('success', 'Pessoa manual criada com sucesso.');
+        // Envia email com as credenciais
+        \App\Jobs\SendWelcomeEmailJob::dispatch($user, $defaultPassword);
+
+        return redirect()->route('configs')->with('success', 'Pessoa manual criada com sucesso. Um email com as credenciais foi enviado.');
     }
 
     public function evaluations(Person $person)

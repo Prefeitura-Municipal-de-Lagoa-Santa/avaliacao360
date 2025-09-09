@@ -5,6 +5,7 @@ import DashboardLayout from '@/layouts/DashboardLayout.vue'
 import * as icons from 'lucide-vue-next'
 import { debounce } from 'lodash'
 import { route } from 'ziggy-js'
+import { usePermissions } from '@/composables/usePermissions'
 import {
   Dialog,
   DialogContent,
@@ -44,6 +45,9 @@ const search = ref(props.filters.search ?? '')
 const filterType = ref(props.filters.type ?? '')
 const filterForm = ref(props.filters.form ?? '')
 const showFilters = ref(false)
+
+const { can } = usePermissions()
+const canGeneratePDF = computed(() => can('evaluations.completed.pdf'))
 
 // Função para aplicar filtros no servidor
 const applyFilters = debounce(() => {
@@ -336,29 +340,28 @@ function goBack() {
               <div class="text-gray-700">{{ req.form_name }}</div>
             </td>
             <td class="table-cell">
-              <div class="flex items-center">
-                <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-sm font-semibold"
-                      :class="{
-                        'bg-red-100 text-red-800': typeof req.score === 'number' && req.score < 60,
-                        'bg-yellow-100 text-yellow-800': typeof req.score === 'number' && req.score >= 60 && req.score < 80,
-                        'bg-green-100 text-green-800': typeof req.score === 'number' && req.score >= 80,
-                        'bg-gray-100 text-gray-600': req.score === '-' || req.score === null
-                      }">
-                  {{ req.score === '-' || req.score === null ? 'N/A' : req.score }}
-                </span>
+              <div class="flex items-center gap-2">
+                <a 
+                  v-if="canGeneratePDF"
+                  :href="route('evaluations.completed.pdf', { id: req.id })"
+                  target="_blank"
+                  class="inline-flex items-center px-2.5 py-1.5 border border-indigo-300 text-xs font-medium rounded text-indigo-700 bg-indigo-50 hover:bg-indigo-100 focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-colors duration-200"
+                  title="Baixar PDF"
+                >
+                  <icons.Download class="size-3 mr-1" /> 
+                  PDF
+                </a>
+                <button 
+                  v-if="req.can_delete" 
+                  @click="confirmDelete(req.id)"
+                  class="inline-flex items-center px-2.5 py-1.5 border border-red-300 text-xs font-medium rounded text-red-700 bg-red-50 hover:bg-red-100 focus:outline-none focus:ring-2 focus:ring-red-500 transition-colors duration-200"
+                  title="Excluir avaliação"
+                >
+                  <icons.Trash2 class="size-3 mr-1" /> 
+                  Excluir
+                </button>
+                <span v-if="!req.can_delete && !canGeneratePDF" class="text-xs text-gray-400">Sem ações</span>
               </div>
-            </td>
-            <td class="table-cell">
-              <button 
-                v-if="req.can_delete" 
-                @click="confirmDelete(req.id)"
-                class="inline-flex items-center px-2.5 py-1.5 border border-red-300 text-xs font-medium rounded text-red-700 bg-red-50 hover:bg-red-100 focus:outline-none focus:ring-2 focus:ring-red-500 transition-colors duration-200"
-                title="Excluir avaliação"
-              >
-                <icons.Trash2 class="size-3 mr-1" /> 
-                Excluir
-              </button>
-              <span v-else class="text-xs text-gray-400">Sem ações</span>
             </td>
           </tr>
         </tbody>
@@ -384,6 +387,14 @@ function goBack() {
                     }">
                 {{ req.type }}
               </span>
+              <a 
+                :href="route('evaluations.completed.pdf', { id: req.id })"
+                target="_blank"
+                class="inline-flex items-center p-1.5 border border-indigo-300 rounded text-indigo-700 bg-indigo-50 hover:bg-indigo-100 focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-colors duration-200"
+                title="Baixar PDF"
+              >
+                <icons.Download class="size-3" />
+              </a>
               <button 
                 v-if="req.can_delete" 
                 @click="confirmDelete(req.id)"

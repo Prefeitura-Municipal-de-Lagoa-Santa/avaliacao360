@@ -15,8 +15,8 @@ class JobFunctionController extends Controller
         $jobFunctions = JobFunction::orderBy('name')->get();
 
         $types = [
-            'chefe' => 'Gestor',
-            'comissionado' => 'Comissionados',
+            'chefe' => 'Gestores Municipais',
+            'comissionado' => 'Cargos de Assessoramento',
         ];
 
         return Inertia::render('JobFunctions/Index', [

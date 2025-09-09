@@ -20,6 +20,8 @@ const props = defineProps<{
     organizational_unit_id: number | null;
     job_function_id: number | null;
     direct_manager_id: number | null;
+    sala: string | null;
+    descricao_sala: string | null;
   };
   jobFunctions: Array<{ id: number; name: string }>;
   organizationalUnits: Array<{ id: number; name: string }>;
@@ -42,6 +44,8 @@ const form = useForm({
   organizational_unit_id: props.person.organizational_unit_id,
   job_function_id: props.person.job_function_id,
   direct_manager_id: props.person.direct_manager_id,
+  sala: props.person.sala,
+  descricao_sala: props.person.descricao_sala,
 });
 
 // Armazena o chefe original para detectar mudanças
@@ -136,6 +140,26 @@ const submit = () => {
                 <option v-for="unit in organizationalUnits" :key="unit.id" :value="unit.id">{{ unit.name }}</option>
               </select>
               <div v-if="form.errors.organizational_unit_id" class="text-sm text-red-600 mt-1">{{ form.errors.organizational_unit_id }}</div>
+            </div>
+
+            <!-- Informações da Sala -->
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-x-4">
+              <div>
+                <label for="sala" class="block text-sm font-medium text-gray-700 mb-1">Número/Código da Sala</label>
+                <input id="sala" type="text" v-model="form.sala"
+                  class="block w-full px-3 py-2 border rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                  :class="{ 'border-red-500': form.errors.sala }" 
+                  placeholder="Ex: 101, A-203, S01..." />
+                <div v-if="form.errors.sala" class="text-sm text-red-600 mt-1">{{ form.errors.sala }}</div>
+              </div>
+              <div>
+                <label for="descricao_sala" class="block text-sm font-medium text-gray-700 mb-1">Descrição/Nome da Sala</label>
+                <input id="descricao_sala" type="text" v-model="form.descricao_sala"
+                  class="block w-full px-3 py-2 border rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                  :class="{ 'border-red-500': form.errors.descricao_sala }" 
+                  placeholder="Ex: Recepção, Diretoria, Almoxarifado..." />
+                <div v-if="form.errors.descricao_sala" class="text-sm text-red-600 mt-1">{{ form.errors.descricao_sala }}</div>
+              </div>
             </div>
 
             <!-- Cargo Atual -->

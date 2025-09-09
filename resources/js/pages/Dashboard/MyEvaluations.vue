@@ -15,6 +15,11 @@ const props = defineProps<{
     calc_auto?: string;
     calc_chefia?: string;
     calc_equipe?: string;
+    team_info?: {
+      total_members: number;
+      completed_members: number;
+      has_team_evaluation: boolean;
+    } | null;
     id: number | null;
     is_in_aware_period?: boolean;
     is_in_recourse_period?: boolean;
@@ -148,11 +153,19 @@ function goBack() {
               <div class="space-y-2">
                 <!-- Nota original -->
                 <div class="flex items-center" :class="{ 'opacity-50': eva.is_recourse_approved }">
-                  <span class="text-2xl font-bold mr-2" :class="eva.is_recourse_approved ? 'text-gray-400 line-through' : 'text-blue-600'">
+                  <span class="text-2xl font-bold mr-2" :class="eva.is_recourse_approved ? 'text-gray-400 line-through' : (eva.final_score === 0 ? 'text-red-600' : 'text-blue-600')">
                     {{ eva.final_score }}
                   </span>
                   <span class="text-sm text-gray-500">pts</span>
                   <span v-if="eva.is_recourse_approved" class="ml-2 text-xs text-gray-500">(original)</span>
+                  <!-- Tooltip para nota zerada -->
+                  <div v-if="eva.final_score === 0" class="ml-2 group relative">
+                    <icons.InfoIcon class="w-4 h-4 text-red-500 cursor-help" />
+                    <div class="absolute bottom-6 left-1/2 transform -translate-x-1/2 bg-gray-800 text-white text-xs rounded py-2 px-3 opacity-0 group-hover:opacity-100 transition-opacity duration-300 z-10 whitespace-nowrap">
+                      {{ eva.calc_final }}
+                      <div class="absolute top-full left-1/2 transform -translate-x-1/2 border-4 border-transparent border-t-gray-800"></div>
+                    </div>
+                  </div>
                 </div>
                 
                 <!-- Nota após recurso (se aprovado) -->
