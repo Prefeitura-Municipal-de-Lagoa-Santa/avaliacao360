@@ -51,8 +51,10 @@ class EvaluationController extends Controller
                 throw new \Exception('Avaliação não encontrada para esta solicitação.');
             }
 
-            // Opcional: Deletar respostas antigas para sobrescrever (ou atualize, se preferir)
-            $evaluation->answers()->delete();
+            // CORREÇÃO: Deletar apenas as respostas do avaliador específico, não todas
+            $evaluation->answers()
+                ->where('subject_person_id', $evaluationRequest->requested_person_id)
+                ->delete();
 
             // Salva as novas respostas
             foreach ($data['answers'] as $answer) {
@@ -559,8 +561,10 @@ class EvaluationController extends Controller
             abort(403, 'Acesso negado. Apenas administradores e RH podem gerar PDFs.');
         }
 
-        // Calcular as respostas e pontuação
-        $answers = $evaluationRequest->evaluation->answers;
+        // CORREÇÃO: Buscar apenas as respostas específicas deste avaliador
+        $answers = Answer::where('evaluation_id', $evaluationRequest->evaluation_id)
+            ->where('subject_person_id', $evaluationRequest->requested_person_id)
+            ->get();
         $form = $evaluationRequest->evaluation->form;
         $groupQuestions = $form->groupQuestions ?? [];
         
@@ -630,8 +634,10 @@ class EvaluationController extends Controller
             $evaluationRequest->status = 'pending';
             $evaluationRequest->save();
 
-            // Deleta as respostas associadas
-            Answer::where('evaluation_id', $evaluationRequest->evaluation_id)->delete();
+            // Deleta as respostas associadas específicas deste avaliador
+            Answer::where('evaluation_id', $evaluationRequest->evaluation_id)
+                ->where('subject_person_id', $evaluationRequest->requested_person_id)
+                ->delete();
 
             // Remove evidências e assinatura
             $evaluationRequest->update([
@@ -651,11 +657,15 @@ class EvaluationController extends Controller
     {
         // Carrega todos os relacionamentos necessários para a tela de resultado
         $evaluationRequest->load([
-            'evaluation.answers',
             'evaluation.form.groupQuestions.questions',
             'evaluation.evaluated.jobFunction', // função/cargo do avaliado
             'evaluation.evaluated.organizationalUnit.allParents'
         ]);
+
+        // CORREÇÃO: Buscar apenas as respostas específicas deste avaliador
+        $answers = Answer::where('evaluation_id', $evaluationRequest->evaluation_id)
+            ->where('subject_person_id', $evaluationRequest->requested_person_id)
+            ->get();
 
         // Pode ser necessário ajustar para pegar campos default, caso estejam nulos.
         $evaluated = $evaluationRequest->evaluation->evaluated;
@@ -665,7 +675,7 @@ class EvaluationController extends Controller
             'person' => $evaluated,
             'type' => $evaluationRequest->evaluation->type,
             'evaluation' => [
-                'answers' => $evaluationRequest->evaluation->answers,
+                'answers' => $answers,
                 'evidencias' => $evaluationRequest->evidencias,
                 'assinatura_base64' => $evaluationRequest->assinatura_base64,
                 'updated_at' => $evaluationRequest->updated_at,
@@ -736,7 +746,9 @@ class EvaluationController extends Controller
                     return null;
                 $form = $request->evaluation?->form;
                 $groups = $form?->groupQuestions ?? [];
-                $answers = Answer::where('evaluation_id', $request->evaluation_id)->get();
+                $answers = Answer::where('evaluation_id', $request->evaluation_id)
+                    ->where('subject_person_id', $request->requested_person_id)
+                    ->get();
 
                 $somaNotas = 0;
                 $somaPesos = 0;
@@ -1001,7 +1013,9 @@ class EvaluationController extends Controller
                 continue;
             }
 
-            $answers = Answer::where('evaluation_id', $r->evaluation_id)->get();
+            $answers = Answer::where('evaluation_id', $r->evaluation_id)
+                ->where('subject_person_id', $r->requested_person_id)
+                ->get();
             $requestForm = $r->evaluation->form;
             $requestFormGroups = $requestForm->groupQuestions ?? [];
             
@@ -1076,7 +1090,9 @@ class EvaluationController extends Controller
 
             $allAnswers = [];
             foreach ($equipes as $reqEquipe) {
-                $answers = Answer::where('evaluation_id', $reqEquipe->evaluation_id)->get();
+                $answers = Answer::where('evaluation_id', $reqEquipe->evaluation_id)
+                    ->where('subject_person_id', $reqEquipe->requested_person_id)
+                    ->get();
                 foreach ($answers as $ans) {
                     if ($ans->score !== null) {
                         $allAnswers[$ans->question_id][] = intval($ans->score);
