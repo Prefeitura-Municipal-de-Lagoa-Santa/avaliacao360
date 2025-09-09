@@ -676,7 +676,7 @@ class EvaluationController extends Controller
     public function myEvaluationsHistory()
     {
         $user = Auth::user();
-        $person = Person::where('cpf', $user->cpf)->first();
+        $person = Person::with('jobFunction')->where('cpf', $user->cpf)->first();
 
         if (!$person) {
             return inertia('Dashboard/MyEvaluations', [
@@ -732,8 +732,8 @@ class EvaluationController extends Controller
             $chefiaTypes = ['servidor', 'gestor', 'comissionado'];
 
             $getNotaPonderada = function ($request) {
-                if (!$request)
-                    return 0;
+                if (!$request || $request->status !== 'completed')
+                    return null;
                 $form = $request->evaluation?->form;
                 $groups = $form?->groupQuestions ?? [];
                 $answers = Answer::where('evaluation_id', $request->evaluation_id)->get();
@@ -762,32 +762,57 @@ class EvaluationController extends Controller
                 (strtolower($r->evaluation->type ?? '') === 'chefia' && $r->requested_person_id !== $person->direct_manager_id)
             );
 
-            $notaAuto = $getNotaPonderada($auto);
-            $notaChefia = $getNotaPonderada($chefia);
+            // Para verificar se DEVERIA ter avaliação de equipe, buscar TODAS as requisições (incluindo pending)
+            $todasRequestsAno = $requests->filter(function ($req) use ($ano) {
+                $form = $req->evaluation?->form;
+                $year = $form?->year ?? ($form?->period ? \Carbon\Carbon::parse($form->period)->format('Y') : null);
+                return $year == $ano;
+            });
+            
+            $todasEquipes = $todasRequestsAno->filter(
+                fn($r) =>
+                str_contains(strtolower($r->evaluation->type ?? ''), 'equipe') ||
+                (strtolower($r->evaluation->type ?? '') === 'chefia' && $r->requested_person_id !== $person->direct_manager_id)
+            );
+
+            $notaAuto = $auto ? $getNotaPonderada($auto) : null;
+            $notaChefia = $chefia ? $getNotaPonderada($chefia) : null;
             $notaEquipe = $equipes->count() > 0 ? round($equipes->avg(fn($r) => $getNotaPonderada($r)), 2) : null;
 
             $calcAuto = $auto ? "Autoavaliação: $notaAuto" : '';
             $calcChefia = $chefia ? "Chefia: $notaChefia" : '';
             $calcEquipe = $equipes->count() ? "Equipe (média de {$equipes->count()} avaliações): $notaEquipe" : '';
 
-            // Determinar se é gestor baseado na existência de avaliações de equipe
-            $isGestor = $notaEquipe !== null && $equipes->count() > 0;
+            // Determinar se é gestor baseado na função organizacional da pessoa
+            $isGestor = $person->jobFunction && $person->jobFunction->is_manager;
 
-            // Lógica original da nota
-            if (
-                ($isGestor && ($notaAuto === 0 || $notaChefia === 0 || $notaEquipe === null)) ||
-                (!$isGestor && ($notaAuto === 0 || $notaChefia === 0))
-            ) {
-                $notaFinal = 0;
-                $calcFinal = 'Nota zerada por ausência de preenchimento de uma ou mais partes.';
+            // Lógica da nota final
+            if ($isGestor) {
+                // Para gestores: todas as três avaliações são obrigatórias
+                // Verificar se DEVERIA ter avaliação de equipe (mesmo que pending)
+                $deveTeravaliacaoEquipe = $todasEquipes->count() > 0;
+                
+                if ($notaAuto === null || $notaChefia === null || ($deveTeravaliacaoEquipe && $notaEquipe === null)) {
+                    $notaFinal = 0;
+                    if ($deveTeravaliacaoEquipe && $notaEquipe === null) {
+                        $calcFinal = 'Nota zerada por ausência de avaliação de equipe (obrigatória para gestores).';
+                    } else {
+                        $calcFinal = 'Nota zerada por ausência de autoavaliação ou avaliação de chefia.';
+                    }
+                } else {
+                    // Gestor com todas as avaliações: 25% + 50% + 25%
+                    $notaFinal = round(($notaAuto * 0.25) + ($notaChefia * 0.5) + ($notaEquipe * 0.25), 2);
+                    $calcFinal = "($notaAuto x 25%) + ($notaChefia x 50%) + ($notaEquipe x 25%) = $notaFinal";
+                }
             } else {
-                $notaFinal = $isGestor
-                    ? round(($notaAuto * 0.25) + ($notaChefia * 0.5) + ($notaEquipe * 0.25), 2)
-                    : round(($notaAuto * 0.3) + ($notaChefia * 0.7), 2);
-
-                $calcFinal = $isGestor
-                    ? "($notaAuto x 25%) + ($notaChefia x 50%) + ($notaEquipe x 25%) = $notaFinal"
-                    : "($notaAuto x 30%) + ($notaChefia x 70%) = $notaFinal";
+                // Para não-gestores: lógica original (autoavaliação + chefia)
+                if ($notaAuto === null || $notaChefia === null) {
+                    $notaFinal = 0;
+                    $calcFinal = 'Nota zerada por ausência de preenchimento de uma ou mais partes.';
+                } else {
+                    $notaFinal = round(($notaAuto * 0.3) + ($notaChefia * 0.7), 2);
+                    $calcFinal = "($notaAuto x 30%) + ($notaChefia x 70%) = $notaFinal";
+                }
             }
 
             $id = $auto?->id ?? $chefia?->id ?? $equipes->first()?->id;
@@ -843,6 +868,17 @@ class EvaluationController extends Controller
                 }
             }
 
+            // Informações sobre avaliação de equipe
+            $teamInfo = null;
+            if ($deveTeravaliacaoEquipe) {
+                $equipesCompletas = $equipes->filter(fn($r) => $r->status === 'completed');
+                $teamInfo = [
+                    'total_members' => $todasEquipes->count(),
+                    'completed_members' => $equipesCompletas->count(),
+                    'has_team_evaluation' => $deveTeravaliacaoEquipe,
+                ];
+            }
+
             $evaluations[] = [
                 'year' => $ano,
                 'user' => $person->name,
@@ -851,6 +887,7 @@ class EvaluationController extends Controller
                 'calc_auto' => $calcAuto,
                 'calc_chefia' => $calcChefia,
                 'calc_equipe' => $calcEquipe,
+                'team_info' => $teamInfo,
                 'id' => $id,
                 'is_in_aware_period' => $isInAwarePeriod,
                 'is_in_recourse_period' => $isInRecoursePeriod,
@@ -907,11 +944,26 @@ class EvaluationController extends Controller
             }
         }
 
-        // Busca TODAS as avaliações da pessoa avaliada no mesmo ano
+        // Busca TODAS as avaliações da pessoa avaliada no mesmo ano (apenas completed)
         $evaluatedPersonId = $evaluation->evaluated_person_id;
-        $evaluatedPerson = Person::find($evaluatedPersonId);
+        $evaluatedPerson = Person::with('jobFunction')->find($evaluatedPersonId);
         
         $requestsAno = EvaluationRequest::with([
+            'evaluation.form.groupQuestions.questions',
+            'requested',
+            'requester',
+        ])
+            ->whereHas('evaluation', function($query) use ($evaluatedPersonId, $year) {
+                $query->where('evaluated_person_id', $evaluatedPersonId)
+                      ->whereHas('form', function($formQuery) use ($year) {
+                          $formQuery->where('year', $year);
+                      });
+            })
+            ->where('status', 'completed')
+            ->get();
+
+        // Busca TODAS as requisições (incluindo pending) para verificar se deveria ter avaliação de equipe
+        $todasRequestsAno = EvaluationRequest::with([
             'evaluation.form.groupQuestions.questions',
             'requested',
             'requester',
@@ -991,6 +1043,23 @@ class EvaluationController extends Controller
 
         // Bloco Equipe
         $blocoEquipe = null;
+        $teamInfo = null;
+        
+        // Verificar se deveria ter avaliação de equipe (buscar todas as requisições, não só completed)
+        $todasEquipesDetail = $todasRequestsAno->filter(function($r) use ($evaluatedPerson) {
+            $type = strtolower($r->evaluation->type ?? '');
+            return str_contains($type, 'equipe') ||
+                   ($type === 'chefia' && $r->requested_person_id !== $evaluatedPerson->direct_manager_id);
+        });
+        
+        if ($todasEquipesDetail->count() > 0) {
+            $teamInfo = [
+                'total_members' => $todasEquipesDetail->count(),
+                'completed_members' => count($equipes),
+                'has_team_evaluation' => true,
+            ];
+        }
+        
         if (count($equipes)) {
             // Usar o formulário da primeira avaliação de equipe para obter as questões
             $firstEquipeForm = $equipes[0]->evaluation->form;
@@ -1038,29 +1107,60 @@ class EvaluationController extends Controller
                 'tipo' => 'Equipe',
                 'nota' => $notaEquipe,
                 'answers' => $answersEquipe,
+                'team_info' => $teamInfo,
+            ];
+        } elseif ($teamInfo) {
+            // Caso tenha solicitações de equipe mas nenhuma completed
+            $blocoEquipe = [
+                'tipo' => 'Equipe',
+                'nota' => null,
+                'answers' => [],
+                'team_info' => $teamInfo,
             ];
         }
 
-        // Cálculo final com lógica de nota zerada
+        // Cálculo final com lógica corrigida
         $notaAuto = optional(collect($blocos)->first(fn($b) => str_contains(strtolower($b['tipo']), 'auto')))['nota'] ?? null;
         $notaChefia = optional(collect($blocos)->first(fn($b) => in_array(strtolower($b['tipo']), ['servidor', 'gestor', 'comissionado'])))['nota'] ?? null;
         $notaEquipe = $blocoEquipe ? $blocoEquipe['nota'] : null;
 
-        $isGestor = $notaEquipe !== null;
-        if (
-            ($isGestor && ($notaAuto === null || $notaChefia === null || $notaEquipe === null)) ||
-            (!$isGestor && ($notaAuto === null || $notaChefia === null))
-        ) {
-            $notaFinal = 0;
-            $calcFinal = 'Nota zerada por ausência de preenchimento de uma ou mais partes.';
-        } else {
-            $notaFinal = $isGestor
-                ? round(($notaAuto * 0.25) + ($notaChefia * 0.5) + ($notaEquipe * 0.25), 2)
-                : round(($notaAuto * 0.3) + ($notaChefia * 0.7), 2);
+        // Determinar se é gestor baseado na função organizacional
+        $isGestor = $evaluatedPerson->jobFunction && $evaluatedPerson->jobFunction->is_manager;
 
-            $calcFinal = $isGestor
-                ? "($notaAuto x 25%) + ($notaChefia x 50%) + ($notaEquipe x 25%) = $notaFinal"
-                : "($notaAuto x 30%) + ($notaChefia x 70%) = $notaFinal";
+        // Para gestores, verificar se DEVERIA ter avaliação de equipe (mesmo que pending)
+        $deveTeravaliacaoEquipe = false;
+        if ($isGestor) {
+            $deveTeravaliacaoEquipe = $todasRequestsAno->filter(function($r) use ($evaluatedPerson) {
+                $type = strtolower($r->evaluation->type ?? '');
+                return str_contains($type, 'equipe') ||
+                       ($type === 'chefia' && $r->requested_person_id !== $evaluatedPerson->direct_manager_id);
+            })->count() > 0;
+        }
+
+        // Lógica da nota final
+        if ($isGestor) {
+            // Para gestores: todas as três avaliações são obrigatórias
+            if ($notaAuto === null || $notaChefia === null || ($deveTeravaliacaoEquipe && $notaEquipe === null)) {
+                $notaFinal = 0;
+                if ($deveTeravaliacaoEquipe && $notaEquipe === null) {
+                    $calcFinal = 'Nota zerada por ausência de avaliação de equipe (obrigatória para gestores).';
+                } else {
+                    $calcFinal = 'Nota zerada por ausência de autoavaliação ou avaliação de chefia.';
+                }
+            } else {
+                // Gestor com todas as avaliações: 25% + 50% + 25%
+                $notaFinal = round(($notaAuto * 0.25) + ($notaChefia * 0.5) + ($notaEquipe * 0.25), 2);
+                $calcFinal = "($notaAuto x 25%) + ($notaChefia x 50%) + ($notaEquipe x 25%) = $notaFinal";
+            }
+        } else {
+            // Para não-gestores: lógica original (autoavaliação + chefia)
+            if ($notaAuto === null || $notaChefia === null) {
+                $notaFinal = 0;
+                $calcFinal = 'Nota zerada por ausência de preenchimento de uma ou mais partes.';
+            } else {
+                $notaFinal = round(($notaAuto * 0.3) + ($notaChefia * 0.7), 2);
+                $calcFinal = "($notaAuto x 30%) + ($notaChefia x 70%) = $notaFinal";
+            }
         }
 
         return inertia('Dashboard/EvaluationDetail', [

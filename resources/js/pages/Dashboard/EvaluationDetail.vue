@@ -21,11 +21,21 @@ const props = defineProps<{
     answers: Array<{ question: string; score: number | null; weight: number }>;
     evidencias?: string;
     evaluator_name?: string;
+    team_info?: {
+      total_members: number;
+      completed_members: number;
+      has_team_evaluation: boolean;
+    } | null;
   }>;
   blocoEquipe?: {
     tipo: string;
     nota: number | null;
     answers: Array<{ question: string; score_media: number | null; weight: number }>;
+    team_info?: {
+      total_members: number;
+      completed_members: number;
+      has_team_evaluation: boolean;
+    } | null;
   } | null;
   final_score: number;
   is_commission?: boolean;
@@ -97,7 +107,8 @@ const allEvaluations = computed(() => {
         weight: a.weight
       })),
       evidencias: undefined,
-      evaluator_name: 'Equipe'
+      evaluator_name: 'Equipe',
+      team_info: props.blocoEquipe.team_info
     });
   }
   return evaluations;
@@ -231,10 +242,30 @@ const completedEvaluations = computed(() =>
                 <div class="flex items-center gap-2 text-blue-800">
                   <icons.Users class="w-4 h-4" />
                   <span class="text-sm font-medium">
-                    Avaliação consolidada da equipe
+                    <template v-if="evaluation.team_info">
+                      Avaliação consolidada de {{ evaluation.team_info.completed_members }}/{{ evaluation.team_info.total_members }} membros da equipe
+                    </template>
+                    <template v-else>
+                      Avaliação consolidada da equipe
+                    </template>
                   </span>
                 </div>
-                <p class="text-xs text-blue-600 mt-1">
+                <div v-if="evaluation.team_info" class="mt-2">
+                  <div class="flex items-center justify-between text-xs text-blue-600">
+                    <span>Progresso das avaliações da equipe</span>
+                    <span class="font-medium">
+                      {{ Math.round((evaluation.team_info.completed_members / evaluation.team_info.total_members) * 100) }}%
+                    </span>
+                  </div>
+                  <div class="w-full bg-blue-200 rounded-full h-2 mt-1">
+                    <div 
+                      class="h-2 rounded-full transition-all"
+                      :class="evaluation.team_info.completed_members === evaluation.team_info.total_members ? 'bg-green-500' : 'bg-yellow-500'"
+                      :style="{ width: (evaluation.team_info.completed_members / evaluation.team_info.total_members) * 100 + '%' }"
+                    ></div>
+                  </div>
+                </div>
+                <p class="text-xs text-blue-600 mt-2">
                   A média apresentada representa a consolidação das avaliações de todos os membros da equipe.
                 </p>
               </div>
