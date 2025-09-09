@@ -15,6 +15,7 @@ use App\Models\EvaluationRequest;
 use App\Models\User;
 use App\Models\configs as Config; // Importar o model de configurações
 use Illuminate\Support\Facades\Log;
+use Barryvdh\DomPDF\Facade\Pdf;
 
 class EvaluationController extends Controller
 {
@@ -514,13 +515,9 @@ class EvaluationController extends Controller
                 $form = $request->evaluation->form;
                 $canDelete = false;
 
-                if (auth()->user() && auth()->user()->roles(['Admin', 'RH']) && $form) {
-
-                    $now = now();
-
-                    if ($form->term_first && $form->term_end && $now->between($form->term_first, $form->term_end->endOfDay())) {
-                        $canDelete = true;
-                    }
+                if (auth()->user() && user_can('evaluations.completed')) {
+                    // Usuários com permissão podem excluir sempre
+                    $canDelete = true;
                 }
 
                 return [
@@ -548,19 +545,79 @@ class EvaluationController extends Controller
         ]);
     }
 
+    public function generatePDF($id)
+    {
+        $evaluationRequest = EvaluationRequest::with([
+            'evaluation.form.groupQuestions.questions',
+            'evaluation.evaluatedPerson',
+            'requestedPerson',
+            'evaluation.answers'
+        ])->findOrFail($id);
+
+        // Verificar permissões (apenas usuários com permissão específica podem gerar PDF)
+        if (!user_can('evaluations.completed.pdf')) {
+            abort(403, 'Acesso negado. Apenas administradores e RH podem gerar PDFs.');
+        }
+
+        // Calcular as respostas e pontuação
+        $answers = $evaluationRequest->evaluation->answers;
+        $form = $evaluationRequest->evaluation->form;
+        $groupQuestions = $form->groupQuestions ?? [];
+        
+        $questionAnswers = [];
+        $totalScore = 0;
+        $totalWeight = 0;
+        
+        foreach ($groupQuestions as $group) {
+            foreach ($group->questions as $question) {
+                $answer = $answers->firstWhere('question_id', $question->id);
+                $score = $answer ? (int)$answer->score : null;
+                
+                $questionAnswers[] = [
+                    'question' => $question->text_content,
+                    'score' => $score,
+                    'weight' => $question->weight,
+                ];
+                
+                if ($score !== null) {
+                    $totalScore += $score * $question->weight;
+                    $totalWeight += $question->weight;
+                }
+            }
+        }
+        
+        $averageScore = $totalWeight > 0 ? round($totalScore / $totalWeight, 2) : 0;
+
+        $data = [
+            'evaluation' => $evaluationRequest->evaluation,
+            'evaluatedPerson' => $evaluationRequest->evaluation->evaluatedPerson,
+            'evaluatorPerson' => $evaluationRequest->requestedPerson,
+            'form' => $form,
+            'questionAnswers' => $questionAnswers,
+            'averageScore' => $averageScore,
+            'evidencias' => $evaluationRequest->evidencias,
+            'assinatura_base64' => $evaluationRequest->assinatura_base64,
+            'completedAt' => $evaluationRequest->updated_at,
+        ];
+
+        $pdf = Pdf::loadView('pdf.evaluation-report', $data);
+        
+        $fileName = sprintf(
+            'avaliacao_%s_%s_%s.pdf',
+            str_replace(' ', '_', $evaluationRequest->evaluation->evaluatedPerson->name ?? 'avaliado'),
+            str_replace(' ', '_', $evaluationRequest->requestedPerson->name ?? 'avaliador'),
+            $evaluationRequest->updated_at?->format('Y-m-d') ?? date('Y-m-d')
+        );
+
+        return $pdf->download($fileName);
+    }
+
     public function deleteCompleted($id)
     {
         $evaluationRequest = EvaluationRequest::findOrFail($id);
 
-        if (!auth()->user()->roles(['Admin', 'RH'])) {
+        if (!user_can('evaluations.completed')) {
             abort(403, 'Sem permissão');
-        }
-
-        // Verifique se está dentro do período
-        $form = $evaluationRequest->evaluation->form;
-        $now = now();
-        if ($now->lt($form->term_first) || $now->gt($form->term_end)) {
-            return back()->withErrors(['error' => 'Fora do período de avaliação']);
         }
 
         DB::beginTransaction();

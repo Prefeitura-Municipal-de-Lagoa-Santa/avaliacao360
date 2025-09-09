@@ -130,6 +130,9 @@ Route::middleware(['auth', 'verified', EnsureCpfIsFilled::class, RedirectIfMustC
 
     Route::get('/evaluations/completed', [EvaluationController::class, 'completed'])
         ->name('evaluations.completed');
+    
+    Route::get('/evaluations/completed/{id}/pdf', [EvaluationController::class, 'generatePDF'])
+        ->name('evaluations.completed.pdf');
 
     Route::get('/organizational-chart', [OrganizationalChartController::class, 'index'])
         ->name('organizational-chart.index');
