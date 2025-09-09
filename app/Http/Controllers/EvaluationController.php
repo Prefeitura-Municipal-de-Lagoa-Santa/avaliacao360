@@ -820,9 +820,9 @@ class EvaluationController extends Controller
 
         $evaluationRequest = EvaluationRequest::with('evaluation.form')->findOrFail($id);
 
-        // ✅ Se não for comissão, só pode ver se foi o avaliador
+        // ✅ Se não for comissão, só pode ver se foi avaliado ou avaliador
         if (!user_can('recourse')) {
-            if (!$person || $evaluationRequest->requester_person_id !== $person->id) {
+            if (!$person || ($evaluationRequest->requester_person_id !== $person->id && $evaluationRequest->evaluation->evaluated_person_id !== $person->id)) {
                 abort(403, 'Você não pode acessar esta avaliação.');
             }
         }
@@ -850,33 +850,55 @@ class EvaluationController extends Controller
             }
         }
 
-        // Filtra todas as requisições no mesmo ano feitas pelo avaliador
+        // Busca TODAS as avaliações da pessoa avaliada no mesmo ano
+        $evaluatedPersonId = $evaluation->evaluated_person_id;
+        $evaluatedPerson = Person::find($evaluatedPersonId);
+        
         $requestsAno = EvaluationRequest::with([
             'evaluation.form.groupQuestions.questions',
             'requested',
             'requester',
         ])
-            ->where('evaluation_id', $evaluation->id)
+            ->whereHas('evaluation', function($query) use ($evaluatedPersonId, $year) {
+                $query->where('evaluated_person_id', $evaluatedPersonId)
+                      ->whereHas('form', function($formQuery) use ($year) {
+                          $formQuery->where('year', $year);
+                      });
+            })
             ->get();
 
-        $formGroups = $form->groupQuestions ?? [];
+        // Obter o formulário de qualquer uma das avaliações (todos do mesmo ano devem ter formulários similares)
+        $formGroups = [];
+        if ($requestsAno->isNotEmpty()) {
+            $firstForm = $requestsAno->first()->evaluation->form;
+            $formGroups = $firstForm->groupQuestions ?? [];
+        }
 
         $blocos = [];
         $equipes = [];
 
         foreach ($requestsAno as $r) {
             $type = strtolower($r->evaluation->type ?? '');
-            if (str_contains($type, 'equipe')) {
+            
+            // Identificar avaliações de equipe
+            // Equipe = avaliações do tipo 'chefia' feitas por pessoas que não são o chefe direto
+            $isEquipeEvaluation = str_contains($type, 'equipe') || 
+                                  ($type === 'chefia' && $r->requested_person_id !== $evaluatedPerson->direct_manager_id);
+            
+            if ($isEquipeEvaluation) {
                 $equipes[] = $r;
                 continue;
             }
 
             $answers = Answer::where('evaluation_id', $r->evaluation_id)->get();
+            $requestForm = $r->evaluation->form;
+            $requestFormGroups = $requestForm->groupQuestions ?? [];
+            
             $byQuestion = [];
             $somaNotas = 0;
             $somaPesos = 0;
 
-            foreach ($formGroups as $group) {
+            foreach ($requestFormGroups as $group) {
                 foreach ($group->questions as $question) {
                     $answer = $answers->firstWhere('question_id', $question->id);
                     $score = $answer ? intval($answer->score) : null;
@@ -894,19 +916,31 @@ class EvaluationController extends Controller
 
             $nota = $somaPesos > 0 ? round($somaNotas / $somaPesos, 2) : null;
 
+            $evaluatorName = $r->requestedPerson->name ?? 'Não informado';
+            
+            // Se é autoavaliação, mostrar como tal
+            if (in_array($type, ['autoavaliação', 'autoavaliaçãogestor', 'autoavaliaçãocomissionado'])) {
+                $evaluatorName = $r->evaluation->evaluatedPerson->name . ' (Autoavaliação)';
+            }
+
             $blocos[] = [
                 'tipo' => $r->evaluation->type ?? '-',
                 'nota' => $nota,
                 'answers' => $byQuestion,
                 'evidencias' => $r->evidencias ?? null,
+                'evaluator_name' => $evaluatorName,
             ];
         }
 
         // Bloco Equipe
         $blocoEquipe = null;
         if (count($equipes)) {
+            // Usar o formulário da primeira avaliação de equipe para obter as questões
+            $firstEquipeForm = $equipes[0]->evaluation->form;
+            $equipeFormGroups = $firstEquipeForm->groupQuestions ?? [];
+            
             $questionsById = [];
-            foreach ($formGroups as $group) {
+            foreach ($equipeFormGroups as $group) {
                 foreach ($group->questions as $question) {
                     $questionsById[$question->id] = $question;
                 }
@@ -916,7 +950,9 @@ class EvaluationController extends Controller
             foreach ($equipes as $reqEquipe) {
                 $answers = Answer::where('evaluation_id', $reqEquipe->evaluation_id)->get();
                 foreach ($answers as $ans) {
-                    $allAnswers[$ans->question_id][] = intval($ans->score);
+                    if ($ans->score !== null) {
+                        $allAnswers[$ans->question_id][] = intval($ans->score);
+                    }
                 }
             }
 
@@ -931,10 +967,12 @@ class EvaluationController extends Controller
                 ];
             }
 
-            $notaEquipe = count($answersEquipe)
+            // Calcular nota da equipe apenas com questões que têm respostas
+            $validAnswers = array_filter($answersEquipe, fn($item) => $item['score_media'] !== null);
+            $notaEquipe = count($validAnswers)
                 ? round(
-                    array_reduce($answersEquipe, fn($carry, $item) => $carry + ($item['score_media'] * $item['weight']), 0) /
-                    array_reduce($answersEquipe, fn($carry, $item) => $carry + $item['weight'], 0),
+                    array_reduce($validAnswers, fn($carry, $item) => $carry + ($item['score_media'] * $item['weight']), 0) /
+                    array_reduce($validAnswers, fn($carry, $item) => $carry + $item['weight'], 0),
                     2
                 )
                 : null;
@@ -975,7 +1013,6 @@ class EvaluationController extends Controller
             'blocos' => $blocos,
             'blocoEquipe' => $blocoEquipe,
             'final_score' => $notaFinal,
-            'calc_final' => $calcFinal,
             'is_commission' => user_can('recourse'),
         ]);
     }
