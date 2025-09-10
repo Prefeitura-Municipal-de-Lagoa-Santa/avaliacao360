@@ -340,6 +340,17 @@ function goBack() {
               <div class="text-gray-700">{{ req.form_name }}</div>
             </td>
             <td class="table-cell">
+              <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold ml-2"
+                    :class="{
+                      'bg-red-100 text-red-800': typeof req.score === 'number' && req.score < 60,
+                      'bg-yellow-100 text-yellow-800': typeof req.score === 'number' && req.score >= 60 && req.score < 80,
+                      'bg-green-100 text-green-800': typeof req.score === 'number' && req.score >= 80,
+                      'bg-gray-100 text-gray-600': req.score === '-' || req.score === null
+                    }">
+                {{ req.score === '-' || req.score === null ? 'N/A' : req.score }}
+              </span>
+            </td>
+            <td class="table-cell">
               <div class="flex items-center gap-2">
                 <a 
                   v-if="canGeneratePDF"
@@ -405,7 +416,6 @@ function goBack() {
               </button>
             </div>
           </div>
-          
           <div class="space-y-2">
             <div>
               <span class="text-xs font-medium text-gray-500 uppercase tracking-wide">Avaliador:</span>
