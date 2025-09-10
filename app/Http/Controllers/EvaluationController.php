@@ -1437,10 +1437,20 @@ class EvaluationController extends Controller
     private function calculateEvaluationScore($evaluationRequest)
     {
         try {
-            // Carrega as respostas com as perguntas e pesos
-            $answers = Answer::where('evaluation_id', $evaluationRequest->evaluation_id)
-                ->with('question')
-                ->get();
+            // Para avaliações de equipe, precisamos filtrar por subject_person_id
+            // Para outras avaliações, usamos todas as respostas da evaluation
+            $answersQuery = Answer::where('evaluation_id', $evaluationRequest->evaluation_id)
+                ->with('question');
+            
+            // Se é uma avaliação de equipe (tipo 'chefia' e há subject_person_id)
+            $isTeamEvaluation = strtolower($evaluationRequest->evaluation->type ?? '') === 'chefia';
+            
+            if ($isTeamEvaluation && $evaluationRequest->requested_person_id) {
+                // Para avaliações de equipe, filtra pelas respostas específicas do avaliador
+                $answersQuery->where('subject_person_id', $evaluationRequest->requested_person_id);
+            }
+            
+            $answers = $answersQuery->get();
 
             if ($answers->isEmpty()) {
                 return '-';
