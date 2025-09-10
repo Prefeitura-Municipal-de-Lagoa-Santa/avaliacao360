@@ -517,10 +517,21 @@ class EvaluationController extends Controller
                 $form = $request->evaluation->form;
                 $canDelete = false;
 
-
                 if (auth()->user() && user_can('evaluations.completed')) {
-                    // Usuários com permissão podem excluir sempre
-                    $canDelete = true;
+                    // Verifica se ainda está dentro do prazo para excluir
+                    $config = Config::where('year', $form->year ?? date('Y'))->first();
+                    
+                    if ($config && $config->gradesPeriod) {
+                        // Se já passou da data de divulgação das notas, não pode mais excluir
+                        $gradesPeriodDate = \Carbon\Carbon::parse($config->gradesPeriod)->startOfDay();
+                        $now = \Carbon\Carbon::now();
+                        
+                        // Só pode excluir se ainda não chegou na data de divulgação das notas
+                        $canDelete = $now->lessThan($gradesPeriodDate);
+                    } else {
+                        // Se não há data configurada, permite excluir (comportamento padrão)
+                        $canDelete = true;
+                    }
                 }
 
                 // Calcular a nota ponderada da avaliação
@@ -628,6 +639,20 @@ class EvaluationController extends Controller
 
         if (!user_can('evaluations.completed')) {
             abort(403, 'Sem permissão');
+        }
+
+        // Verificar se ainda está dentro do prazo para excluir
+        $form = $evaluationRequest->evaluation->form;
+        $config = Config::where('year', $form->year ?? date('Y'))->first();
+        
+        if ($config && $config->gradesPeriod) {
+            $gradesPeriodDate = \Carbon\Carbon::parse($config->gradesPeriod)->startOfDay();
+            $now = \Carbon\Carbon::now();
+            
+            // Se já passou da data de divulgação das notas, não pode mais excluir
+            if ($now->greaterThanOrEqualTo($gradesPeriodDate)) {
+                return back()->with('error', 'Não é possível excluir avaliações após a data de divulgação das notas.');
+            }
         }
 
         DB::beginTransaction();
