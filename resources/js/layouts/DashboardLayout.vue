@@ -58,6 +58,16 @@ const isActive = (itemRouteName: string, itemHref: string) => {
   return page.url.startsWith(itemHref);
 };
 
+async function markAsRead(id: string) {
+  await axios.patch(`/notifications/${id}/read`);
+  // Atualiza o estado local
+  const notification = notifications.value.find(n => n.id === id);
+  if (notification) {
+    notification.read_at = new Date().toISOString();
+  }
+  unreadCount.value = notifications.value.filter(n => !n.read_at).length;
+}
+
 async function dismissNotification(id: string) {
   await axios.delete(`/notifications/${id}`);
   notifications.value = notifications.value.filter(n => n.id !== id);
@@ -104,7 +114,7 @@ function goToNotificationUrl(notification: any) {
   if (notification.data.url) {
     // Marca como lida primeiro
     if (!notification.read_at) {
-      dismissNotification(notification.id);
+      markAsRead(notification.id);
     }
     showDropdown.value = false;
     window.location.href = notification.data.url;
@@ -148,17 +158,28 @@ function goToNotificationUrl(notification: any) {
               </div>
               
               <ul>
-                <li v-for="n in notifications" :key="n.id" class="border-b p-2 text-sm hover:bg-gray-50 flex justify-between items-start">
+                <li v-for="n in notifications" :key="n.id" 
+                    class="border-b p-2 text-sm hover:bg-gray-50 flex justify-between items-start"
+                    :class="{ 'opacity-60 bg-gray-50': n.read_at }"
+                >
                   <div class="pr-2 flex-grow cursor-pointer" @click="goToNotificationUrl(n)">
-                    <strong class="block text-gray-700">{{ n.data.title }}</strong>
+                    <strong class="block text-gray-700" :class="{ 'font-normal': n.read_at }">{{ n.data.title }}</strong>
                     <span class="text-gray-600">{{ n.data.content }}</span>
-                    <div class="text-xs text-gray-500 mt-1">
+                    <div class="text-xs text-gray-500 mt-1 flex items-center gap-2">
                       {{ formatNotificationDate(n.created_at) }}
+                      <span v-if="n.read_at" class="text-green-600 text-xs">✓ Lida</span>
                     </div>
                   </div>
-                  <button @click="dismissNotification(n.id)" class="text-gray-400 hover:text-red-500 text-xs ml-2 flex-shrink-0" title="Marcar como lida">
-                    ✓
-                  </button>
+                  <div class="flex gap-1 flex-shrink-0 ml-2">
+                    <button v-if="!n.read_at" @click="markAsRead(n.id)" 
+                            class="text-gray-400 hover:text-green-500 text-xs" title="Marcar como lida">
+                      ✓
+                    </button>
+                    <button @click="dismissNotification(n.id)" 
+                            class="text-gray-400 hover:text-red-500 text-xs" title="Excluir notificação">
+                      ✕
+                    </button>
+                  </div>
                 </li>
                 <li v-if="notifications.length === 0" class="p-4 text-center text-sm text-gray-500">
                   Nenhuma notificação recente
