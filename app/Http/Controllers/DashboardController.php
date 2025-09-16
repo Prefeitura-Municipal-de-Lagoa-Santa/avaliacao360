@@ -107,12 +107,22 @@ class DashboardController extends Controller
             'overallProgress' => $formattedProgress . '%',
         ];
 
+        // Estatísticas de PDI
+        $completedPdis = \App\Models\PdiRequest::where('status', 'completed')->count();
+        $pendingPdis = \App\Models\PdiRequest::whereIn('status', ['pending_manager_fill', 'pending_employee_signature'])->count();
+
+        $pdiStats = [
+            'completedPdis' => $completedPdis,
+            'pendingPdis' => $pendingPdis,
+        ];
+
         return Inertia::render('Dashboard/Index', [
             'selectedYear' => (int) $year,
             'availableYears' => $availableYears,
             'prazoAvaliacao' => $prazoAvaliacao,
             'prazoPdi' => $prazoPdi,
             'dashboardStats' => $dashboardStats,
+            'pdiStats' => $pdiStats,
             'pdiExpiredVisible' => $pdiExpiredVisible,
         ]);
     }

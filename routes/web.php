@@ -88,8 +88,10 @@ Route::middleware(['auth', 'verified', EnsureCpfIsFilled::class, RedirectIfMustC
     // Rota para deletar avaliação concluída
     Route::delete('/evaluations/completed/{id}', [EvaluationController::class, 'deleteCompleted'])
         ->name('evaluations.completed.delete');
-    // Rotas para o PDI 
+    // Rotas para o PDI - específicas DEVEM vir antes da genérica
     Route::get('/pdi/list', [PdiController::class, 'index'])->name('pdi.index');
+    Route::get('/pdi/pending', [PdiController::class, 'pending'])->name('pdi.pending');
+    Route::get('/pdi/completed', [PdiController::class, 'completed'])->name('pdi.completed');
     Route::get('/pdi/{pdiRequest}', [PdiController::class, 'show'])->name('pdi.show');
     Route::put('/pdi/{pdiRequest}', [PdiController::class, 'update'])->name('pdi.update');
     // Em routes.php

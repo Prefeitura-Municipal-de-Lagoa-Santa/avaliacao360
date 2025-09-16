@@ -16,6 +16,10 @@ const props = defineProps<{
     unansweredAssessments: number;
     overallProgress: string;
   };
+  pdiStats: {
+    completedPdis: number;
+    pendingPdis: number;
+  };
   pdiExpiredVisible?: boolean;
 }>();
 console.log(props);
@@ -54,6 +58,14 @@ function showDetailsForCompleted() {
 
 function showDetailsForUnanswered() {
   router.get(route('evaluations.unanswered'));
+}
+
+function showCompletedPdis() {
+  router.get(route('pdi.completed'));
+}
+
+function showPendingPdis() {
+  router.get(route('pdi.pending'));
 }
 </script>
 
@@ -99,18 +111,6 @@ function showDetailsForUnanswered() {
         </template>
       </DashboardCard>
 
-      <DashboardCard
-        label="PDIs Sem Resposta"
-        iconBgColor="#f97316"
-        buttonText="Ver Lista"
-        :buttonAction="() => router.get(route('pdi.unanswered'))"
-        v-if="props.pdiExpiredVisible"
-      >
-        <template #icon>
-          <icons.FileClock />
-        </template>
-      </DashboardCard>
-
       <!-- Avaliações Sem Resposta (prazo encerrado) -->
       <DashboardCard
         v-if="props.dashboardStats.unansweredAssessments > 0"
@@ -122,6 +122,34 @@ function showDetailsForUnanswered() {
       >
         <template #icon>
           <icons.AlertTriangle />
+        </template>
+      </DashboardCard>
+
+      <!-- PDIs Concluídos -->
+      <DashboardCard
+        v-if="props.pdiStats && props.pdiStats.completedPdis > 0"
+        :value="props.pdiStats.completedPdis"
+        label="PDIs Concluídos"
+        iconBgColor="#10b981"
+        :buttonAction="showCompletedPdis"
+        buttonText="Ver Concluídos"
+      >
+        <template #icon>
+          <icons.CheckCircle />
+        </template>
+      </DashboardCard>
+
+      <!-- PDIs Pendentes -->
+      <DashboardCard
+        v-if="props.pdiStats && props.pdiStats.pendingPdis > 0"
+        :value="props.pdiStats.pendingPdis"
+        label="PDIs Pendentes"
+        iconBgColor="#f97316"
+        :buttonAction="showPendingPdis"
+        buttonText="Ver Pendentes"
+      >
+        <template #icon>
+          <icons.Clock />
         </template>
       </DashboardCard>
 

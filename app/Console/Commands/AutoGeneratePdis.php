@@ -37,7 +37,7 @@ class AutoGeneratePdis extends Command
 
         // 1. Encontra todos os formulários de PDI que foram liberados e cujo prazo de início é hoje.
         $formsParaVerificar = Form::where('release', true)
-            ->whereDate('term_first', $today)
+            //->whereDate('term_first', $today)
             ->whereIn('type', $pdiFormTypes)
             ->get();
 
