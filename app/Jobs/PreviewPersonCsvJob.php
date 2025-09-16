@@ -34,9 +34,10 @@ class PreviewPersonCsvJob
         $registrationNumbers = array_column($rowsData, 'MATRICULA');
         $existingPersons = Person::whereIn('registration_number', $registrationNumbers)->get()->keyBy('registration_number');
 
-        $summary = ['new' => 0, 'updated' => 0, 'unchanged' => 0, 'errors' => 0, 'skipped' => 0];
+        $summary = ['new' => 0, 'updated' => 0, 'unchanged' => 0, 'errors' => 0, 'skipped' => 0, 'to_inactivate' => 0];
         $errorsList = [];
         $detailedChanges = [];
+        $registrationNumbersInCsv = [];
 
         foreach ($rowsData as $index => $data) {
             if ($this->shouldSkipRow($data)) {
@@ -46,6 +47,11 @@ class PreviewPersonCsvJob
             try {
                 $personData = $this->transformPersonData($data, $organizationalUnitsLookup);
                 $this->validateRow($personData);
+
+                // Adiciona a matrícula na lista de pessoas da planilha
+                if ($personData['registration_number']) {
+                    $registrationNumbersInCsv[] = $personData['registration_number'];
+                }
 
                 $existingPerson = $existingPersons->get($personData['registration_number']);
                 if ($existingPerson) {
@@ -75,11 +81,31 @@ class PreviewPersonCsvJob
             }
         }
 
+        // Calcula quantas pessoas serão inativadas
+        $peopleToInactivate = Person::whereNotIn('registration_number', $registrationNumbersInCsv)
+            ->whereNotIn('functional_status', ['INATIVO', 'EXONERADO', 'APOSENTADO'])
+            ->whereNotNull('registration_number')
+            ->get();
+
+        $summary['to_inactivate'] = $peopleToInactivate->count();
+
+        // Adiciona informações das pessoas que serão inativadas
+        $inactivationDetails = [];
+        foreach ($peopleToInactivate as $person) {
+            $inactivationDetails[] = [
+                'status' => 'to_inactivate',
+                'name' => $person->name,
+                'registration_number' => $person->registration_number,
+                'current_status' => $person->functional_status
+            ];
+        }
+
         return [
             'message' => 'Pré-visualização gerada com sucesso.',
             'summary' => $summary,
             'errors' => $errorsList,
             'detailed_changes' => $detailedChanges,
+            'inactivation_details' => $inactivationDetails,
             'temp_file_path' => $this->filePath,
         ];
     }

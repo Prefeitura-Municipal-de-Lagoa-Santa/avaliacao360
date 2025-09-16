@@ -238,6 +238,7 @@ class PersonController extends Controller
         $successCount = 0;
         $skippedCount = 0;
         $errorCount = 0;
+        $inactivatedCount = 0;
         $errorsList = [];
         try {
             $rowsData = $this->getCsvRowsAsMap($tempFilePath);
@@ -248,6 +249,9 @@ class PersonController extends Controller
 
             $organizationalUnitsLookup = OrganizationalUnit::all()->keyBy('code');
 
+            // Coleta todas as matrículas da planilha (incluindo as que serão puladas)
+            $registrationNumbersInCsv = [];
+            
             foreach ($rowsData as $index => $data) {
                 if ($this->shouldSkipRow($data)) {
                     $skippedCount++;
@@ -263,6 +267,9 @@ class PersonController extends Controller
                         continue;
                     }
 
+                    // Adiciona a matrícula na lista de pessoas da planilha
+                    $registrationNumbersInCsv[] = $personData['registration_number'];
+
                     Person::updateOrCreate(
                         ['registration_number' => $personData['registration_number']],
                         $personData
@@ -274,15 +281,34 @@ class PersonController extends Controller
                 }
             }
 
+            // Inativa pessoas que não estão na planilha atual
+            // Busca pessoas que estão ativas mas não estão na lista da planilha
+            $peopleToInactivate = Person::whereNotIn('registration_number', $registrationNumbersInCsv)
+                ->whereNotIn('functional_status', ['INATIVO', 'EXONERADO', 'APOSENTADO'])
+                ->whereNotNull('registration_number') // Garante que só afeta pessoas com matrícula
+                ->get();
+
+            foreach ($peopleToInactivate as $person) {
+                $person->update(['functional_status' => 'INATIVO']);
+                $inactivatedCount++;
+            }
+
             DB::commit();
             Storage::disk($this->tempDisk)->delete($tempFilePath);
 
             // Dispara o Job para atualizar chefias em background
             UpdatePersonManagersJob::dispatch();
 
+            $message = "Operação concluída! $successCount pessoas foram criadas/atualizadas. ($skippedCount puladas, $errorCount com erro)";
+            if ($inactivatedCount > 0) {
+                $message .= " $inactivatedCount pessoas foram inativadas por não estarem na planilha.";
+            }
+            $message .= " A atualização das chefias será processada em segundo plano.";
+
             return response()->json([
-                'message' => "Operação concluída! $successCount pessoas foram criadas/atualizadas. ($skippedCount puladas, $errorCount com erro). A atualização das chefias será processada em segundo plano.",
+                'message' => $message,
                 'errors' => $errorsList,
+                'inactivated_count' => $inactivatedCount,
             ]);
         } catch (\Exception $e) {
             DB::rollBack();
