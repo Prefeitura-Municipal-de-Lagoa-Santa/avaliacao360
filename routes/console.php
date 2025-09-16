@@ -17,8 +17,7 @@ Artisan::command('send:evaluation-notifications', function () {
 })->purpose('Enviar notificações automáticas de avaliações e PDI');
 
 // Agendamento automático diário das notificações (às 08:00)
-Schedule::command(SendEvaluationNotifications::class)->everyMinute();
+Schedule::command(SendEvaluationNotifications::class)->dailyAt('08:00');
 
-
-// Agendamento automático diário de geração de avaliações
-Schedule::command(AutoGenerateEvaluations::class)->everyMinute();
+// Agendamento automático diário de geração de avaliações (às 06:00)
+Schedule::command(AutoGenerateEvaluations::class)->dailyAt('06:00');

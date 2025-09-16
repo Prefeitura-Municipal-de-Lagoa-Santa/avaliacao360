@@ -126,14 +126,27 @@ class SendEvaluationNotifications extends Command
 
     private function notifyIfNotSent(User $user, string $title, string $content, ?string $url)
     {
-        $alreadySent = $user->notifications()
+        // Verifica se já existe uma notificação com este título para o usuário hoje
+        $existingNotification = $user->notifications()
             ->whereDate('created_at', today())
             ->where('type', SystemNotification::class)
             ->where('data->title', $title)
-            ->exists();
+            ->first();
 
-        if (! $alreadySent) {
-            $user->notify(new SystemNotification($title, $content, $url));
+        // Se já existe uma notificação, só reenvia se ela não foi lida
+        if ($existingNotification) {
+            // Se a notificação já foi lida, não envia novamente
+            if ($existingNotification->read_at !== null) {
+                return;
+            }
+            
+            // Se não foi lida mas foi criada há mais de 2 horas, pode reenviar uma vez
+            if ($existingNotification->created_at->diffInHours(now()) < 2) {
+                return; // Muito recente, não reenvia
+            }
         }
+
+        // Envia a notificação (nova ou reenvio de uma não lida após 2h)
+        $user->notify(new SystemNotification($title, $content, $url));
     }
 }
