@@ -634,8 +634,10 @@ class EvaluationController extends Controller
     {
         $evaluationRequest = EvaluationRequest::with([
             'evaluation.form.groupQuestions.questions',
-            'evaluation.evaluatedPerson',
-            'requestedPerson',
+            'evaluation.evaluatedPerson.jobFunction',
+            'evaluation.evaluatedPerson.organizationalUnit.allParents',
+            'requestedPerson.jobFunction',
+            'requestedPerson.organizationalUnit.allParents',
             'evaluation.answers'
         ])->findOrFail($id);
 
@@ -653,25 +655,38 @@ class EvaluationController extends Controller
         $groupQuestions = $form->groupQuestions ?? [];
         
         $questionAnswers = [];
+        $groupedQuestionAnswers = [];
         $totalScore = 0;
         $totalWeight = 0;
-        
+
         foreach ($groupQuestions as $group) {
+            $groupItems = [];
             foreach ($group->questions as $question) {
                 $answer = $answers->firstWhere('question_id', $question->id);
-                $score = $answer ? (int)$answer->score : null;
-                
+                $score = $answer ? (int) $answer->score : null;
+
+                // Flat list kept for backward compatibility (no longer displayed)
                 $questionAnswers[] = [
                     'question' => $question->text_content,
                     'score' => $score,
                     'weight' => $question->weight,
                 ];
-                
+
+                // Grouped structure for the new PDF layout
+                $groupItems[] = [
+                    'question' => $question->text_content,
+                    'score' => $score,
+                ];
+
                 if ($score !== null) {
-                    $totalScore += $score * $question->weight;
-                    $totalWeight += $question->weight;
+                    $totalScore += $score * ($question->weight ?? 1);
+                    $totalWeight += ($question->weight ?? 1);
                 }
             }
+            $groupedQuestionAnswers[] = [
+                'group' => $group->name,
+                'questions' => $groupItems,
+            ];
         }
         
         $averageScore = $totalWeight > 0 ? round($totalScore / $totalWeight, 2) : 0;
@@ -682,6 +697,7 @@ class EvaluationController extends Controller
             'evaluatorPerson' => $evaluationRequest->requestedPerson,
             'form' => $form,
             'questionAnswers' => $questionAnswers,
+            'groupedQuestionAnswers' => $groupedQuestionAnswers,
             'averageScore' => $averageScore,
             'evidencias' => $evaluationRequest->evidencias,
             'assinatura_base64' => $evaluationRequest->assinatura_base64,

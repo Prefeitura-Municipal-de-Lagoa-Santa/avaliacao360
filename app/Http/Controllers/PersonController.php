@@ -60,9 +60,11 @@ class PersonController extends Controller
     {
         $organizationalUnits = OrganizationalUnit::orderBy('name')->get(['id', 'name']);
         $functionalStatuses = ['ATIVO', 'INATIVO', 'CEDIDO', 'AFASTADO', 'LICENÇA', 'FERIAS', 'EXONERADO', 'APOSENTADO', 'TRABALHANDO'];
+        $jobFunctions = JobFunction::orderBy('name')->get(['id', 'name']);
         return Inertia::render('People/Edit', [
             'organizationalUnits' => $organizationalUnits,
             'functionalStatuses' => $functionalStatuses,
+            'jobFunctions' => $jobFunctions,
         ]);
     }
 
@@ -77,7 +79,15 @@ class PersonController extends Controller
             'cpf' => 'nullable|string|max:14',
             'bond_type' => 'nullable|string|max:255',
             'direct_manager_id' => ['nullable', 'exists:people,id'],
+            'job_function_id' => 'nullable|exists:job_functions,id',
         ]);
+
+        // Se a pessoa for CEDIDA e nenhuma função foi selecionada, atribui automaticamente Chefe(Cedido)
+        if (strtoupper($validatedData['functional_status'] ?? '') === 'CEDIDO' && empty($validatedData['job_function_id'])) {
+            if ($chefeCedido = JobFunction::where('name', 'Chefe(Cedido)')->first()) {
+                $validatedData['job_function_id'] = $chefeCedido->id;
+            }
+        }
         Person::create($validatedData);
         return Redirect::route('people.index')->with('success', 'Pessoa criada com sucesso!');
     }
@@ -167,6 +177,13 @@ class PersonController extends Controller
             'sala' => 'nullable|string|max:255',
             'descricao_sala' => 'nullable|string|max:255',
         ]);
+
+        // Se marcar Situação Funcional como CEDIDO e não informar função, atribui automaticamente Chefe(Cedido)
+        if (strtoupper($validatedData['functional_status'] ?? '') === 'CEDIDO' && empty($validatedData['job_function_id'])) {
+            if ($chefeCedido = JobFunction::where('name', 'Chefe(Cedido)')->first()) {
+                $validatedData['job_function_id'] = $chefeCedido->id;
+            }
+        }
 
         $person->update($validatedData);
 
@@ -665,11 +682,16 @@ class PersonController extends Controller
             'must_change_password' => true,
         ]);
 
+        // Localiza a função Chefe(Cedido)
+        $chefeCedido = JobFunction::where('name', 'Chefe(Cedido)')->first();
+
         // Cria a pessoa manual e associa com o user
         $person = Person::create([
             'name' => $data['name'],
             'cpf' => $cpf,
             'bond_type' => 'manual',
+            'functional_status' => 'CEDIDO',
+            'job_function_id' => $chefeCedido?->id,
             'user_id' => $user->id,
         ]);
 

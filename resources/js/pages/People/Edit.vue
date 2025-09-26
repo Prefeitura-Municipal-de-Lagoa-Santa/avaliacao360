@@ -2,7 +2,7 @@
 import { Head, Link, useForm } from '@inertiajs/vue3';
 import DashboardLayout from '@/layouts/DashboardLayout.vue';
 import { route } from 'ziggy-js';
-import { ref, computed } from 'vue';
+import { ref, computed, watch } from 'vue';
 
 const props = defineProps<{
   person: {
@@ -93,6 +93,17 @@ const submit = () => {
     }
   });
 };
+
+// Auto-seleciona "Chefe(Cedido)" quando Situação Funcional = CEDIDO e nenhuma função estiver definida
+watch(() => form.functional_status, (newVal) => {
+  const isCedido = (newVal || '').toString().toUpperCase() === 'CEDIDO';
+  if (isCedido && (form.job_function_id === null || form.job_function_id === undefined)) {
+    const chefeCedido = props.jobFunctions.find(j => j.name === 'Chefe(Cedido)');
+    if (chefeCedido) {
+      form.job_function_id = chefeCedido.id;
+    }
+  }
+});
 </script>
 
 <template>
