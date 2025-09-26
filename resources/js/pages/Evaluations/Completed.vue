@@ -26,14 +26,17 @@ const props = defineProps<{
       avaliador: string,
       created_at: string,
       score: string | number,
+      status: string,
       can_delete: boolean,
+      can_invalidate: boolean,
     }>,
     links: Array<any>
   },
   filters: {
     search: string | null,
     type?: string | null,
-    form?: string | null
+    form?: string | null,
+    status?: string | null
   },
   availableTypes?: string[],
   availableForms?: string[]
@@ -41,9 +44,14 @@ const props = defineProps<{
 
 const isDeleteDialogOpen = ref(false)
 const evaluationToDelete = ref<number | null>(null)
+const isInvalidateDialogOpen = ref(false)
+const evaluationToInvalidate = ref<number | null>(null)
+const isInvalidationDetailsDialogOpen = ref(false)
+const invalidationDetails = ref<{invalidated_by: string, invalidated_at: string} | null>(null)
 const search = ref(props.filters.search ?? '')
 const filterType = ref(props.filters.type ?? '')
 const filterForm = ref(props.filters.form ?? '')
+const filterStatus = ref(props.filters.status ?? '')
 const showFilters = ref(false)
 
 const { can } = usePermissions()
@@ -56,6 +64,7 @@ const applyFilters = debounce(() => {
   if (search.value) filters.search = search.value
   if (filterType.value) filters.type = filterType.value
   if (filterForm.value) filters.form = filterForm.value
+  if (filterStatus.value) filters.status = filterStatus.value
   
   router.get(route('evaluations.completed'), filters, {
     preserveState: true,
@@ -68,6 +77,7 @@ const clearAllFilters = () => {
   search.value = ''
   filterType.value = ''
   filterForm.value = ''
+  filterStatus.value = ''
   
   router.get(route('evaluations.completed'), {}, {
     preserveState: true,
@@ -81,6 +91,7 @@ const activeFiltersCount = computed(() => {
   if (search.value) count++
   if (filterType.value) count++
   if (filterForm.value) count++
+  if (filterStatus.value) count++
   return count
 })
 
@@ -88,6 +99,7 @@ const activeFiltersCount = computed(() => {
 watch(search, applyFilters)
 watch(filterType, applyFilters)
 watch(filterForm, applyFilters)
+watch(filterStatus, applyFilters)
 
 function confirmDelete(id: number) {
   evaluationToDelete.value = id
@@ -105,6 +117,37 @@ function handleDelete() {
   })
 }
 
+function confirmInvalidate(id: number) {
+  evaluationToInvalidate.value = id
+  isInvalidateDialogOpen.value = true
+}
+
+function handleInvalidate() {
+  if (!evaluationToInvalidate.value) return
+
+  router.post(route('evaluations.completed.invalidate', { id: evaluationToInvalidate.value }), {}, {
+    onSuccess: () => {
+      isInvalidateDialogOpen.value = false
+      evaluationToInvalidate.value = null
+    }
+  })
+}
+
+async function showInvalidationDetails(id: number) {
+  try {
+    const response = await fetch(route('evaluations.completed.invalidation-details', { id: id }))
+    if (response.ok) {
+      const data = await response.json()
+      invalidationDetails.value = data
+      isInvalidationDetailsDialogOpen.value = true
+    } else {
+      console.error('Erro ao buscar detalhes da invalidação')
+    }
+  } catch (error) {
+    console.error('Erro ao buscar detalhes da invalidação:', error)
+  }
+}
+
 function goBack() {
   if (window.history.length > 1) {
     window.history.back()
@@ -116,13 +159,13 @@ function goBack() {
 
 <template>
 
-  <Head title="Avaliações Concluídas" />
-  <DashboardLayout pageTitle="Avaliações Concluídas (Todos)">
+  <Head title="Avaliações Concluídas e Anuladas" />
+  <DashboardLayout pageTitle="Avaliações Concluídas e Anuladas">
     <div class="detail-page-header">
       <div class="flex items-center gap-3">
-        <h2 class="text-2xl font-bold text-gray-800">Avaliações Concluídas</h2>
-        <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
-          Concluídas
+        <h2 class="text-2xl font-bold text-gray-800">Avaliações Concluídas e Anuladas</h2>
+        <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+          Todas
         </span>
       </div>
       <button @click="goBack" class="back-btn">
@@ -179,7 +222,7 @@ function goBack() {
 
       <!-- Painel de filtros -->
       <div v-show="showFilters" class="bg-gray-50 border border-gray-200 rounded-lg p-4 transition-all duration-200">
-        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
           <!-- Filtro por Tipo -->
           <div>
             <label class="block text-sm font-medium text-gray-700 mb-2">
@@ -211,6 +254,22 @@ function goBack() {
               <option v-for="form in props.availableForms" :key="form" :value="form">
                 {{ form }}
               </option>
+            </select>
+          </div>
+
+          <!-- Filtro por Status -->
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-2">
+              <icons.InfoIcon class="size-4 inline mr-1" />
+              Status
+            </label>
+            <select
+              v-model="filterStatus"
+              class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-sm"
+            >
+              <option value="">Todos os status</option>
+              <option value="completed">Concluídas</option>
+              <option value="invalidated">Anuladas</option>
             </select>
           </div>
 
@@ -247,6 +306,13 @@ function goBack() {
               </button>
             </span>
             
+            <span v-if="filterStatus" class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-indigo-100 text-indigo-800">
+              Status: {{ filterStatus === 'completed' ? 'Concluídas' : filterStatus === 'invalidated' ? 'Anuladas' : filterStatus }}
+              <button @click="filterStatus = ''" class="ml-1 text-indigo-600 hover:text-indigo-800">
+                <icons.XIcon class="size-3" />
+              </button>
+            </span>
+            
             <span v-if="search" class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-800">
               Busca: "{{ search }}"
               <button @click="search = ''" class="ml-1 text-purple-600 hover:text-purple-800">
@@ -260,9 +326,9 @@ function goBack() {
 
     <div v-if="props.completedRequests.data.length === 0" class="text-center py-12">
       <icons.ClipboardListIcon class="mx-auto h-12 w-12 text-gray-400 mb-4" />
-      <h3 class="text-lg font-medium text-gray-900 mb-2">Nenhuma avaliação concluída encontrada</h3>
+      <h3 class="text-lg font-medium text-gray-900 mb-2">Nenhuma avaliação encontrada</h3>
       <p class="text-gray-500 max-w-md mx-auto mb-4">
-        {{ activeFiltersCount > 0 ? 'Tente ajustar os filtros para encontrar outras avaliações.' : 'Não há avaliações concluídas no momento.' }}
+        {{ activeFiltersCount > 0 ? 'Tente ajustar os filtros para encontrar outras avaliações.' : 'Não há avaliações concluídas ou anuladas no momento.' }}
       </p>
       <button
         v-if="activeFiltersCount > 0"
@@ -303,9 +369,15 @@ function goBack() {
               </div>
             </th>
             <th class="table-header">
-              <div class="flex items-center gap-0">
+              <div class="flex items-center gap-2">
                 <icons.TrendingUpIcon class="size-4" />
                 Nota   
+              </div>
+            </th>
+            <th class="table-header">
+              <div class="flex items-center gap-2">
+                <icons.InfoIcon class="size-4" />
+                Status
               </div>
             </th>
             <th class="table-header">
@@ -351,6 +423,15 @@ function goBack() {
               </span>
             </td>
             <td class="table-cell">
+              <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium"
+                    :class="{
+                      'bg-green-100 text-green-800': req.status === 'completed',
+                      'bg-orange-100 text-orange-800': req.status === 'invalidated'
+                    }">
+                {{ req.status === 'completed' ? 'Concluída' : req.status === 'invalidated' ? 'Anulada' : req.status }}
+              </span>
+            </td>
+            <td class="table-cell">
               <div class="flex items-center gap-2">
                 <a 
                   v-if="canGeneratePDF"
@@ -363,6 +444,23 @@ function goBack() {
                   PDF
                 </a>
                 <button 
+                  v-if="req.can_invalidate" 
+                  @click="confirmInvalidate(req.id)"
+                  class="inline-flex items-center px-2.5 py-1.5 border border-orange-300 text-xs font-medium rounded text-orange-700 bg-orange-50 hover:bg-orange-100 focus:outline-none focus:ring-2 focus:ring-orange-500 transition-colors duration-200"
+                  title="Anular avaliação"
+                >
+                  <icons.XCircle class="size-3 mr-1" /> 
+                  Anular
+                </button>
+                <button 
+                  v-if="req.status === 'invalidated'" 
+                  @click="showInvalidationDetails(req.id)"
+                  class="inline-flex items-center px-2.5 py-1.5 border border-blue-300 text-xs font-medium rounded text-blue-700 bg-blue-50 hover:bg-blue-100 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors duration-200"
+                  title="Ver detalhes da anulação"
+                >
+                  <icons.Info class="size-3" /> 
+                </button>
+                <button 
                   v-if="req.can_delete" 
                   @click="confirmDelete(req.id)"
                   class="inline-flex items-center px-2.5 py-1.5 border border-red-300 text-xs font-medium rounded text-red-700 bg-red-50 hover:bg-red-100 focus:outline-none focus:ring-2 focus:ring-red-500 transition-colors duration-200"
@@ -371,7 +469,7 @@ function goBack() {
                   <icons.Trash2 class="size-3 mr-1" /> 
                   Excluir
                 </button>
-                <span v-if="!req.can_delete && !canGeneratePDF" class="text-xs text-gray-400">Sem ações</span>
+                <span v-if="!req.can_delete && !req.can_invalidate && req.status !== 'invalidated' && !canGeneratePDF" class="text-xs text-gray-400">Sem ações</span>
               </div>
             </td>
           </tr>
@@ -399,6 +497,7 @@ function goBack() {
                 {{ req.type }}
               </span>
               <a 
+                v-if="canGeneratePDF"
                 :href="route('evaluations.completed.pdf', { id: req.id })"
                 target="_blank"
                 class="inline-flex items-center p-1.5 border border-indigo-300 rounded text-indigo-700 bg-indigo-50 hover:bg-indigo-100 focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-colors duration-200"
@@ -406,6 +505,22 @@ function goBack() {
               >
                 <icons.Download class="size-3" />
               </a>
+              <button 
+                v-if="req.can_invalidate" 
+                @click="confirmInvalidate(req.id)"
+                class="inline-flex items-center p-1.5 border border-orange-300 rounded text-orange-700 bg-orange-50 hover:bg-orange-100 focus:outline-none focus:ring-2 focus:ring-orange-500 transition-colors duration-200"
+                title="Anular avaliação"
+              >
+                <icons.XCircle class="size-3" />
+              </button>
+              <button 
+                v-if="req.status === 'invalidated'" 
+                @click="showInvalidationDetails(req.id)"
+                class="inline-flex items-center p-1.5 border border-blue-300 rounded text-blue-700 bg-blue-50 hover:bg-blue-100 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors duration-200"
+                title="Ver detalhes da anulação"
+              >
+                <icons.Info class="size-3" />
+              </button>
               <button 
                 v-if="req.can_delete" 
                 @click="confirmDelete(req.id)"
@@ -435,6 +550,16 @@ function goBack() {
                       'bg-gray-100 text-gray-600': req.score === '-' || req.score === null
                     }">
                 {{ req.score === '-' || req.score === null ? 'N/A' : req.score }}
+              </span>
+            </div>
+            <div>
+              <span class="text-xs font-medium text-gray-500 uppercase tracking-wide">Status:</span>
+              <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ml-2"
+                    :class="{
+                      'bg-green-100 text-green-800': req.status === 'completed',
+                      'bg-orange-100 text-orange-800': req.status === 'invalidated'
+                    }">
+                {{ req.status === 'completed' ? 'Concluída' : req.status === 'invalidated' ? 'Anulada' : req.status }}
               </span>
             </div>
           </div>
@@ -503,6 +628,65 @@ function goBack() {
           >
             Excluir
           </button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+
+    <Dialog :open="isInvalidateDialogOpen" @update:open="isInvalidateDialogOpen = $event">
+      <DialogContent class="sm:max-w-md bg-white">
+        <DialogHeader>
+          <DialogTitle class="text-lg font-semibold text-gray-900">Anular Avaliação</DialogTitle>
+          <DialogDescription class="mt-2 text-sm text-gray-600">
+            Atenção: Tem certeza que deseja anular esta avaliação? Esta ação não poderá ser desfeita. 
+                    </DialogDescription>
+        </DialogHeader>
+        <DialogFooter class="mt-6 flex flex-col-reverse sm:flex-row sm:justify-end sm:space-x-2">
+          <DialogClose as-child>
+            <button
+              type="button"
+              class="mt-3 sm:mt-0 w-full sm:w-auto inline-flex justify-center rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50"
+            >
+              Cancelar
+            </button>
+          </DialogClose>
+          <button
+            @click="handleInvalidate"
+            type="button"
+            class="w-full sm:w-auto inline-flex justify-center rounded-md border border-transparent bg-orange-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-orange-700"
+          >
+            Anular
+          </button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+
+    <Dialog :open="isInvalidationDetailsDialogOpen" @update:open="isInvalidationDetailsDialogOpen = $event">
+      <DialogContent class="sm:max-w-md bg-white">
+        <DialogHeader>
+          <DialogTitle class="text-lg font-semibold text-gray-900">Detalhes da Anulação</DialogTitle>
+          <DialogDescription class="mt-2 text-sm text-gray-600">
+            Informações sobre quem anulou a avaliação e quando foi anulada.
+          </DialogDescription>
+        </DialogHeader>
+        <div v-if="invalidationDetails" class="mt-4 space-y-3">
+          <div class="bg-gray-50 p-3 rounded-lg">
+            <div class="text-sm font-medium text-gray-700">Anulado por:</div>
+            <div class="text-sm text-gray-900 mt-1">{{ invalidationDetails.invalidated_by }}</div>
+          </div>
+          <div class="bg-gray-50 p-3 rounded-lg">
+            <div class="text-sm font-medium text-gray-700">Data da anulação:</div>
+            <div class="text-sm text-gray-900 mt-1">{{ invalidationDetails.invalidated_at }}</div>
+          </div>
+        </div>
+        <DialogFooter class="mt-6">
+          <DialogClose as-child>
+            <button
+              type="button"
+              class="w-full sm:w-auto inline-flex justify-center rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50"
+            >
+              Fechar
+            </button>
+          </DialogClose>
         </DialogFooter>
       </DialogContent>
     </Dialog>

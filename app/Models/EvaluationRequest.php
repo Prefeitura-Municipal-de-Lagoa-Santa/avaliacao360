@@ -21,7 +21,15 @@ class EvaluationRequest extends Model
         'deleted_by',
         'exception_date_first',
         'exception_date_end',
-        'released_by'
+        'released_by',
+        'invalidated_by',
+        'invalidated_at'
+    ];
+
+    protected $casts = [
+        'invalidated_at' => 'datetime',
+        'exception_date_first' => 'date',
+        'exception_date_end' => 'date',
     ];
 
     public function evaluation(): BelongsTo
@@ -55,8 +63,13 @@ class EvaluationRequest extends Model
         return $this->belongsTo(User::class, 'deleted_by');
     }
     public function releasedByUser()
-{
-    return $this->belongsTo(User::class, 'released_by');
-}
+    {
+        return $this->belongsTo(User::class, 'released_by');
+    }
+
+    public function invalidatedBy()
+    {
+        return $this->belongsTo(User::class, 'invalidated_by');
+    }
 
 }

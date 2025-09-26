@@ -88,6 +88,10 @@ Route::middleware(['auth', 'verified', EnsureCpfIsFilled::class, RedirectIfMustC
     // Rota para deletar avaliação concluída
     Route::delete('/evaluations/completed/{id}', [EvaluationController::class, 'deleteCompleted'])
         ->name('evaluations.completed.delete');
+    Route::post('/evaluations/completed/{id}/invalidate', [EvaluationController::class, 'invalidateCompleted'])
+        ->name('evaluations.completed.invalidate');
+    Route::get('/evaluations/completed/{id}/invalidation-details', [EvaluationController::class, 'getInvalidationDetails'])
+        ->name('evaluations.completed.invalidation-details');
     // Rotas para o PDI - específicas DEVEM vir antes da genérica
     Route::get('/pdi/list', [PdiController::class, 'index'])->name('pdi.index');
     Route::get('/pdi/pending', [PdiController::class, 'pending'])->name('pdi.pending');

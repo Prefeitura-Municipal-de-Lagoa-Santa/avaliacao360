@@ -445,10 +445,11 @@ class EvaluationController extends Controller
         $search = $request->input('search');
         $typeFilter = $request->input('type');
         $formFilter = $request->input('form');
+        $statusFilter = $request->input('status');
 
         // Busca todos os tipos e formulários disponíveis para os filtros
         $availableTypesQuery = EvaluationRequest::with('evaluation')
-            ->where('status', 'completed')
+            ->whereIn('status', ['completed', 'invalidated'])
             ->whereHas('evaluation', function ($q) {
                 $q->whereNotNull('type');
             });
@@ -463,7 +464,7 @@ class EvaluationController extends Controller
             ->toArray();
 
         $availableFormsQuery = EvaluationRequest::with('evaluation.form')
-            ->where('status', 'completed')
+            ->whereIn('status', ['completed', 'invalidated'])
             ->whereHas('evaluation.form', function ($q) {
                 $q->whereNotNull('name');
             });
@@ -482,7 +483,7 @@ class EvaluationController extends Controller
             'evaluation.form',
             'evaluation.evaluatedPerson',
             'requestedPerson'
-        ])->where('status', 'completed');
+        ])->whereIn('status', ['completed', 'invalidated']);
 
         // Aplicar filtro de busca
         if ($search) {
@@ -510,12 +511,18 @@ class EvaluationController extends Controller
             });
         }
 
+        // Aplicar filtro de status
+        if ($statusFilter) {
+            $query->where('status', $statusFilter);
+        }
+
         $completedRequests = $query
             ->orderByDesc('created_at')
             ->paginate(20)
             ->through(function ($request) {
                 $form = $request->evaluation->form;
                 $canDelete = false;
+                $canInvalidate = false;
 
                 if (auth()->user() && user_can('evaluations.completed')) {
                     // Verifica se ainda está dentro do prazo para excluir
@@ -537,6 +544,12 @@ class EvaluationController extends Controller
                 // Calcular a nota ponderada da avaliação
                 $score = $this->calculateEvaluationScore($request);
 
+                // Permissão para anular: reutiliza mesma permissão de excluir ou pode ser nova (ajustar conforme regra)
+                // Só pode anular se ainda está completo (não pode anular uma já anulada)
+                if (auth()->user() && user_can('evaluations.completed') && $request->status === 'completed') {
+                    $canInvalidate = true;
+                }
+
                 return [
                     'id' => $request->id,
                     'type' => $request->evaluation->type ?? '-',
@@ -545,7 +558,9 @@ class EvaluationController extends Controller
                     'avaliador' => $request->requestedPerson->name ?? '-',
                     'created_at' => $request->created_at?->format('d/m/Y H:i') ?? '',
                     'score' => $score,
+                    'status' => $request->status, // Adicionar campo status
                     'can_delete' => $canDelete,
+                    'can_invalidate' => $canInvalidate,
                 ];
             })
 
@@ -557,9 +572,51 @@ class EvaluationController extends Controller
                 'search' => $search,
                 'type' => $typeFilter,
                 'form' => $formFilter,
+                'status' => $statusFilter,
             ],
             'availableTypes' => $availableTypes,
             'availableForms' => $availableForms,
+        ]);
+    }
+
+    /**
+     * Anula (invalida) uma avaliação concluída, alterando status para 'invalidated'.
+     */
+    public function invalidateCompleted($id)
+    {
+        $evaluationRequest = EvaluationRequest::findOrFail($id);
+
+        if ($evaluationRequest->status !== 'completed') {
+            return back()->with('error', 'Somente avaliações concluídas podem ser anuladas.');
+        }
+
+        if (!user_can('evaluations.completed')) {
+            abort(403, 'Sem permissão para anular avaliação.');
+        }
+
+        // Poderíamos registrar log aqui
+        $evaluationRequest->status = 'invalidated';
+        $evaluationRequest->invalidated_by = auth()->id();
+        $evaluationRequest->invalidated_at = now();
+        $evaluationRequest->save();
+
+        return back()->with('success', 'Avaliação anulada com sucesso.');
+    }
+
+    /**
+     * Retorna os detalhes da invalidação de uma avaliação anulada.
+     */
+    public function getInvalidationDetails($id)
+    {
+        $evaluationRequest = EvaluationRequest::with(['invalidatedBy'])->findOrFail($id);
+
+        if ($evaluationRequest->status !== 'invalidated') {
+            return response()->json(['error' => 'Esta avaliação não foi anulada.'], 400);
+        }
+
+        return response()->json([
+            'invalidated_by' => $evaluationRequest->invalidatedBy ? $evaluationRequest->invalidatedBy->name : 'Usuário não identificado',
+            'invalidated_at' => $evaluationRequest->invalidated_at ? $evaluationRequest->invalidated_at->format('d/m/Y H:i') : 'Data não disponível',
         ]);
     }
 
