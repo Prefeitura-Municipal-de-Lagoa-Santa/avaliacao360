@@ -109,6 +109,13 @@ class GenerateEvaluationsJob implements ShouldQueue
             $isManager = $jobFunction && $jobFunction->is_manager;
             $isComissionado = $jobFunction && !$jobFunction->is_manager && $this->comissionadoForm;
 
+            // Pular AUTOAVALIAÇÃO para CHEFE CEDIDO
+            $isChefeCedido = (strtoupper($person->functional_status ?? '') === 'CEDIDO' && $isManager)
+                || ($jobFunction && $jobFunction->name === 'Chefe(Cedido)');
+            if ($isChefeCedido) {
+                continue;
+            }
+
             if ($isManager) {
                 $evaluation = Evaluation::firstOrCreate(
                     ['form_id' => $this->gestorForm->id, 'evaluated_person_id' => $person->id, 'type' => 'autoavaliaçãoGestor']
@@ -203,6 +210,13 @@ class GenerateEvaluationsJob implements ShouldQueue
             $manager = $person->directManager;
             if (!$manager) continue;
 
+            // REGRA: Se o chefe for "chefe cedido", NÃO criar avaliação do chefe (subordinado não avalia o chefe)
+            $managerIsCedido = (strtoupper($manager->functional_status ?? '') === 'CEDIDO')
+                || ($manager->jobFunction && $manager->jobFunction->name === 'Chefe(Cedido)');
+            if ($managerIsCedido) {
+                continue;
+            }
+
             // IMPORTANTE: Só cria avaliação do chefe se ele PODE SER AVALIADO
             // (ou seja, não é 8 - Concursado)
             $managerCanBeEvaluated = $this->pessoasElegiveis()
@@ -237,6 +251,14 @@ class GenerateEvaluationsJob implements ShouldQueue
             ->get();
 
         foreach ($managers as $manager) {
+            // Não criar autoavaliação fallback para CHEFE CEDIDO
+            $jobFunction = $manager->jobFunction;
+            $managerIsChefeCedido = (strtoupper($manager->functional_status ?? '') === 'CEDIDO')
+                || ($jobFunction && $jobFunction->name === 'Chefe(Cedido)');
+            if ($managerIsChefeCedido) {
+                continue;
+            }
+
             // Verifica subordinados que PODEM AVALIAR (excluindo afastados, mas incluindo 8 - Concursado com função)
             $hasSubordinates = $this->pessoasQuePodemAvaliar()
                 ->where('direct_manager_id', $manager->id)

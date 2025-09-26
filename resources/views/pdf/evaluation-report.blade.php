@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Relatório de Avaliação</title>
+    <title>Relatório Parcial Da Avaliação Periódica De Desempenho</title>
     <style>
         body {
             font-family: 'DejaVu Sans', Arial, sans-serif;
@@ -165,7 +165,7 @@
 </head>
 <body>
     <div class="header">
-        <div class="title">Relatório de Avaliação</div>
+        <div class="title">Relatório Parcial Da Avaliação Periódica De Desempenho</div>
         <div class="subtitle">Sistema de Avaliação 360°</div>
     </div>
 
@@ -199,16 +199,24 @@
                 <div class="info-value">{{ $evaluatedPerson->name ?? 'N/A' }}</div>
             </div>
             <div class="info-row">
-                <div class="info-label">CPF:</div>
-                <div class="info-value">{{ $evaluatedPerson->cpf ?? 'N/A' }}</div>
-            </div>
-            <div class="info-row">
                 <div class="info-label">Matrícula:</div>
                 <div class="info-value">{{ $evaluatedPerson->registration_number ?? 'N/A' }}</div>
             </div>
             <div class="info-row">
-                <div class="info-label">Cargo:</div>
-                <div class="info-value">{{ $evaluatedPerson->current_position ?? 'N/A' }}</div>
+                <div class="info-label">Função:</div>
+                <div class="info-value">{{ $evaluatedPerson->jobFunction?->name ?? 'N/A' }}</div>
+            </div>
+            <div class="info-row">
+                <div class="info-label">Sala:</div>
+                <div class="info-value">{{ $evaluatedPerson->descricao_sala ?? $evaluatedPerson->sala ?? 'N/A' }}</div>
+            </div>
+            <div class="info-row">
+                <div class="info-label">Secretaria:</div>
+                <div class="info-value">{{ $evaluatedPerson->organizationalUnit?->secretaria?->name ?? 'N/A' }}</div>
+            </div>
+            <div class="info-row">
+                <div class="info-label">Data de Admissão:</div>
+                <div class="info-value">{{ $evaluatedPerson->admission_date ? $evaluatedPerson->admission_date->format('d/m/Y') : 'N/A' }}</div>
             </div>
         </div>
     </div>
@@ -221,12 +229,28 @@
                 <div class="info-value">{{ $evaluatorPerson->name ?? 'N/A' }}</div>
             </div>
             <div class="info-row">
-                <div class="info-label">CPF:</div>
-                <div class="info-value">{{ $evaluatorPerson->cpf ?? 'N/A' }}</div>
-            </div>
-            <div class="info-row">
                 <div class="info-label">Matrícula:</div>
                 <div class="info-value">{{ $evaluatorPerson->registration_number ?? 'N/A' }}</div>
+            </div>
+            <div class="info-row">
+                <div class="info-label">Cargo:</div>
+                <div class="info-value">{{ $evaluatorPerson->current_position ?? 'N/A' }}</div>
+            </div>
+            <div class="info-row">
+                <div class="info-label">Função:</div>
+                <div class="info-value">{{ $evaluatorPerson->jobFunction?->name ?? 'N/A' }}</div>
+            </div>
+            <div class="info-row">
+                <div class="info-label">Sala:</div>
+                <div class="info-value">{{ $evaluatorPerson->descricao_sala ?? $evaluatorPerson->sala ?? 'N/A' }}</div>
+            </div>
+            <div class="info-row">
+                <div class="info-label">Secretaria:</div>
+                <div class="info-value">{{ $evaluatorPerson->organizationalUnit?->secretaria?->name ?? 'N/A' }}</div>
+            </div>
+            <div class="info-row">
+                <div class="info-label">Data de Admissão:</div>
+                <div class="info-value">{{ $evaluatorPerson->admission_date ? $evaluatorPerson->admission_date->format('d/m/Y') : 'N/A' }}</div>
             </div>
         </div>
     </div>
@@ -249,48 +273,52 @@
         </div>
     </div>
 
-    @if(count($questionAnswers) > 0)
+    @if(isset($groupedQuestionAnswers) && count($groupedQuestionAnswers) > 0)
     <div class="section page-break">
-        <div class="section-title">Detalhamento das Questões</div>
-        <table class="questions-table">
-            <thead>
-                <tr>
-                    <th style="width: 60%;">Questão</th>
-                    <th style="width: 15%;">Peso</th>
-                    <th style="width: 15%;">Nota</th>
-                    <th style="width: 10%;">Status</th>
-                </tr>
-            </thead>
-            <tbody>
-                @foreach($questionAnswers as $qa)
-                <tr>
-                    <td>{{ $qa['question'] }}</td>
-                    <td style="text-align: center;">{{ $qa['weight'] }}</td>
-                    <td class="score-cell
-                        @if($qa['score'] === null) score-na
-                        @elseif($qa['score'] >= 4) score-excellent
-                        @elseif($qa['score'] >= 3) score-good
-                        @elseif($qa['score'] >= 2) score-average
-                        @else score-poor
-                        @endif
-                    ">
-                        {{ $qa['score'] ?? 'N/A' }}
-                    </td>
-                    <td style="text-align: center;">
-                        @if($qa['score'] === null)
-                            <span style="color: #6b7280;">N/R</span>
-                        @elseif($qa['score'] >= 4)
-                            <span style="color: #059669;">✓</span>
-                        @elseif($qa['score'] >= 3)
-                            <span style="color: #0891b2;">~</span>
-                        @else
-                            <span style="color: #dc2626;">✗</span>
-                        @endif
-                    </td>
-                </tr>
-                @endforeach
-            </tbody>
-        </table>
+        <div class="section-title">Detalhamento das Questões por Competência</div>
+
+        @foreach($groupedQuestionAnswers as $group)
+            <div class="section" style="margin-top: 10px;">
+                <div class="section-title" style="font-size: 14px; color: #374151; border-bottom-color: #f3f4f6;">{{ $group['group'] }}</div>
+                <table class="questions-table">
+                    <thead>
+                        <tr>
+                            <th style="width: 70%;">Questão</th>
+                            <th style="width: 15%;">Nota</th>
+                            <th style="width: 15%;">Status</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach($group['questions'] as $qa)
+                        <tr>
+                            <td>{{ $qa['question'] }}</td>
+                            <td class="score-cell
+                                @if($qa['score'] === null) score-na
+                                @elseif($qa['score'] >= 4) score-excellent
+                                @elseif($qa['score'] >= 3) score-good
+                                @elseif($qa['score'] >= 2) score-average
+                                @else score-poor
+                                @endif
+                            ">
+                                {{ $qa['score'] ?? 'N/A' }}
+                            </td>
+                            <td style="text-align: center;">
+                                @if($qa['score'] === null)
+                                    <span style="color: #6b7280;">N/R</span>
+                                @elseif($qa['score'] >= 4)
+                                    <span style="color: #059669;">✓</span>
+                                @elseif($qa['score'] >= 3)
+                                    <span style="color: #0891b2;">~</span>
+                                @else
+                                    <span style="color: #dc2626;">✗</span>
+                                @endif
+                            </td>
+                        </tr>
+                        @endforeach
+                    </tbody>
+                </table>
+            </div>
+        @endforeach
     </div>
     @endif
 
