@@ -23,7 +23,8 @@ class EvaluationRequest extends Model
         'exception_date_end',
         'released_by',
         'invalidated_by',
-        'invalidated_at'
+        'invalidated_at',
+        'invalidation_reason'
     ];
 
     protected $casts = [

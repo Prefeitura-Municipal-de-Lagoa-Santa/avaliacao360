@@ -46,8 +46,9 @@ const isDeleteDialogOpen = ref(false)
 const evaluationToDelete = ref<number | null>(null)
 const isInvalidateDialogOpen = ref(false)
 const evaluationToInvalidate = ref<number | null>(null)
+const invalidationReason = ref('')
 const isInvalidationDetailsDialogOpen = ref(false)
-const invalidationDetails = ref<{invalidated_by: string, invalidated_at: string} | null>(null)
+const invalidationDetails = ref<{invalidated_by: string, invalidated_at: string, invalidation_reason?: string} | null>(null)
 const search = ref(props.filters.search ?? '')
 const filterType = ref(props.filters.type ?? '')
 const filterForm = ref(props.filters.form ?? '')
@@ -119,16 +120,31 @@ function handleDelete() {
 
 function confirmInvalidate(id: number) {
   evaluationToInvalidate.value = id
+  invalidationReason.value = '' // Limpar o campo de justificativa
   isInvalidateDialogOpen.value = true
 }
 
 function handleInvalidate() {
   if (!evaluationToInvalidate.value) return
 
-  router.post(route('evaluations.completed.invalidate', { id: evaluationToInvalidate.value }), {}, {
+  // Validar se a justificativa foi preenchida
+  if (!invalidationReason.value.trim()) {
+    alert('Por favor, informe o motivo da anulação.')
+    return
+  }
+
+  const formData = {
+    invalidation_reason: invalidationReason.value.trim()
+  }
+
+  router.post(route('evaluations.completed.invalidate', { id: evaluationToInvalidate.value }), formData, {
     onSuccess: () => {
       isInvalidateDialogOpen.value = false
       evaluationToInvalidate.value = null
+      invalidationReason.value = ''
+    },
+    onError: () => {
+      // Manter o modal aberto em caso de erro para que o usuário possa tentar novamente
     }
   })
 }
@@ -633,18 +649,37 @@ function goBack() {
     </Dialog>
 
     <Dialog :open="isInvalidateDialogOpen" @update:open="isInvalidateDialogOpen = $event">
-      <DialogContent class="sm:max-w-md bg-white">
+      <DialogContent class="sm:max-w-lg bg-white">
         <DialogHeader>
           <DialogTitle class="text-lg font-semibold text-gray-900">Anular Avaliação</DialogTitle>
           <DialogDescription class="mt-2 text-sm text-gray-600">
             Atenção: Tem certeza que deseja anular esta avaliação? Esta ação não poderá ser desfeita. 
-                    </DialogDescription>
+          </DialogDescription>
         </DialogHeader>
+        
+        <div class="mt-4">
+          <label for="invalidation-reason" class="block text-sm font-medium text-gray-700 mb-2">
+            Motivo da anulação *
+          </label>
+          <textarea
+            id="invalidation-reason"
+            v-model="invalidationReason"
+            rows="4"
+            class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-2 focus:ring-orange-500 focus:border-orange-500 text-sm"
+            placeholder="Descreva o motivo da anulação desta avaliação..."
+            required
+          ></textarea>
+          <p class="mt-1 text-xs text-gray-500">
+            Este campo é obrigatório e será registrado junto com a anulação.
+          </p>
+        </div>
+
         <DialogFooter class="mt-6 flex flex-col-reverse sm:flex-row sm:justify-end sm:space-x-2">
           <DialogClose as-child>
             <button
               type="button"
               class="mt-3 sm:mt-0 w-full sm:w-auto inline-flex justify-center rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50"
+              @click="invalidationReason = ''"
             >
               Cancelar
             </button>
@@ -652,7 +687,12 @@ function goBack() {
           <button
             @click="handleInvalidate"
             type="button"
-            class="w-full sm:w-auto inline-flex justify-center rounded-md border border-transparent bg-orange-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-orange-700"
+            :disabled="!invalidationReason.trim()"
+            class="w-full sm:w-auto inline-flex justify-center rounded-md border border-transparent px-4 py-2 text-sm font-medium text-white shadow-sm transition-colors"
+            :class="{
+              'bg-orange-600 hover:bg-orange-700': invalidationReason.trim(),
+              'bg-gray-400 cursor-not-allowed': !invalidationReason.trim()
+            }"
           >
             Anular
           </button>
@@ -661,7 +701,7 @@ function goBack() {
     </Dialog>
 
     <Dialog :open="isInvalidationDetailsDialogOpen" @update:open="isInvalidationDetailsDialogOpen = $event">
-      <DialogContent class="sm:max-w-md bg-white">
+      <DialogContent class="sm:max-w-lg bg-white">
         <DialogHeader>
           <DialogTitle class="text-lg font-semibold text-gray-900">Detalhes da Anulação</DialogTitle>
           <DialogDescription class="mt-2 text-sm text-gray-600">
@@ -676,6 +716,10 @@ function goBack() {
           <div class="bg-gray-50 p-3 rounded-lg">
             <div class="text-sm font-medium text-gray-700">Data da anulação:</div>
             <div class="text-sm text-gray-900 mt-1">{{ invalidationDetails.invalidated_at }}</div>
+          </div>
+          <div class="bg-gray-50 p-3 rounded-lg">
+            <div class="text-sm font-medium text-gray-700">Motivo da anulação:</div>
+            <div class="text-sm text-gray-900 mt-1 whitespace-pre-wrap">{{ invalidationDetails.invalidation_reason }}</div>
           </div>
         </div>
         <DialogFooter class="mt-6">

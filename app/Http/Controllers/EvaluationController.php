@@ -582,7 +582,7 @@ class EvaluationController extends Controller
     /**
      * Anula (invalida) uma avaliação concluída, alterando status para 'invalidated'.
      */
-    public function invalidateCompleted($id)
+    public function invalidateCompleted(Request $request, $id)
     {
         $evaluationRequest = EvaluationRequest::findOrFail($id);
 
@@ -594,10 +594,19 @@ class EvaluationController extends Controller
             abort(403, 'Sem permissão para anular avaliação.');
         }
 
-        // Poderíamos registrar log aqui
+        // Validar justificativa
+        $request->validate([
+            'invalidation_reason' => 'required|string|max:1000',
+        ], [
+            'invalidation_reason.required' => 'O motivo da anulação é obrigatório.',
+            'invalidation_reason.max' => 'O motivo da anulação não pode ter mais de 1000 caracteres.',
+        ]);
+
+        // Salvar dados da invalidação
         $evaluationRequest->status = 'invalidated';
         $evaluationRequest->invalidated_by = auth()->id();
         $evaluationRequest->invalidated_at = now();
+        $evaluationRequest->invalidation_reason = $request->invalidation_reason;
         $evaluationRequest->save();
 
         return back()->with('success', 'Avaliação anulada com sucesso.');
@@ -617,6 +626,7 @@ class EvaluationController extends Controller
         return response()->json([
             'invalidated_by' => $evaluationRequest->invalidatedBy ? $evaluationRequest->invalidatedBy->name : 'Usuário não identificado',
             'invalidated_at' => $evaluationRequest->invalidated_at ? $evaluationRequest->invalidated_at->format('d/m/Y H:i') : 'Data não disponível',
+            'invalidation_reason' => $evaluationRequest->invalidation_reason ?? 'Motivo não informado',
         ]);
     }
 
