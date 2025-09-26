@@ -31,6 +31,8 @@ class JobFunctionSeeder extends Seeder
             ['id' => 10, 'name' => 'GESTOR OPERACIONAL', 'type' => 'chefe', 'is_manager' => true, 'code' => 389],
             ['id' => 25, 'name' => 'GESTOR DE UNIDADE DE SERVICOS SOCIAIS', 'type' => 'chefe', 'is_manager' => true, 'code' => 390],
             ['id' => 22, 'name' => 'ASSESSOR JURIDICO', 'type' => 'chefe', 'is_manager' => true, 'code' => 391],
+            // Novo: função específica para Chefia CEDIDA
+            ['id' => 31, 'name' => 'Chefe(Cedido)', 'type' => 'chefe', 'is_manager' => true, 'code' => null],
             ['id' => 19, 'name' => 'ASSESSOR I', 'type' => 'comissionado', 'is_manager' => false, 'code' => 392],
             ['id' => 21, 'name' => 'ASSESSOR II', 'type' => 'comissionado', 'is_manager' => false, 'code' => 393],
             ['id' => 18, 'name' => 'REFERENCIA TECNICA', 'type' => 'chefe', 'is_manager' => true, 'code' => 394],
