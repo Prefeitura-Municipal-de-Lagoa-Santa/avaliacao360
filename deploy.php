@@ -1,33 +1,52 @@
 <?php
-
 namespace Deployer;
 
 require 'recipe/laravel.php';
 
-// Configurações globais
-set('application', 'avaliacao360');
+// ==========================================
+// CONFIGURAÇÕES GERAIS
+// ==========================================
+
+set('application', 'Laravel Avaliação');
 set('repository', 'git@github.com:Prefeitura-Municipal-de-Lagoa-Santa/avaliacao360.git');
-set('git_tty', true);
 set('keep_releases', 3);
+set('writable_mode', 'chmod');
+set('writable_chmod_mode', '0775');
+set('use_relative_symlink', false);
+// Desabilita multiplexação SSH (evita erros em Windows como "getsockname failed: Not a socket")
+set('ssh_multiplexing', false);
 
-// Configuração para usar containers Docker
-set('use_docker', true);
-set('docker_compose_file', 'docker-compose.yml');
-set('container_name', 'laravel_avaliacao');
+// ==========================================
+// CONFIGURAÇÃO DO SERVIDOR
+// ==========================================
 
-// Diretórios compartilhados entre deploys
-set('shared_dirs', [
+host('producao')
+    ->set('remote_user', 'seu_usuario')              // 🔴 ALTERE AQUI
+    ->set('hostname', '192.168.1.100')               // 🔴 ALTERE AQUI
+    ->set('port', 22)
+    ->set('deploy_path', '/var/www/laravel-app')    // 🔴 ALTERE AQUI
+    ->set('branch', 'main');
+
+host('develop')
+    ->set('remote_user', 'deploy')
+    ->set('hostname', '10.1.7.75') 
+    ->set('port', 22)
+    ->set('deploy_path', '/var/www/avaliacao')
+    ->set('branch', 'develop');
+
+// ==========================================
+// ARQUIVOS E PASTAS COMPARTILHADAS
+// ==========================================
+
+add('shared_files', [
+    '.env',
+]);
+
+add('shared_dirs', [
     'storage',
-    'bootstrap/cache',
 ]);
 
-// Arquivos compartilhados entre deploys
-set('shared_files', [
-    '.env'
-]);
-
-// Diretórios que devem ter permissões específicas
-set('writable_dirs', [
+add('writable_dirs', [
     'bootstrap/cache',
     'storage',
     'storage/app',
@@ -39,179 +58,187 @@ set('writable_dirs', [
     'storage/logs',
 ]);
 
-// Usar sudo para chmod se necessário
-set('writable_use_sudo', false);
+// ==========================================
+// TASKS CUSTOMIZADAS PARA DOCKER
+// ==========================================
+// ==========================================
+// TASKS CUSTOMIZADAS PARA DOCKER
+// ==========================================
 
-// ==============================================
-// HOSTS - Servidores de Desenvolvimento e Produção
-// ==============================================
+desc('Parar containers Docker');
+task('docker:down', function () {
+    run('cd {{deploy_path}}/current && docker compose down || true');
+});
 
-// Servidor de Desenvolvimento
-host('develop')
-    ->setHostname('10.1.7.75') // Substitua pelo IP/hostname
-    ->setRemoteUser('deploy') // Usuário para deploy
-    ->setPort(22)
-    ->set('labels', ['stage' => 'develop'])
-    ->set('deploy_path', '/var/www/avaliacao360-develop')
-    ->set('branch', 'develop')
-    ->set('docker_compose_env', 'develop')
-    ->set('app_env', 'develop');
-
-// Servidor de Produção
-host('production')
-    ->setHostname('SEU_SERVIDOR_PRODUCTION') // Substitua pelo IP/hostname
-    ->setRemoteUser('deploy') // Usuário para deploy
-    ->setPort(22)
-    ->set('labels', ['stage' => 'production'])
-    ->set('deploy_path', '/var/www/avaliacao360-production')
-    ->set('branch', 'main')
-    ->set('docker_compose_env', 'production')
-    ->set('app_env', 'production');
-
-// ==============================================
-// TAREFAS CUSTOMIZADAS PARA CONTAINERS
-// ==============================================
-
-// Tarefa para build dos assets do frontend
-task('build:assets', function () {
-    writeln('<info>Building frontend assets...</info>');
-    runLocally('npm install');
-    runLocally('npm run build');
-})->desc('Build frontend assets locally');
-
-// Tarefa para fazer upload dos assets buildados
-task('upload:assets', function () {
-    writeln('<info>Uploading built assets...</info>');
-    upload('public/build/', '{{release_path}}/public/build/', [
-        'options' => ['--recursive', '--compress']
-    ]);
-})->desc('Upload built assets to server');
-
-// Tarefa para construir a imagem Docker no servidor
+desc('Build da imagem Docker');
 task('docker:build', function () {
-    $dockerComposeFile = get('docker_compose_file');
-    $env = get('docker_compose_env');
-    
-    writeln('<info>Building Docker image on server...</info>');
-    
-    // Para em containers existentes
-    run("cd {{release_path}} && docker-compose -f docker-compose.{{env}}.yml down || true");
-    
-    // Constrói nova imagem
-    run("cd {{release_path}} && docker-compose -f docker-compose.{{env}}.yml build --no-cache");
-})->desc('Build Docker image on server');
+    // Build da imagem usando o código do release (mantém cache) e com timeout maior
+    run('cd {{release_path}} && docker compose build', ['timeout' => 3600]);
+});
 
-// Tarefa para iniciar containers
+desc('Instalar dependências Node.js');
+task('npm:install', function () {
+    // Executa no release antes do publish
+    run('cd {{release_path}} && docker compose run --rm app npm ci', ['timeout' => 1800]);
+});
+
+desc('Compilar assets com Vite');
+task('npm:build', function () {
+    // Executa no release antes do publish
+    run('cd {{release_path}} && docker compose run --rm app npm run build', ['timeout' => 1800]);
+});
+
+desc('Subir containers Docker');
 task('docker:up', function () {
-    $env = get('docker_compose_env');
-    
-    writeln('<info>Starting Docker containers...</info>');
-    run("cd {{release_path}} && docker-compose -f docker-compose.{{env}}.yml up -d");
-})->desc('Start Docker containers');
+    run('cd {{deploy_path}}/current && docker compose up -d');
+});
 
-// Tarefa para parar containers antigos
-task('docker:stop_old', function () {
-    $env = get('docker_compose_env');
-    
-    writeln('<info>Stopping old containers...</info>');
-    run("cd {{current_path}} && docker-compose -f docker-compose.{{env}}.yml down || true");
-})->desc('Stop old Docker containers');
+desc('Aguardar containers iniciarem');
+task('docker:wait', function () {
+    sleep(5);
+    info('⏳ Aguardando containers iniciarem...');
+});
 
-// Tarefa para executar comandos Artisan dentro do container
+desc('Executar migrations');
 task('artisan:migrate', function () {
-    $containerName = get('container_name');
-    $env = get('docker_compose_env');
-    
-    writeln('<info>Running database migrations inside container...</info>');
-    run("cd {{release_path}} && docker-compose -f docker-compose.{{env}}.yml exec -T app php artisan migrate --force");
-})->desc('Run database migrations inside container');
+    run('cd {{deploy_path}}/current && docker compose exec -T app php artisan migrate --force');
+});
 
+desc('Criar link simbólico do storage');
+task('artisan:storage-link', function () {
+    run('cd {{deploy_path}}/current && docker compose exec -T app php artisan storage:link || true');
+});
+
+desc('Cachear configurações Laravel');
 task('artisan:cache', function () {
-    $containerName = get('container_name');
-    $env = get('docker_compose_env');
-    
-    writeln('<info>Clearing and caching inside container...</info>');
-    run("cd {{release_path}} && docker-compose -f docker-compose.{{env}}.yml exec -T app php artisan config:cache");
-    run("cd {{release_path}} && docker-compose -f docker-compose.{{env}}.yml exec -T app php artisan route:cache");
-    run("cd {{release_path}} && docker-compose -f docker-compose.{{env}}.yml exec -T app php artisan view:cache");
-})->desc('Cache config, routes and views inside container');
+    run('cd {{deploy_path}}/current && docker compose exec -T app php artisan config:cache');
+    run('cd {{deploy_path}}/current && docker compose exec -T app php artisan route:cache');
+    run('cd {{deploy_path}}/current && docker compose exec -T app php artisan view:cache');
+});
 
-task('artisan:queue_restart', function () {
-    $env = get('docker_compose_env');
-    
-    writeln('<info>Restarting queue workers inside container...</info>');
-    run("cd {{release_path}} && docker-compose -f docker-compose.{{env}}.yml exec -T app php artisan queue:restart || true");
-})->desc('Restart queue workers inside container');
+desc('Limpar caches Laravel');
+task('artisan:clear', function () {
+    run('cd {{deploy_path}}/current && docker compose exec -T app php artisan cache:clear || true');
+    run('cd {{deploy_path}}/current && docker compose exec -T app php artisan config:clear || true');
+});
 
-// ==============================================
-// FLUXO DE DEPLOY CUSTOMIZADO
-// ==============================================
+desc('Limpar recursos Docker não utilizados');
+task('docker:cleanup', function () {
+    run('docker system prune -f');
+});
 
-// Fluxo principal de deploy
-task('deploy', [
+desc('Verificar status dos containers');
+task('docker:status', function () {
+    run('cd {{deploy_path}}/current && docker compose ps');
+});
+
+desc('Ver logs da aplicação');
+task('logs', function () {
+    run('cd {{deploy_path}}/current && docker compose logs --tail=50 app');
+});
+
+desc('Modo manutenção ON');
+task('maintenance:on', function () {
+    // Só tenta se o symlink current existir
+    run('[ -d {{deploy_path}}/current ] && cd {{deploy_path}}/current && docker compose exec -T app php artisan down --retry=60 || true');
+});
+
+desc('Modo manutenção OFF');
+task('maintenance:off', function () {
+    // Só tenta se o symlink current existir
+    run('[ -d {{deploy_path}}/current ] && cd {{deploy_path}}/current && docker compose exec -T app php artisan up || true');
+});
+
+// ==========================================
+// FLUXO DE DEPLOY PRINCIPAL
+// ==========================================
+
+// Vamos usar o fluxo padrão do recipe/laravel e inserir nossos passos com hooks
+// 1) Construir imagem ANTES de criar os links compartilhados (evita copiar symlink de storage para a imagem)
+before('deploy:shared', 'docker:build');
+// 2) Rodar npm dentro do release antes do publish
+before('deploy:publish', 'npm:install');
+before('deploy:publish', 'npm:build');
+
+// Sobrescreve o deploy:vendors para executar dentro do container Docker
+// Isso garante que as extensões (ex.: ext-ldap) presentes na imagem sejam usadas
+task('deploy:vendors', function () {
+    run('cd {{release_path}} && docker compose run --rm app composer install --verbose --prefer-dist --no-progress --no-interaction --no-dev --optimize-autoloader', ['timeout' => 1800]);
+})->desc('Instalar vendors com Composer dentro do Docker');
+
+// ==========================================
+// DEPLOY COM MODO MANUTENÇÃO
+// ==========================================
+
+// Mantém tarefa de deploy:safe usando o fluxo padrão, apenas com hooks aplicados
+task('deploy:safe', [
+    'maintenance:on',
+    'deploy',
+    'maintenance:off',
+])->desc('Deploy com modo de manutenção');
+
+// ==========================================
+// DEPLOY RÁPIDO (sem build)
+// ==========================================
+
+task('deploy:quick', [
     'deploy:prepare',
     'deploy:vendors',
-    'build:assets',
-    'upload:assets',
-    'docker:stop_old',
-    'docker:build',
+    'deploy:publish',
     'docker:up',
+    'docker:wait',
     'artisan:migrate',
     'artisan:cache',
-    'artisan:queue_restart',
-    'deploy:publish',
-    'deploy:cleanup',
-])->desc('Deploy application with Docker');
+])->desc('Deploy rápido (sem rebuild de assets)');
 
-// Deploy apenas para desenvolvimento (mais rápido, sem build completo)
-task('deploy:develop', [
-    'deploy:prepare',
-    'deploy:vendors',
-    'build:assets',
-    'upload:assets',
-    'docker:stop_old',
-    'docker:up',
-    'artisan:migrate',
-    'deploy:publish',
-])->desc('Quick deploy for development environment');
+// ==========================================
+// ROLLBACK CUSTOMIZADO
+// ==========================================
 
-// ==============================================
-// HOOKS E EVENTOS
-// ==============================================
+// Remove a task padrão do rollback
+Deployer::get()->tasks->remove('rollback');
 
-// Antes do deploy
-before('deploy', 'deploy:info');
+task('rollback', [
+    'deploy:rollback',          // Rollback do Deployer
+    'docker:down',              // Para containers
+    'docker:up',                // Sobe containers da versão anterior
+    'docker:wait',
+    'artisan:cache',            // Recacheia
+])->desc('Reverter para versão anterior');
 
-// Depois do deploy bem-sucedido
+// ==========================================
+// CALLBACKS
+// ==========================================
+
+after('deploy:failed', function () {
+    warning('❌ Deploy falhou!');
+    warning('Execute "dep rollback producao" para reverter.');
+    invoke('maintenance:off');  // Garante que sai do modo manutenção
+});
+
 after('deploy:success', function () {
-    writeln('<info>✅ Deploy completed successfully!</info>');
+    info('✅ Deploy concluído com sucesso!');
+    info('🌐 Sua aplicação está online!');
 });
 
-// Em caso de falha no deploy
-fail('deploy', function () {
-    writeln('<error>❌ Deploy failed!</error>');
-    // Tentar voltar containers antigos
-    invoke('docker:stop_old');
+// ==========================================
+// TASKS AUXILIARES
+// ==========================================
+
+desc('Conectar ao servidor via SSH');
+task('ssh', function () {
+    run('bash');
 });
 
-// ==============================================
-// TAREFAS AUXILIARES
-// ==============================================
+desc('Reiniciar containers');
+task('restart', function () {
+    run('cd {{deploy_path}}/current && docker compose restart');
+});
 
-// Tarefa para verificar status dos containers
-task('docker:status', function () {
-    $env = get('docker_compose_env');
-    run("cd {{current_path}} && docker-compose -f docker-compose.{{env}}.yml ps");
-})->desc('Show Docker containers status');
-
-// Tarefa para ver logs dos containers
-task('docker:logs', function () {
-    $env = get('docker_compose_env');
-    run("cd {{current_path}} && docker-compose -f docker-compose.{{env}}.yml logs --tail=50");
-})->desc('Show Docker containers logs');
-
-// Tarefa para acessar o container
-task('docker:shell', function () {
-    $env = get('docker_compose_env');
-    runLocally("ssh -t {{hostname}} 'cd {{current_path}} && docker-compose -f docker-compose.{{env}}.yml exec app bash'");
-})->desc('Access container shell');
+desc('Status completo do sistema');
+task('status', function () {
+    info('📊 Status do Sistema:');
+    run('cd {{deploy_path}}/current && docker compose ps');
+    run('df -h | grep -E "Filesystem|/var/www"');
+    run('free -h');
+});
