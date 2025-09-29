@@ -79,13 +79,13 @@ task('docker:build', function () {
 desc('Instalar dependências Node.js');
 task('npm:install', function () {
     // Executa no release antes do publish
-    run('cd {{release_path}} && docker compose run --rm app npm ci', ['timeout' => 1800]);
+    run('cd {{release_path}} && docker compose run --rm --no-deps --entrypoint "" -w /var/www/html app npm ci', ['timeout' => 1800]);
 });
 
 desc('Compilar assets com Vite');
 task('npm:build', function () {
     // Executa no release antes do publish
-    run('cd {{release_path}} && docker compose run --rm app npm run build', ['timeout' => 1800]);
+    run('cd {{release_path}} && docker compose run --rm --no-deps --entrypoint "" -w /var/www/html app npm run build', ['timeout' => 1800]);
 });
 
 desc('Subir containers Docker');
@@ -101,7 +101,8 @@ task('docker:wait', function () {
 
 desc('Executar migrations');
 task('artisan:migrate', function () {
-    run('cd {{deploy_path}}/current && docker compose exec -T app php artisan migrate --force');
+    // Se "current" existir e os containers estiverem de pé, usa exec; caso contrário, roda no release usando run
+    run('[ -d {{deploy_path}}/current ] && cd {{deploy_path}}/current && docker compose exec -T app php artisan migrate --force || (cd {{release_path}} && docker compose run --rm --no-deps --entrypoint "" -w /var/www/html app php artisan migrate --force)');
 });
 
 desc('Criar link simbólico do storage');
@@ -160,10 +161,18 @@ before('deploy:shared', 'docker:build');
 before('deploy:publish', 'npm:install');
 before('deploy:publish', 'npm:build');
 
+// Depois de publicar, subir containers e executar passos Laravel
+after('deploy:publish', 'docker:up');
+after('docker:up', 'docker:wait');
+after('docker:wait', 'artisan:migrate');
+after('artisan:migrate', 'artisan:storage-link');
+after('artisan:storage-link', 'artisan:cache');
+after('artisan:cache', 'docker:cleanup');
+
 // Sobrescreve o deploy:vendors para executar dentro do container Docker
 // Isso garante que as extensões (ex.: ext-ldap) presentes na imagem sejam usadas
 task('deploy:vendors', function () {
-    run('cd {{release_path}} && docker compose run --rm app composer install --verbose --prefer-dist --no-progress --no-interaction --no-dev --optimize-autoloader', ['timeout' => 1800]);
+    run('cd {{release_path}} && docker compose run --rm --no-deps --entrypoint "" -w /var/www/html -e COMPOSER_ALLOW_SUPERUSER=1 app composer install --verbose --prefer-dist --no-progress --no-interaction --no-dev --optimize-autoloader', ['timeout' => 1800]);
 })->desc('Instalar vendors com Composer dentro do Docker');
 
 // ==========================================
