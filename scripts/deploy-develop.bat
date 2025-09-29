@@ -26,8 +26,17 @@ if %SIZE% gtr 0 (
     exit /b 1
 )
 
-echo 📤 Fazendo push das mudanças...
-git push origin develop
+REM Verifica se está sincronizado com o remoto
+git fetch origin develop
+for /f "tokens=*" %%i in ('git rev-list HEAD..origin/develop --count') do set BEHIND=%%i
+for /f "tokens=*" %%i in ('git rev-list origin/develop..HEAD --count') do set AHEAD=%%i
+
+if %AHEAD% gtr 0 (
+    echo 📤 Fazendo push das mudanças locais...
+    git push origin develop
+)
+
+)
 
 echo 🔄 Executando deploy...
 .\vendor\bin\dep deploy:develop develop -v
