@@ -19,6 +19,7 @@
         "tightenco/ziggy": "^2.4"
     },
     "require-dev": {
+        "deployer/deployer": "^7.5",
         "fakerphp/faker": "^1.23",
         "laravel/pail": "^1.2.2",
         "laravel/pint": "^1.18",
@@ -72,6 +73,18 @@
         "test": [
             "@php artisan config:clear --ansi",
             "@php artisan test"
+        ],
+        "deploy:develop": [
+            "./vendor/bin/dep deploy:develop develop -v"
+        ],
+        "deploy:production": [
+            "./vendor/bin/dep deploy production -v"
+        ],
+        "deploy:status": [
+            "./vendor/bin/dep docker:status"
+        ],
+        "deploy:logs": [
+            "./vendor/bin/dep docker:logs"
         ]
     },
     "extra": {

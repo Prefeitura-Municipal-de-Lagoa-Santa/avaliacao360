@@ -1,0 +1,105 @@
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        - NODE_ENV=production
+    container_name: laravel_avaliacao_production
+    restart: unless-stopped
+    ports:
+      - "8000:80"
+    # Em produção, não usamos volumes de código (código fica na imagem)
+    volumes:
+      # Apenas volumes necessários para dados persistentes
+      - storage_data:/var/www/html/storage
+      - bootstrap_cache:/var/www/html/bootstrap/cache
+    networks:
+      - rede_avaliacao_production
+    environment:
+      - APP_ENV=production
+      - APP_DEBUG=false
+      - CONTAINER_ROLE=app
+    env_file:
+      - .env.production
+    depends_on:
+      - redis
+    # Configurações de recursos para produção
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+        reservations:
+          memory: 512M
+
+  # Redis para cache e sessões
+  redis:
+    image: redis:7-alpine
+    container_name: redis_avaliacao_production
+    restart: unless-stopped
+    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+    volumes:
+      - redis_data:/data
+    networks:
+      - rede_avaliacao_production
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+
+  # Queue worker para produção
+  queue:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: queue_avaliacao_production
+    restart: unless-stopped
+    command: php artisan queue:work --tries=3 --timeout=90 --memory=256
+    volumes:
+      - storage_data:/var/www/html/storage
+    networks:
+      - rede_avaliacao_production
+    environment:
+      - APP_ENV=production
+      - CONTAINER_ROLE=queue
+    env_file:
+      - .env.production
+    depends_on:
+      - app
+      - redis
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+
+  # Scheduler para comandos Artisan
+  scheduler:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: scheduler_avaliacao_production
+    restart: unless-stopped
+    command: php artisan schedule:work
+    volumes:
+      - storage_data:/var/www/html/storage
+    networks:
+      - rede_avaliacao_production
+    environment:
+      - APP_ENV=production
+      - CONTAINER_ROLE=scheduler
+    env_file:
+      - .env.production
+    depends_on:
+      - app
+
+volumes:
+  storage_data:
+    driver: local
+  bootstrap_cache:
+    driver: local
+  redis_data:
+    driver: local
+
+networks:
+  rede_avaliacao_production:
+    driver: bridge
