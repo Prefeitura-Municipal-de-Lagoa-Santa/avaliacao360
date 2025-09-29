@@ -40,6 +40,7 @@ host('develop')
 
 add('shared_files', [
     '.env',
+    'database/database.sqlite', // Garante persistência do SQLite entre releases
 ]);
 
 add('shared_dirs', [
@@ -105,9 +106,10 @@ task('artisan:migrate', function () {
     run('[ -d {{deploy_path}}/current ] && cd {{deploy_path}}/current && docker compose exec -T app php artisan migrate --force || (cd {{release_path}} && docker compose run --rm --no-deps --entrypoint "" -w /var/www/html app php artisan migrate --force)');
 });
 
+// Overrides dos tasks artisan para rodarem dentro do Docker SEMPRE no release_path (antes do publish)
 desc('Criar link simbólico do storage');
-task('artisan:storage-link', function () {
-    run('cd {{deploy_path}}/current && docker compose exec -T app php artisan storage:link || true');
+task('artisan:storage:link', function () {
+    run('cd {{release_path}} && docker compose run --rm --no-deps --entrypoint "" -w /var/www/html app php artisan storage:link || true');
 });
 
 desc('Cachear configurações Laravel');
@@ -115,6 +117,27 @@ task('artisan:cache', function () {
     run('cd {{deploy_path}}/current && docker compose exec -T app php artisan config:cache');
     run('cd {{deploy_path}}/current && docker compose exec -T app php artisan route:cache');
     run('cd {{deploy_path}}/current && docker compose exec -T app php artisan view:cache');
+});
+
+// Substitui tasks padrão do recipe/laravel para executarem dentro do container no release_path (fase pré-publish)
+desc('Artisan config:cache (Docker)');
+task('artisan:config:cache', function () {
+    run('cd {{release_path}} && docker compose run --rm --no-deps --entrypoint "" -w /var/www/html app php artisan config:cache');
+});
+
+desc('Artisan route:cache (Docker)');
+task('artisan:route:cache', function () {
+    run('cd {{release_path}} && docker compose run --rm --no-deps --entrypoint "" -w /var/www/html app php artisan route:cache');
+});
+
+desc('Artisan view:cache (Docker)');
+task('artisan:view:cache', function () {
+    run('cd {{release_path}} && docker compose run --rm --no-deps --entrypoint "" -w /var/www/html app php artisan view:cache');
+});
+
+desc('Artisan event:cache (Docker)');
+task('artisan:event:cache', function () {
+    run('cd {{release_path}} && docker compose run --rm --no-deps --entrypoint "" -w /var/www/html app php artisan event:cache');
 });
 
 desc('Limpar caches Laravel');
@@ -165,8 +188,11 @@ before('deploy:publish', 'npm:build');
 after('deploy:publish', 'docker:up');
 after('docker:up', 'docker:wait');
 after('docker:wait', 'artisan:migrate');
-after('artisan:migrate', 'artisan:storage-link');
-after('artisan:storage-link', 'artisan:cache');
+after('artisan:migrate', 'artisan:storage:link');
+after('artisan:storage:link', 'artisan:config:cache');
+after('artisan:config:cache', 'artisan:route:cache');
+after('artisan:route:cache', 'artisan:view:cache');
+after('artisan:view:cache', 'artisan:event:cache');
 after('artisan:cache', 'docker:cleanup');
 
 // Sobrescreve o deploy:vendors para executar dentro do container Docker
