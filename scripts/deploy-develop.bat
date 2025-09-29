@@ -17,9 +17,12 @@ if not "%CURRENT_BRANCH%"=="develop" (
 )
 
 REM Verifica se há mudanças não commitadas
-git diff-index --quiet HEAD --
-if errorlevel 1 (
+git status --porcelain > temp_status.txt
+for /f %%i in ("temp_status.txt") do set SIZE=%%~zi
+del temp_status.txt
+if %SIZE% gtr 0 (
     echo ❌ Existem mudanças não commitadas. Faça commit antes do deploy.
+    git status
     exit /b 1
 )
 
