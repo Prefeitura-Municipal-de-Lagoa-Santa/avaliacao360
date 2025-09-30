@@ -41,6 +41,7 @@ const props = defineProps<{
   availableTypes?: string[],
   availableForms?: string[]
 }>()
+console.log(props); // --- IGNORE ---
 
 const isDeleteDialogOpen = ref(false)
 const evaluationToDelete = ref<number | null>(null)
@@ -460,10 +461,10 @@ function goBack() {
                   PDF
                 </a>
                 <button 
-                  v-if="req.can_invalidate" 
+                  v-if="req.can_invalidate && req.status === 'completed'" 
                   @click="confirmInvalidate(req.id)"
                   class="inline-flex items-center px-2.5 py-1.5 border border-orange-300 text-xs font-medium rounded text-orange-700 bg-orange-50 hover:bg-orange-100 focus:outline-none focus:ring-2 focus:ring-orange-500 transition-colors duration-200"
-                  title="Anular avaliação"
+                  title="Anular avaliação (disponível após prazo de encerramento)"
                 >
                   <icons.XCircle class="size-3 mr-1" /> 
                   Anular
@@ -477,10 +478,10 @@ function goBack() {
                   <icons.Info class="size-3" /> 
                 </button>
                 <button 
-                  v-if="req.can_delete" 
+                  v-if="req.can_delete && req.status === 'completed'" 
                   @click="confirmDelete(req.id)"
                   class="inline-flex items-center px-2.5 py-1.5 border border-red-300 text-xs font-medium rounded text-red-700 bg-red-50 hover:bg-red-100 focus:outline-none focus:ring-2 focus:ring-red-500 transition-colors duration-200"
-                  title="Excluir avaliação"
+                  title="Excluir avaliação (disponível até prazo de encerramento)"
                 >
                   <icons.Trash2 class="size-3 mr-1" /> 
                   Excluir
@@ -522,10 +523,10 @@ function goBack() {
                 <icons.Download class="size-3" />
               </a>
               <button 
-                v-if="req.can_invalidate" 
+                v-if="req.can_invalidate && req.status === 'completed'" 
                 @click="confirmInvalidate(req.id)"
                 class="inline-flex items-center p-1.5 border border-orange-300 rounded text-orange-700 bg-orange-50 hover:bg-orange-100 focus:outline-none focus:ring-2 focus:ring-orange-500 transition-colors duration-200"
-                title="Anular avaliação"
+                title="Anular avaliação (disponível após prazo de encerramento)"
               >
                 <icons.XCircle class="size-3" />
               </button>
@@ -538,10 +539,10 @@ function goBack() {
                 <icons.Info class="size-3" />
               </button>
               <button 
-                v-if="req.can_delete" 
+                v-if="req.can_delete && req.status === 'completed'" 
                 @click="confirmDelete(req.id)"
                 class="inline-flex items-center p-1.5 border border-red-300 rounded text-red-700 bg-red-50 hover:bg-red-100 focus:outline-none focus:ring-2 focus:ring-red-500 transition-colors duration-200"
-                title="Excluir avaliação"
+                title="Excluir avaliação (disponível até prazo de encerramento)"
               >
                 <icons.Trash2 class="size-3" />
               </button>

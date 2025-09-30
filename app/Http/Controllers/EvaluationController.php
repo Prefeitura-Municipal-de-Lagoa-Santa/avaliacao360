@@ -525,30 +525,30 @@ class EvaluationController extends Controller
                 $canInvalidate = false;
 
                 if (auth()->user() && user_can('evaluations.completed')) {
-                    // Verifica se ainda está dentro do prazo para excluir
-                    $config = Config::where('year', $form->year ?? date('Y'))->first();
-                    
-                    if ($config && $config->gradesPeriod) {
-                        // Se já passou da data de divulgação das notas, não pode mais excluir
-                        $gradesPeriodDate = \Carbon\Carbon::parse($config->gradesPeriod)->startOfDay();
-                        $now = \Carbon\Carbon::now();
+                    // Buscar data de encerramento do formulário
+                    if ($form && $form->term_end) {
+                        // Usar endOfDay() para incluir todo o dia (até 23:59:59)
+                        $term_end = Carbon::parse($form->term_end)->endOfDay();
+                        $now = Carbon::now();
                         
-                        // Só pode excluir se ainda não chegou na data de divulgação das notas
-                        $canDelete = $now->lessThan($gradesPeriodDate);
+                        // EXCLUIR: Disponível até o final da data de encerramento (inclusivo)
+                        $canDelete = $now->lessThanOrEqualTo($term_end);
+
+                        // ANULAR: Disponível apenas APÓS a data de encerramento (e se está completa)
+                        if ($request->status === 'completed') {
+                            $canInvalidate = $now->greaterThan($term_end);
+                        }
                     } else {
-                        // Se não há data configurada, permite excluir (comportamento padrão)
+                        // Se não há data configurada, mantém comportamento padrão
                         $canDelete = true;
+                        if ($request->status === 'completed') {
+                            $canInvalidate = true;
+                        }
                     }
                 }
-
+                
                 // Calcular a nota ponderada da avaliação
                 $score = $this->calculateEvaluationScore($request);
-
-                // Permissão para anular: reutiliza mesma permissão de excluir ou pode ser nova (ajustar conforme regra)
-                // Só pode anular se ainda está completo (não pode anular uma já anulada)
-                if (auth()->user() && user_can('evaluations.completed') && $request->status === 'completed') {
-                    $canInvalidate = true;
-                }
 
                 return [
                     'id' => $request->id,
