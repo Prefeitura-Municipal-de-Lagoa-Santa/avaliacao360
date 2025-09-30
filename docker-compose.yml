@@ -7,7 +7,7 @@ services:
     restart: unless-stopped
     ports:
       # Expõe a aplicação na porta 8000
-      - "8000:80"
+      - "8006:80"
     volumes:
       - .:/var/www/html
       # Monta a pasta compartilhada do Deployer dentro do container para que o symlink de storage funcione
