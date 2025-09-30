@@ -115,18 +115,25 @@ const formattedAnswers = computed(() => {
         }));
 });
 
-const grandTotal = computed(() => {
+// Valor numérico bruto para validações
+const grandTotalRaw = computed(() => {
     let total = 0;
     props.form.group_questions.forEach(group => {
         group.questions.forEach(question => {
             const score = evaluationForm.answers[question.id];
             if (score !== null && score !== undefined) {
-                const questionScore = (parseInt(score) / 100.0) * question.weight;
+                const questionScore = (parseInt(score) / 100.00) * question.weight;
                 total += questionScore;
             }
         });
     });
-    return Math.round(total);
+    // Arredonda para 1 casa decimal
+    return Math.round(total * 10) / 10;
+});
+
+// Valor formatado com vírgula para exibição
+const grandTotal = computed(() => {
+    return grandTotalRaw.value.toFixed(1).replace('.', ',');
 });
 
 const cidade = 'Lagoa Santa';
@@ -157,7 +164,7 @@ const isFormReadyToSubmit = computed(() => {
 
 // Verifica se a pontuação total é inferior a 70
 const hasLowTotalScore = computed(() => {
-    return grandTotal.value < 70;
+    return grandTotalRaw.value < 70;
 });
 
 // Validação de evidências obrigatórias para pontuação total baixa
