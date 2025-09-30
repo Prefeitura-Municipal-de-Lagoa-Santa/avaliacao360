@@ -17,6 +17,7 @@ services:
       - rede_geral_existente
     env_file:
       - .env
+    entrypoint: ["tail", "-f", "/dev/null"]
 
 networks:
   rede_geral_existente:
