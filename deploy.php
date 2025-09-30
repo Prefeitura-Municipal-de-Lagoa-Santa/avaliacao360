@@ -13,6 +13,8 @@ set('keep_releases', 3);
 set('writable_mode', 'chmod');
 set('writable_chmod_mode', '0775');
 set('use_relative_symlink', false);
+// Desabilita multiplexação SSH (evita erros em Windows como "getsockname failed: Not a socket")
+set('ssh_multiplexing', false);
 
 // ==========================================
 // CONFIGURAÇÃO DO SERVIDOR
@@ -38,6 +40,7 @@ host('develop')
 
 add('shared_files', [
     '.env',
+    'database/database.sqlite', // Garante persistência do SQLite entre releases
 ]);
 
 add('shared_dirs', [
@@ -59,6 +62,9 @@ add('writable_dirs', [
 // ==========================================
 // TASKS CUSTOMIZADAS PARA DOCKER
 // ==========================================
+// ==========================================
+// TASKS CUSTOMIZADAS PARA DOCKER
+// ==========================================
 
 desc('Parar containers Docker');
 task('docker:down', function () {
@@ -67,17 +73,20 @@ task('docker:down', function () {
 
 desc('Build da imagem Docker');
 task('docker:build', function () {
-    run('cd {{deploy_path}}/current && docker compose build --no-cache');
+    // Build da imagem usando o código do release (mantém cache) e com timeout maior
+    run('cd {{release_path}} && docker compose build', ['timeout' => 3600]);
 });
 
 desc('Instalar dependências Node.js');
 task('npm:install', function () {
-    run('cd {{deploy_path}}/current && docker compose run --rm app npm ci');
+    // Executa no release antes do publish
+    run('cd {{release_path}} && docker compose run --rm --no-deps --entrypoint "" -w /var/www/html app npm ci', ['timeout' => 1800]);
 });
 
 desc('Compilar assets com Vite');
 task('npm:build', function () {
-    run('cd {{deploy_path}}/current && docker compose run --rm app npm run build');
+    // Executa no release antes do publish
+    run('cd {{release_path}} && docker compose run --rm --no-deps --entrypoint "" -w /var/www/html app npm run build', ['timeout' => 1800]);
 });
 
 desc('Subir containers Docker');
@@ -87,21 +96,17 @@ task('docker:up', function () {
 
 desc('Aguardar containers iniciarem');
 task('docker:wait', function () {
+    sleep(5);
     info('⏳ Aguardando containers iniciarem...');
-    sleep(15); // Aumentado para 15 segundos
 });
 
 desc('Executar migrations');
 task('artisan:migrate', function () {
-    // Usando apenas 'exec' para garantir que o comando rode no container já em execução
-    run('cd {{deploy_path}}/current && docker compose exec -T app php artisan migrate --force');
+    // Se "current" existir e os containers estiverem de pé, usa exec; caso contrário, roda no release usando run
+    run('[ -d {{deploy_path}}/current ] && cd {{deploy_path}}/current && docker compose exec -T app php artisan migrate --force || (cd {{release_path}} && docker compose run --rm --no-deps --entrypoint "" -w /var/www/html app php artisan migrate --force)');
 });
 
-desc('Criar link simbólico do storage');
-task('artisan:storage-link', function () {
-    run('cd {{deploy_path}}/current && docker compose exec -T app php artisan storage:link || true');
-});
-
+// Cachear configurações Laravel (após publish, usando container em execução)
 desc('Cachear configurações Laravel');
 task('artisan:cache', function () {
     run('cd {{deploy_path}}/current && docker compose exec -T app php artisan config:cache');
@@ -132,43 +137,50 @@ task('logs', function () {
 
 desc('Modo manutenção ON');
 task('maintenance:on', function () {
-    run('cd {{deploy_path}}/current && docker compose exec -T app php artisan down --retry=60');
+    // Só tenta se o symlink current existir
+    run('[ -d {{deploy_path}}/current ] && cd {{deploy_path}}/current && docker compose exec -T app php artisan down --retry=60 || true');
 });
 
 desc('Modo manutenção OFF');
 task('maintenance:off', function () {
-    run('cd {{deploy_path}}/current && docker compose exec -T app php artisan up');
+    // Só tenta se o symlink current existir
+    run('[ -d {{deploy_path}}/current ] && cd {{deploy_path}}/current && docker compose exec -T app php artisan up || true');
 });
 
 // ==========================================
 // FLUXO DE DEPLOY PRINCIPAL
 // ==========================================
 
-task('deploy', [
-    'deploy:prepare',           // Cria estrutura de pastas
-    'deploy:vendors',           // composer install
-    'npm:install',              // npm ci
-    'npm:build',                // npm run build
-    'docker:down',              // Para containers antigos
-    'docker:build',             // Build nova imagem
-    'deploy:publish',           // Atualiza symlink current
-    'docker:up',                // Sobe novos containers
-    'docker:wait',              // Aguarda inicialização
-    'artisan:migrate',          // Roda migrations
-    'artisan:storage-link',     // Link do storage
-    'artisan:cache',            // Cacheia configs
-    'docker:cleanup',           // Limpa Docker
-    'deploy:cleanup',           // Remove releases antigas
-])->desc('Deploy completo da aplicação');
+// Vamos usar o fluxo padrão do recipe/laravel e inserir nossos passos com hooks
+// 1) Construir imagem ANTES de criar os links compartilhados (evita copiar symlink de storage para a imagem)
+before('deploy:shared', 'docker:build');
+// 2) Rodar npm dentro do release antes do publish
+before('deploy:publish', 'npm:install');
+before('deploy:publish', 'npm:build');
+
+// Depois de publicar, subir containers e executar passos Laravel
+after('deploy:publish', 'docker:up');
+after('docker:up', 'docker:wait');
+after('docker:wait', 'artisan:migrate');
+// Após publicar e subir containers, podemos opcionalmente recachear
+after('deploy:success', 'artisan:cache');
+after('deploy:success', 'docker:cleanup');
+
+// Sobrescreve o deploy:vendors para executar dentro do container Docker
+// Isso garante que as extensões (ex.: ext-ldap) presentes na imagem sejam usadas
+task('deploy:vendors', function () {
+    run('cd {{release_path}} && docker compose run --rm --no-deps --entrypoint "" -w /var/www/html -e COMPOSER_ALLOW_SUPERUSER=1 app composer install --verbose --prefer-dist --no-progress --no-interaction --no-dev --optimize-autoloader', ['timeout' => 1800]);
+})->desc('Instalar vendors com Composer dentro do Docker');
 
 // ==========================================
 // DEPLOY COM MODO MANUTENÇÃO
 // ==========================================
 
+// Mantém tarefa de deploy:safe usando o fluxo padrão, apenas com hooks aplicados
 task('deploy:safe', [
-    'maintenance:on',           // Ativa manutenção
-    'deploy',                   // Deploy normal
-    'maintenance:off',          // Desativa manutenção
+    'maintenance:on',
+    'deploy',
+    'maintenance:off',
 ])->desc('Deploy com modo de manutenção');
 
 // ==========================================
@@ -178,7 +190,6 @@ task('deploy:safe', [
 task('deploy:quick', [
     'deploy:prepare',
     'deploy:vendors',
-    'docker:down',
     'deploy:publish',
     'docker:up',
     'docker:wait',
@@ -190,8 +201,8 @@ task('deploy:quick', [
 // ROLLBACK CUSTOMIZADO
 // ==========================================
 
-// Remove a tarefa de rollback padrão para evitar conflito
-\Deployer\get()->tasks->remove('rollback');
+// Remove a task padrão do rollback
+Deployer::get()->tasks->remove('rollback');
 
 task('rollback', [
     'deploy:rollback',          // Rollback do Deployer
