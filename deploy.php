@@ -21,15 +21,15 @@ set('ssh_multiplexing', false);
 // ==========================================
 
 host('producao')
-    ->set('remote_user', 'seu_usuario')              // 🔴 ALTERE AQUI
-    ->set('hostname', '192.168.1.100')               // 🔴 ALTERE AQUI
+    ->set('remote_user', 'seu_usuario')          // 🔴 ALTERE AQUI
+    ->set('hostname', '192.168.1.100')         // 🔴 ALTERE AQUI
     ->set('port', 22)
-    ->set('deploy_path', '/var/www/laravel-app')    // 🔴 ALTERE AQUI
+    ->set('deploy_path', '/var/www/laravel-app') // 🔴 ALTERE AQUI
     ->set('branch', 'main');
 
 host('develop')
     ->set('remote_user', 'deploy')
-    ->set('hostname', '10.1.7.75') 
+    ->set('hostname', '10.1.7.75')
     ->set('port', 22)
     ->set('deploy_path', '/var/www/avaliacao')
     ->set('branch', 'develop');
@@ -40,11 +40,6 @@ host('develop')
 
 add('shared_files', [
     '.env',
-    'database/database.sqlite', // Garante persistência do SQLite entre releases
-]);
-
-add('shared_dirs', [
-    'storage',
 ]);
 
 add('writable_dirs', [
@@ -62,9 +57,6 @@ add('writable_dirs', [
 // ==========================================
 // TASKS CUSTOMIZADAS PARA DOCKER
 // ==========================================
-// ==========================================
-// TASKS CUSTOMIZADAS PARA DOCKER
-// ==========================================
 
 desc('Parar containers Docker');
 task('docker:down', function () {
@@ -79,7 +71,7 @@ task('docker:build', function () {
 
 desc('Instalar dependências Node.js');
 task('npm:install', function () {
-    // Executa no release antes do publish
+    // Executa no release antes do publish. Usar 'npm ci' é melhor para CI/CD pois usa o package-lock.json
     run('cd {{release_path}} && docker compose run --rm --no-deps --entrypoint "" -w /var/www/html app npm ci', ['timeout' => 1800]);
 });
 
@@ -89,6 +81,13 @@ task('npm:build', function () {
     run('cd {{release_path}} && docker compose run --rm --no-deps --entrypoint "" -w /var/www/html app npm run build', ['timeout' => 1800]);
 });
 
+// ✅ NOVO: Meta-tarefa para garantir a ordem correta de instalação e build.
+task('build:assets', [
+    'npm:install',
+    'npm:build',
+])->desc('Instalar dependências NPM e compilar assets');
+
+
 desc('Subir containers Docker');
 task('docker:up', function () {
     run('cd {{deploy_path}}/current && docker compose up -d');
@@ -96,8 +95,8 @@ task('docker:up', function () {
 
 desc('Aguardar containers iniciarem');
 task('docker:wait', function () {
+    info('⏳ Aguardando 5 segundos para os containers iniciarem...');
     sleep(5);
-    info('⏳ Aguardando containers iniciarem...');
 });
 
 desc('Executar migrations');
@@ -151,19 +150,38 @@ task('maintenance:off', function () {
 // FLUXO DE DEPLOY PRINCIPAL
 // ==========================================
 
-// Vamos usar o fluxo padrão do recipe/laravel e inserir nossos passos com hooks
-// 1) Construir imagem ANTES de criar os links compartilhados (evita copiar symlink de storage para a imagem)
-before('deploy:shared', 'docker:build');
-// 2) Rodar npm dentro do release antes do publish
-before('deploy:publish', 'npm:install');
-before('deploy:publish', 'npm:build');
+// ✅ CORREÇÃO: Redefinimos a tarefa 'deploy' para ser um fluxo único e sequencial.
+// Isso evita race conditions e garante que cada passo espere o anterior.
+task('deploy', [
+    'deploy:prepare',   // Prepara a estrutura de release
+    'docker:build',     // Builda a imagem Docker com o código novo
+    'deploy:vendors',   // Instala dependências do Composer
+    'build:assets',     // Instala dependências NPM e compila os assets
+    'deploy:publish',   // Ativa a nova release (symlink)
+    'docker:up',        // Sobe os containers (usando a nova release em 'current')
+    'docker:wait',      // Dá um tempo para os serviços iniciarem
+    'artisan:migrate',  // Roda as migrations no container em execução
+    'artisan:cache',    // Roda os comandos de cache no container em execução
+])->desc('Fluxo de deploy completo');
 
-// Depois de publicar, subir containers e executar passos Laravel
-after('deploy:publish', 'docker:up');
-after('docker:up', 'docker:wait');
-after('docker:wait', 'artisan:migrate');
-// Após publicar e subir containers, podemos opcionalmente recachear
-after('deploy:success', 'artisan:cache');
+
+// 1) Construir imagem ANTES de criar os links compartilhados (evita copiar symlink de storage para a imagem)
+// REMOVIDO: A tarefa 'docker:build' agora faz parte do fluxo principal 'deploy'.
+// before('deploy:shared', 'docker:build');
+
+// 2) ✅ CORREÇÃO: Usar a nova meta-tarefa para garantir a ordem de instalação e build.
+// REMOVIDO: A tarefa 'build:assets' agora faz parte do fluxo principal 'deploy'.
+// before('deploy:publish', 'build:assets');
+
+// 3) Depois de publicar, subir containers e executar passos Laravel
+// REMOVIDO: Todas essas tarefas agora fazem parte do fluxo principal 'deploy'.
+// after('deploy:publish', 'docker:up');
+// after('docker:up', 'docker:wait');
+// after('docker:wait', 'artisan:migrate');
+
+// 4) Após tudo ter sucesso, recachear e limpar
+// REMOVIDO: A tarefa 'artisan:cache' agora faz parte do fluxo principal 'deploy'.
+// after('deploy:success', 'artisan:cache');
 after('deploy:success', 'docker:cleanup');
 
 // Sobrescreve o deploy:vendors para executar dentro do container Docker
@@ -176,7 +194,6 @@ task('deploy:vendors', function () {
 // DEPLOY COM MODO MANUTENÇÃO
 // ==========================================
 
-// Mantém tarefa de deploy:safe usando o fluxo padrão, apenas com hooks aplicados
 task('deploy:safe', [
     'maintenance:on',
     'deploy',
@@ -184,7 +201,7 @@ task('deploy:safe', [
 ])->desc('Deploy com modo de manutenção');
 
 // ==========================================
-// DEPLOY RÁPIDO (sem build)
+// DEPLOY RÁPIDO (sem build de imagem/assets)
 // ==========================================
 
 task('deploy:quick', [
@@ -195,21 +212,22 @@ task('deploy:quick', [
     'docker:wait',
     'artisan:migrate',
     'artisan:cache',
-])->desc('Deploy rápido (sem rebuild de assets)');
+    'deploy:success', // Adicionado para disparar os hooks de sucesso
+])->desc('Deploy rápido (sem rebuild de imagem/assets)');
 
 // ==========================================
 // ROLLBACK CUSTOMIZADO
 // ==========================================
 
-// Remove a task padrão do rollback
+// ✅ CORREÇÃO: Remove a tarefa 'rollback' padrão antes de definir a nossa customizada.
 Deployer::get()->tasks->remove('rollback');
 
 task('rollback', [
-    'deploy:rollback',          // Rollback do Deployer
-    'docker:down',              // Para containers
-    'docker:up',                // Sobe containers da versão anterior
+    'deploy:rollback',          // Rollback do Deployer (muda o symlink)
+    'docker:down',              // Para containers atuais
+    'docker:up',                // Sobe containers da versão anterior (que está em 'current' agora)
     'docker:wait',
-    'artisan:cache',            // Recacheia
+    'artisan:cache',            // Recacheia para a versão anterior
 ])->desc('Reverter para versão anterior');
 
 // ==========================================
@@ -218,7 +236,8 @@ task('rollback', [
 
 after('deploy:failed', function () {
     warning('❌ Deploy falhou!');
-    warning('Execute "dep rollback producao" para reverter.');
+    // A sugestão de rollback deve usar o host correto
+    warning('Execute "dep rollback {{hostname}}" para reverter.');
     invoke('maintenance:off');  // Garante que sai do modo manutenção
 });
 
@@ -233,7 +252,8 @@ after('deploy:success', function () {
 
 desc('Conectar ao servidor via SSH');
 task('ssh', function () {
-    run('bash');
+    // O ideal é especificar o path para começar na pasta da aplicação
+    run('cd {{deploy_path}}/current && bash');
 });
 
 desc('Reiniciar containers');
@@ -248,3 +268,5 @@ task('status', function () {
     run('df -h | grep -E "Filesystem|/var/www"');
     run('free -h');
 });
+
+
