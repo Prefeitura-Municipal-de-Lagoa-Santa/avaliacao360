@@ -18,25 +18,38 @@ class DashboardController extends Controller
     /**
      * Função de ajuda para buscar o prazo de um grupo específico.
      */
-    private function getGroupDeadline(string $groupName, ?int $year = null): ?Form
+    private function getGroupDeadline(string $groupName, ?int $year = null): ?object
     {
-        // Define ano atual padrão (ajustado para janeiro e fevereiro)
         if (!$year) {
             $year = in_array(date('n'), [1, 2]) ? date('Y') - 1 : date('Y');
         }
-        $formTypes = [];
 
+        $formTypes = [];
         if ($groupName === 'avaliacao') {
             $formTypes = ['servidor', 'gestor', 'chefia', 'comissionado'];
         } elseif ($groupName === 'pdi') {
             $formTypes = ['pactuacao_servidor', 'pactuacao_comissionado', 'pactuacao_gestor'];
         }
 
-        return Form::where('year', $year)
+        $forms = Form::where('year', $year)
             ->whereIn('type', $formTypes)
             ->where('release', true)
+            ->whereNotNull('term_first')
+            ->whereNotNull('term_end')
             ->select('term_first', 'term_end')
-            ->first();
+            ->get();
+
+        if ($forms->isEmpty()) {
+            return null;
+        }
+
+        $earliestStart = $forms->min('term_first');
+        $latestEnd = $forms->max('term_end');
+
+        return (object) [
+            'term_first' => $earliestStart,
+            'term_end' => $latestEnd,
+        ];
     }
 
 
@@ -229,12 +242,22 @@ class DashboardController extends Controller
                 })->exists();
 
         // --- Prazo Geral (para exibição no card de data) ---
-        $mainFormForPrazo = $selfForm ?? $bossForm;
+        // CORREÇÃO: Buscar o prazo mais amplo entre todos os formulários disponíveis
+        $allActiveForms = Form::where('year', $currentYear)
+            ->where('release', true)
+            ->whereNotNull('term_first')
+            ->whereNotNull('term_end')
+            ->get();
+            
         $prazo = null;
-        if ($mainFormForPrazo) {
+        if ($allActiveForms->count() > 0) {
+            // Encontrar o prazo mais amplo (menor data de início e maior data de fim)
+            $earliestStart = $allActiveForms->min('term_first');
+            $latestEnd = $allActiveForms->max('term_end');
+            
             $prazo = [
-                'term_first' => $mainFormForPrazo->term_first ? Carbon::parse($mainFormForPrazo->term_first)->format('Y-m-d') : null,
-                'term_end' => $mainFormForPrazo->term_end ? Carbon::parse($mainFormForPrazo->term_end)->format('Y-m-d') : null
+                'term_first' => $earliestStart ? Carbon::parse($earliestStart)->format('Y-m-d') : null,
+                'term_end' => $latestEnd ? Carbon::parse($latestEnd)->format('Y-m-d') : null
             ];
         }
 

@@ -9,7 +9,7 @@ interface DeadlineEvent {
   start: string;
   end: string;
   title: string;
-  group: 'avaliacao' | 'pdi';
+  group: 'avaliacao' | 'pdi' | 'divulgacao' | 'ciencia';
 }
 // Define como é um objeto de dia no calendário
 interface CalendarDay {
@@ -86,10 +86,10 @@ const displayedMonthYear = computed<string>(() => {
  * Lida com o clique em um evento e mostra a mensagem APRIMORADA.
  */
 function handleEventClick(dayNumber: number, month: number, year: number, event: DeadlineEvent) {
-  const clickedDate = new Date(year, month, dayNumber);
-  const startDate = new Date(event.start + 'T00:00:00');
-  const endDate = new Date(event.end + 'T00:00:00');
-  // Define um nome mais amigável para o grupo
+  // Normalizar todas as datas para comparação (apenas data, sem hora)
+  const clickedDateStr = `${year}-${(month + 1).toString().padStart(2, '0')}-${dayNumber.toString().padStart(2, '0')}`;
+  const startDateStr = event.start;
+  const endDateStr = event.end;
 
   let message = event.title; // Mensagem padrão para os dias no meio do período
   let title = "Período de Preenchimento"; // Título padrão do modal
@@ -98,10 +98,10 @@ function handleEventClick(dayNumber: number, month: number, year: number, event:
   if (event.group === 'avaliacao' || event.group === 'pdi') {
     const friendlyGroupName = event.group === 'avaliacao' ? 'a Avaliação' : 'o PDI';
     title = "Período de Preenchimento";
-    if (clickedDate.getTime() === startDate.getTime()) {
+    if (clickedDateStr === startDateStr) {
       title = "Início do Prazo";
       message = `Início do período para preencher ${friendlyGroupName}.`;
-    } else if (clickedDate.getTime() === endDate.getTime()) {
+    } else if (clickedDateStr === endDateStr) {
       title = "Fim do Prazo";
       message = `Último dia para preencher ${friendlyGroupName}.`;
     }
@@ -115,9 +115,9 @@ function handleEventClick(dayNumber: number, month: number, year: number, event:
   else if (event.group === 'ciencia') {
     title = "Ciência da Nota";
     message = "Período para os servidores tomarem ciência de suas notas.";
-    if (clickedDate.getTime() === startDate.getTime()) {
+    if (clickedDateStr === startDateStr) {
       title = "Início do Período de Ciência";
-    } else if (clickedDate.getTime() === endDate.getTime()) {
+    } else if (clickedDateStr === endDateStr) {
       title = "Fim do Período de Ciência";
     }
   }

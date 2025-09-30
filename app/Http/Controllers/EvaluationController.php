@@ -134,8 +134,8 @@ class EvaluationController extends Controller
     }
 
     // Se não, exibe a mensagem de erro
-    $startDate = $chefiaForm->term_first->format('d/m/Y');
-    $endDate = $chefiaForm->term_end->format('d/m/Y');
+    $startDate = Carbon::parse($chefiaForm->term_first)->format('d/m/Y');
+    $endDate = Carbon::parse($chefiaForm->term_end)->format('d/m/Y');
     return response()->json([
         'available' => false,
         'message' => "Fora do prazo. O formulário está disponível para preenchimento apenas entre {$startDate} e {$endDate}."
@@ -245,8 +245,8 @@ class EvaluationController extends Controller
     }
 
     // Se não, exibe a mensagem de erro com o prazo padrão
-    $startDate = $autoavaliacaoForm->term_first->format('d/m/Y');
-    $endDate = $autoavaliacaoForm->term_end->format('d/m/Y');
+    $startDate = Carbon::parse($autoavaliacaoForm->term_first)->format('d/m/Y');
+    $endDate = Carbon::parse($autoavaliacaoForm->term_end)->format('d/m/Y');
     return response()->json([
         'available' => false,
         'message' => "Fora do prazo. O formulário está disponível para preenchimento apenas entre {$startDate} e {$endDate}."

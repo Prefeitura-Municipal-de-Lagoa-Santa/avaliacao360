@@ -22,7 +22,7 @@ const props = defineProps<{
   };
   pdiExpiredVisible?: boolean;
 }>();
-console.log(props);
+
 const selectedYear = ref(props.selectedYear);
 const availableYears = ref(props.availableYears);
 
@@ -34,15 +34,49 @@ watch(selectedYear, (year) => {
   });
 });
 
-function formatPrazo(prazo: { term_first: string; term_end: string } | null): string {
-  if (!prazo) return 'Não definido';
+function formatPrazo(prazo: { term_first: string; term_end: string; } | null): string {
+  if (!prazo || !prazo.term_first || !prazo.term_end) return 'Não definido';
+  
+  try {
+    // Normalizar possíveis strings ISO (cortar após 'T') para garantir formato YYYY-MM-DD
+    const normalize = (s: string) => (s || '').split('T')[0];
+    const termFirst = normalize(prazo.term_first);
+    const termEnd = normalize(prazo.term_end);
 
-  const options: Intl.DateTimeFormatOptions = { day: '2-digit', month: '2-digit' };
-  const inicio = new Date(prazo.term_first).toLocaleDateString('pt-BR', options);
-  const fim = new Date(prazo.term_end).toLocaleDateString('pt-BR', options);
+    // Agora garantir que temos exatamente 10 chars (YYYY-MM-DD)
+    if (termFirst.length !== 10 || termEnd.length !== 10) {
+      console.error('Formato inesperado de data (tamanho diferente de 10):', { term_first: prazo.term_first, term_end: prazo.term_end });
+      return 'Data inválida';
+    }
 
-  return `${inicio} - ${fim}`;
+    const [startYear, startMonth, startDay] = termFirst.split('-').map(v => parseInt(v, 10));
+    const [endYear, endMonth, endDay] = termEnd.split('-').map(v => parseInt(v, 10));
+    
+    const inicio = new Date(startYear, startMonth - 1, startDay);
+    const fim = new Date(endYear, endMonth - 1, endDay);
+    
+    // Se ainda são inválidas, retorna erro
+    if (isNaN(inicio.getTime()) || isNaN(fim.getTime())) {
+      console.error('Datas inválidas:', { term_first: prazo.term_first, term_end: prazo.term_end });
+      return 'Data inválida';
+    }
+    
+    const options: Intl.DateTimeFormatOptions = { 
+      day: '2-digit', 
+      month: '2-digit',
+      timeZone: 'America/Sao_Paulo'
+    };
+    
+    const inicioFmt = inicio.toLocaleDateString('pt-BR', options);
+    const fimFmt = fim.toLocaleDateString('pt-BR', options);
+    
+    return `${inicioFmt} - ${fimFmt}`;
+  } catch (error) {
+    console.error('Erro ao formatar prazo:', error, prazo);
+    return 'Erro na data';
+  }
 }
+
 
 function goToCalendar() {
   router.get(route('calendar'));
