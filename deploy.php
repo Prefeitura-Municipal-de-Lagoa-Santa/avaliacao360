@@ -27,10 +27,10 @@ set('ssh_multiplexing', false);
 // ==========================================
 
 host('producao')
-    ->set('remote_user', 'seu_usuario')          // 🔴 ALTERE AQUI
-    ->set('hostname', '192.168.1.100')         // 🔴 ALTERE AQUI
+    ->set('remote_user', 'deploy')
+    ->set('hostname', '10.1.7.76')
     ->set('port', 22)
-    ->set('deploy_path', '/var/www/laravel-app') // 🔴 ALTERE AQUI
+    ->set('deploy_path', '/var/www/avaliacao-dep')
     ->set('branch', 'main');
 
 host('develop')
@@ -174,11 +174,15 @@ task('logs', function () {
 desc('Modo manutenção ON');
 task('maintenance:on', function () {
     run('[ -L {{deploy_path}}/current ] && cd $(readlink -f {{deploy_path}}/current) && docker compose --project-name {{docker_project_name}} exec -T app php artisan down --retry=60 || true');
+
 });
 
 desc('Modo manutenção OFF');
 task('maintenance:off', function () {
     run('[ -L {{deploy_path}}/current ] && cd $(readlink -f {{deploy_path}}/current) && docker compose --project-name {{docker_project_name}} exec -T app php artisan up || true');
+    run('cd $(readlink -f {{deploy_path}}/current) && docker compose --project-name {{docker_project_name}} exec -T app php artisan config:cache');
+    run('cd $(readlink -f {{deploy_path}}/current) && docker compose --project-name {{docker_project_name}} exec -T app php artisan route:cache');
+    run('cd $(readlink -f {{deploy_path}}/current) && docker compose --project-name {{docker_project_name}} exec -T app php artisan view:cache');
 });
 // ==========================================
 // FLUXO DE DEPLOY PRINCIPAL
