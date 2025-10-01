@@ -3,7 +3,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: laravel_avaliacao
+    container_name: laravel_avaliacao_app
     restart: unless-stopped
     ports:
       # Expõe a aplicação na porta 8000
