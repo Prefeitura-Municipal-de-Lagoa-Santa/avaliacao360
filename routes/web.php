@@ -186,6 +186,26 @@ Route::middleware(['auth', 'verified', EnsureCpfIsFilled::class, RedirectIfMustC
     Route::post('/recourses/{recourse}/respond', [EvaluationRecourseController::class, 'respond'])
         ->name('recourses.respond');
 
+    // Diretoria do RH decide (homologação)
+    Route::post('/recourses/{recourse}/director-decision', [EvaluationRecourseController::class, 'directorDecision'])
+        ->name('recourses.directorDecision');
+
+    // Requerente registra ciência (1ª ou final)
+    Route::post('/recourses/{recourse}/acknowledge', [EvaluationRecourseController::class, 'acknowledge'])
+        ->name('recourses.acknowledge');
+
+    // RH encaminha à 2ª instância
+    Route::post('/recourses/{recourse}/escalate', [EvaluationRecourseController::class, 'escalateToSecretary'])
+        ->name('recourses.escalate');
+
+    // Secretário decide 2ª instância
+    Route::post('/recourses/{recourse}/secretary-decision', [EvaluationRecourseController::class, 'secretaryDecision'])
+        ->name('recourses.secretaryDecision');
+
+    // Devolver à instância anterior
+    Route::post('/recourses/{recourse}/return', [EvaluationRecourseController::class, 'returnToPrevious'])
+        ->name('recourses.return');
+
     Route::post('/recourses/{recourse}/assign-responsible', [EvaluationRecourseController::class, 'assignResponsible'])
         ->name('recourses.assignResponsible');
 

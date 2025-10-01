@@ -77,7 +77,9 @@ function goBack() {
           <tr v-for="r in recourses.data" :key="r.id" class="border-b hover:bg-gray-50">
             <td class="px-4 py-2">{{ r.person.name }}</td>
             <td class="px-4 py-2">{{ r.evaluation.year }}</td>
-            <td class="px-4 py-2 capitalize">{{ r.status.replace('_', ' ') }}</td>
+            <td class="px-4 py-2 capitalize">
+              {{ r.status.replace('_', ' ') }}
+            </td>
             <td v-if="canManageAssignees" class="px-4 py-2">
               <div v-if="r.responsiblePersons && r.responsiblePersons.length > 0" class="flex flex-wrap gap-1">
                 <span 
