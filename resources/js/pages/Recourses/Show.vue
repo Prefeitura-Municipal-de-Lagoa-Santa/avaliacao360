@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { Head, Link, router } from '@inertiajs/vue3';
+import { route } from 'ziggy-js';
 import DashboardLayout from '@/layouts/DashboardLayout.vue';
 import * as icons from 'lucide-vue-next';
 
@@ -8,6 +9,7 @@ const props = defineProps<{
     id: number;
     text: string;
     status: string;
+    stage?: string;
     response?: string;
     responded_at?: string;
     attachments: Array<{ name: string; url: string }>;
@@ -19,7 +21,12 @@ const props = defineProps<{
     person: { name: string };
     logs: Array<{ status: string; message: string; created_at: string }>;
   };
+  permissions?: { isRH: boolean; isComissao: boolean; isRequerente: boolean };
 }>();
+
+function acknowledge() {
+  router.post(route('recourses.acknowledge', props.recourse.id));
+}
 
 function openFile(file: { name: string; url: string }) {
   const link = document.createElement('a');
@@ -34,7 +41,7 @@ function goBack() {
   if (window.history.length > 1) {
     window.history.back();
   } else {
-    router.get(route('recourses.dashboard'));
+    router.get(route('recourse'));
   }
 }
 </script>
@@ -54,8 +61,16 @@ function goBack() {
         </button>
       </div>
 
-      <!-- Status -->
+      <!-- Status/Etapa -->
       <div class="space-y-2">
+        <div class="flex gap-2 items-center">
+          <span class="text-xs px-3 py-1 rounded-full bg-gray-100 text-gray-700 border">
+            Etapa: {{ recourse.stage?.toUpperCase() || '—' }}
+          </span>
+          <span class="text-xs px-3 py-1 rounded-full bg-gray-100 text-gray-700 border">
+            Status: {{ recourse.status?.toUpperCase() || '—' }}
+          </span>
+        </div>
         <p class="text-sm text-gray-700 font-medium">Status do Recurso:</p>
 
         <div v-if="recourse.status === 'aberto'" class="text-yellow-700 bg-yellow-50 px-4 py-2 rounded flex items-center gap-2">
@@ -77,6 +92,15 @@ function goBack() {
           <icons.XCircleIcon class="w-5 h-5" />
           <span>Recurso indeferido. Veja a justificativa abaixo.</span>
         </div>
+      </div>
+
+      <!-- Ações do Requerente: Ciência -->
+      <div v-if="permissions?.isRequerente && (recourse.stage === 'requerente' || recourse.stage === 'finalizado')" class="bg-blue-50 border border-blue-200 rounded p-3 flex items-center justify-between">
+        <div class="text-sm text-blue-800">
+          <p v-if="recourse.stage === 'requerente'">Você pode registrar ciência da decisão da 1ª instância.</p>
+          <p v-else>Você pode registrar ciência da decisão final.</p>
+        </div>
+        <button @click="acknowledge" class="px-3 py-2 bg-blue-600 text-white rounded text-sm">Registrar ciência</button>
       </div>
 
       <!-- Texto enviado -->
