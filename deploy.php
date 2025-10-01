@@ -26,7 +26,7 @@ set('ssh_multiplexing', false);
 // CONFIGURAÇÃO DO SERVIDOR
 // ==========================================
 
-host('producao')
+host('production')
     ->set('remote_user', 'deploy')
     ->set('hostname', '10.1.7.76')
     ->set('port', 22)
