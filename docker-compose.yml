@@ -7,9 +7,18 @@ services:
     restart: unless-stopped
     ports:
       # Expõe a aplicação na porta 8000
-      - "8000:80"
+      - "8006:80"
     volumes:
+      # 1. Mapeia o código da aplicação
       - .:/var/www/html
+
+      # 2. ✅ ESSA É A CORREÇÃO PRINCIPAL
+      #    Mapeia a pasta 'shared/storage' do servidor DIRETAMENTE sobre a pasta 'storage' da aplicação no contêiner.
+      #    Isso resolve o problema do link simbólico de forma definitiva.
+      - ../../shared/storage:/var/www/html/storage
+
+      # 3. (Opcional, mas recomendado) Faça o mesmo para outros diretórios compartilhados.
+      - ../../shared/bootstrap/cache:/var/www/html/bootstrap/cache
     networks:
       # Conecta à sua rede principal já existente
       - rede_geral_existente

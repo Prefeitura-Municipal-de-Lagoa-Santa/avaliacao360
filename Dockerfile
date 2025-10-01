@@ -43,9 +43,7 @@ RUN rm -f /etc/nginx/sites-enabled/default && \
     ln -s /etc/nginx/sites-available/default /etc/nginx/sites-enabled/default && \
     chmod +x /usr/local/bin/entrypoint.sh
 
-# Ajusta permissões das pastas do Laravel
-RUN chown -R www-data:www-data /var/www/html/storage /var/www/html/bootstrap/cache
-RUN chmod -R 775 /var/www/html/storage /var/www/html/bootstrap/cache
+# Diretório de trabalho já definido; permissões serão ajustadas no entrypoint se necessário
 
 # Expõe a porta 80, que o Nginx usará
 EXPOSE 80
