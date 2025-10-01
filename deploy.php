@@ -219,6 +219,23 @@ task('logs', function () {
     run('cd $(readlink -f {{deploy_path}}/current) && docker compose --project-name {{docker_project_name}} logs --tail=50 app');
 });
 
+// Aplicar configuração do Nginx dentro do container sem rebuild
+desc('Nginx: aplicar config do projeto e recarregar');
+task('nginx:apply-config', function () {
+    $base = 'cd $(readlink -f {{deploy_path}}/current) && docker compose --project-name {{docker_project_name}}';
+    // Copia o arquivo do repositório para o local de config ativo do Nginx no container
+    run($base.' exec -T app bash -lc "cp /var/www/html/docker/nginx.conf /etc/nginx/sites-available/default"');
+    // Testa a configuração
+    run($base.' exec -T app bash -lc "nginx -t"');
+    // Reload no Nginx (via sinal) gerenciado pelo supervisord
+    run($base.' exec -T app bash -lc "nginx -s reload"');
+});
+
+desc('Nginx: logs de erro (container)');
+task('nginx:errors', function () {
+    run('cd $(readlink -f {{deploy_path}}/current) && docker compose --project-name {{docker_project_name}} exec -T app bash -lc "tail -n 200 /var/log/nginx/error.log || true"');
+});
+
 desc('Modo manutenção ON');
 task('maintenance:on', function () {
     run('[ -L {{deploy_path}}/current ] && cd $(readlink -f {{deploy_path}}/current) && docker compose --project-name {{docker_project_name}} exec -T app php artisan down --retry=60 || true');
