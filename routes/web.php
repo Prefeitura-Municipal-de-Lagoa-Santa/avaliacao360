@@ -28,6 +28,11 @@ use Illuminate\Support\Facades\Route;
 
 Route::redirect("/", "/dashboard");
 
+// Healthcheck simples (sem auth) para testar proxy e container
+Route::get('/health', function () {
+    return response()->json(['status' => 'ok'], 200);
+});
+
 Route::middleware(['auth', 'verified', EnsureCpfIsFilled::class, RedirectIfMustChangePassword::class])->group(function () {
 
     Route::get('/dashboard', [DashboardController::class, 'index'])->name('dashboard');
