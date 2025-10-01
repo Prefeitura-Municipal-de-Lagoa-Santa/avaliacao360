@@ -12,6 +12,7 @@ const props = defineProps<{
     email: string;
     roles: Array<{ name: string }>;
   }>;
+  availableRoles: string[];
 }>();
 
 // Estado para seleção de papel por usuário
@@ -84,13 +85,9 @@ function goBack() {
               <span v-else>Nenhum</span>
             </td>
             <td class="px-4 py-2 flex items-center gap-2">
-              <select
-                v-model="selectedRoles[user.id]"
-                class="border rounded px-2 py-1 text-sm"
-              >
+              <select v-model="selectedRoles[user.id]" class="border rounded px-2 py-1 text-sm">
                 <option value="">Remover papel</option>
-                <option value="RH">RH</option>
-                <option value="Comissão">Comissão</option>
+                <option v-for="role in props.availableRoles" :key="role" :value="role">{{ role }}</option>
               </select>
               <button
                 class="bg-blue-600 text-white px-3 py-1 rounded hover:bg-blue-700"

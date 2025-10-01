@@ -12,6 +12,8 @@ class CreateRolesSeeder extends Seeder
     {
         $admin    = Role::updateOrCreate(['name' => 'Admin'], ['level' => 10]);
         $rh       = Role::updateOrCreate(['name' => 'RH'], ['level' => 5]);
+        $diretoriaRH = Role::updateOrCreate(['name' => 'Diretoria RH'], ['level' => 6]);
+        $secretario  = Role::updateOrCreate(['name' => 'Secretário'], ['level' => 7]);
         $comissao = Role::updateOrCreate(['name' => 'Comissão'], ['level' => 3]);
         $servidor = Role::updateOrCreate(['name' => 'Servidor'], ['level' => 1]);
 
@@ -48,12 +50,33 @@ class CreateRolesSeeder extends Seeder
             'persons.confirm',
             'persons.preview',
             'recourses',
+            'recourse',
+            'recourses.index',
+            'recourses.review',
+            'recourses.assignResponsible',
+            'recourses.removeResponsible',
+            'recourses.escalate',
+            'recourses.return',
             'releases.generate',
             'reports',
             'storage.local',
             'users.manage-roles',
             'users.assign-role',
         ])->values());
+
+            // Diretoria RH - homologação da 1ª instância
+            $diretoriaRH->permissions()->sync($permissions->only([
+                'recourses.review',
+                'recourses.directorDecision',
+                'storage.local',
+            ])->values());
+
+            // Secretário - decisão da 2ª instância
+            $secretario->permissions()->sync($permissions->only([
+                'recourses.review',
+                'recourses.secretaryDecision',
+                'storage.local',
+            ])->values());
 
         // Comissão
         $comissao->permissions()->sync($permissions->only([
@@ -97,6 +120,7 @@ class CreateRolesSeeder extends Seeder
             'recourses.create',
             'recourses.show',
             'recourses.store',
+            'recourses.acknowledge',
             'storage.local',
         ])->values());
 

@@ -10,6 +10,7 @@ const props = defineProps<{
     id: number;
     text: string;
     status: string;
+    stage?: string;
     response: string | null;
     attachments: Array<{ name: string; url: string }>;
     responseAttachments?: Array<{ name: string; url: string }>;
@@ -26,9 +27,13 @@ const props = defineProps<{
       original_evaluation_type: string;
     };
     logs: Array<{ status: string; message: string | null; created_at: string }>;
+    commission?: { decision?: string | null; response?: string | null; decided_at?: string | null };
+    director?: { decision?: string | null; response?: string | null; decided_at?: string | null };
+    secretary?: { decision?: string | null; response?: string | null; decided_at?: string | null };
   };
   availablePersons: Array<{ id: number; name: string; registration_number: string }>;
   canManageAssignees: boolean;
+  permissions?: { isRH: boolean; isComissao: boolean; isRequerente: boolean };
 }>();
 
 const response = ref('');
@@ -150,6 +155,35 @@ function goBack() {
     router.get(route('recourse')); // Dashboard de recursos
   }
 }
+
+// Ações do fluxo
+function directorDecision(decision: 'deferido' | 'indeferido') {
+  const resp = prompt('Informe o texto da decisão da Diretoria:');
+  if (!resp) return;
+  const formData = new FormData();
+  formData.append('decision', decision);
+  formData.append('response', resp);
+  router.post(route('recourses.directorDecision', props.recourse.id), formData, { forceFormData: true });
+}
+
+function escalateToSecretary() {
+  if (!confirm('Encaminhar à 2ª instância (Secretário)?')) return;
+  router.post(route('recourses.escalate', props.recourse.id));
+}
+
+function secretaryDecision(decision: 'deferido' | 'indeferido') {
+  const resp = prompt('Informe o texto da decisão do Secretário:');
+  if (!resp) return;
+  const formData = new FormData();
+  formData.append('decision', decision);
+  formData.append('response', resp);
+  router.post(route('recourses.secretaryDecision', props.recourse.id), formData, { forceFormData: true });
+}
+
+function returnToPrevious() {
+  const reason = prompt('Motivo (opcional) para devolver à instância anterior:') || '';
+  router.post(route('recourses.return', props.recourse.id), { reason });
+}
 </script>
 
 <template>
@@ -179,6 +213,9 @@ function goBack() {
             </div>
           </div>
           <div class="flex items-center gap-3">
+            <span class="text-xs px-3 py-1 rounded-full bg-gray-100 text-gray-700 border">
+              Etapa: {{ recourse.stage?.toUpperCase() || '—' }}
+            </span>
             <span
               class="text-sm font-medium text-white px-4 py-2 rounded-full"
               :class="{
@@ -424,12 +461,37 @@ function goBack() {
             <icons.Scale class="w-5 h-5" />
             Análise e Parecer da Comissão
           </h2>
-          <p class="text-sm text-gray-300 mt-1">
-            Decisão sobre o recurso baseada na avaliação das notas
-          </p>
+          <p class="text-sm text-gray-300 mt-1">Decisão sobre o recurso baseada na avaliação das notas</p>
         </div>
 
         <div class="p-4">
+          <!-- Ações rápidas por etapa -->
+          <div class="mb-4 flex flex-wrap gap-2">
+            <!-- Comissão decide -->
+            <button v-if="props.permissions?.isComissao && recourse.stage === 'comissao' && recourse.status !== 'respondido' && recourse.status !== 'indeferido'"
+              @click="isAnalyzing ? null : markAsAnalyzing()"
+              class="px-3 py-2 text-xs bg-gray-200 rounded">Iniciar/continuar análise</button>
+
+            <!-- Diretoria homologa -->
+            <template v-if="props.permissions?.isRH && recourse.stage === 'diretoria_rh'">
+              <button @click="directorDecision('deferido')" class="px-3 py-2 text-xs bg-green-600 text-white rounded">Diretoria: Deferir</button>
+              <button @click="directorDecision('indeferido')" class="px-3 py-2 text-xs bg-red-600 text-white rounded">Diretoria: Indeferir</button>
+            </template>
+
+            <!-- RH encaminha à 2ª instância -->
+            <button v-if="props.permissions?.isRH && recourse.stage === 'requerente'" @click="escalateToSecretary" class="px-3 py-2 text-xs bg-indigo-600 text-white rounded">Encaminhar ao Secretário</button>
+
+            <!-- Secretário decide -->
+            <template v-if="props.permissions?.isRH && recourse.stage === 'secretario'">
+              <button @click="secretaryDecision('deferido')" class="px-3 py-2 text-xs bg-green-700 text-white rounded">Secretário: Deferir</button>
+              <button @click="secretaryDecision('indeferido')" class="px-3 py-2 text-xs bg-red-700 text-white rounded">Secretário: Indeferir</button>
+            </template>
+
+            <!-- Devolver à instância anterior -->
+            <button v-if="(props.permissions?.isRH || props.permissions?.isComissao) && ['comissao','diretoria_rh','requerente','secretario'].includes(recourse.stage || '')"
+              @click="returnToPrevious" class="px-3 py-2 text-xs bg-yellow-500 text-white rounded">Devolver etapa</button>
+          </div>
+
           <!-- Mostrar parecer final -->
           <template v-if="recourse.status === 'respondido' || recourse.status === 'indeferido'">
             <div class="space-y-4">
@@ -475,7 +537,7 @@ function goBack() {
           </template>
 
           <!-- Formulário de análise -->
-          <template v-else-if="isAnalyzing">
+          <template v-else-if="isAnalyzing && recourse.stage === 'comissao'">
             <div class="space-y-6">
               <!-- Área de texto para parecer -->
               <div>
@@ -582,7 +644,7 @@ function goBack() {
           </template>
 
           <!-- Botão para iniciar análise -->
-          <template v-else>
+          <template v-else-if="recourse.stage === 'comissao'">
             <div class="text-center py-8">
               <icons.Play class="w-12 h-12 text-gray-500 mx-auto mb-4" />
               <h3 class="text-lg font-semibold text-gray-800 mb-2">Pronto para Análise</h3>
@@ -596,6 +658,11 @@ function goBack() {
                 <icons.Play class="w-5 h-5" />
                 Iniciar Análise do Recurso
               </button>
+            </div>
+          </template>
+          <template v-else>
+            <div class="text-center py-8 text-sm text-gray-600">
+              Nenhuma ação disponível nesta etapa por este perfil.
             </div>
           </template>
         </div>

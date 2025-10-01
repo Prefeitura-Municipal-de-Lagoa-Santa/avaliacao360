@@ -915,12 +915,13 @@ class EvaluationController extends Controller
             // Determinar se é gestor baseado na função organizacional da pessoa
             $isGestor = $person->jobFunction && $person->jobFunction->is_manager;
 
+            // Definição padrão: se deveria haver avaliação de equipe neste ano (mesmo pendente)
+            $deveTeravaliacaoEquipe = $todasEquipes->count() > 0;
+
             // Lógica da nota final
             if ($isGestor) {
                 // Para gestores: todas as três avaliações são obrigatórias
                 // Verificar se DEVERIA ter avaliação de equipe (mesmo que pending)
-                $deveTeravaliacaoEquipe = $todasEquipes->count() > 0;
-                
                 if ($notaAuto === null || $notaChefia === null || ($deveTeravaliacaoEquipe && $notaEquipe === null)) {
                     $notaFinal = 0;
                     if ($deveTeravaliacaoEquipe && $notaEquipe === null) {

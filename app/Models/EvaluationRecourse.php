@@ -14,12 +14,29 @@ class EvaluationRecourse extends Model
         'user_id',
         'text',
         'status',
+        'stage',
         'response',
         'responded_at',
+        'commission_decision',
+        'commission_response',
+        'commission_decided_at',
+        'director_decision',
+        'director_response',
+        'director_decided_at',
+        'secretary_decision',
+        'secretary_response',
+        'secretary_decided_at',
+        'ack_first_at',
+        'ack_final_at',
     ];
 
     protected $casts = [
         'responded_at' => 'datetime',
+        'commission_decided_at' => 'datetime',
+        'director_decided_at' => 'datetime',
+        'secretary_decided_at' => 'datetime',
+        'ack_first_at' => 'datetime',
+        'ack_final_at' => 'datetime',
     ];
 
     public function evaluation()
