@@ -14,12 +14,17 @@ class EvaluationRecourse extends Model
         'user_id',
         'text',
         'status',
+        'current_instance',
+        'last_returned_by_user_id',
+        'last_returned_to_instance',
+        'last_returned_at',
         'response',
         'responded_at',
     ];
 
     protected $casts = [
         'responded_at' => 'datetime',
+        'last_returned_at' => 'datetime',
     ];
 
     public function evaluation()
@@ -35,6 +40,11 @@ class EvaluationRecourse extends Model
     public function user()
     {
         return $this->belongsTo(User::class);
+    }
+
+    public function lastReturnedBy()
+    {
+        return $this->belongsTo(User::class, 'last_returned_by_user_id');
     }
 
     public function attachments()

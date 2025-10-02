@@ -186,6 +186,9 @@ Route::middleware(['auth', 'verified', EnsureCpfIsFilled::class, RedirectIfMustC
     Route::post('/recourses/{recourse}/respond', [EvaluationRecourseController::class, 'respond'])
         ->name('recourses.respond');
 
+    Route::post('/recourses/{recourse}/return', [EvaluationRecourseController::class, 'returnToPreviousInstance'])
+        ->name('recourses.return');
+
     Route::post('/recourses/{recourse}/assign-responsible', [EvaluationRecourseController::class, 'assignResponsible'])
         ->name('recourses.assignResponsible');
 

@@ -10,6 +10,7 @@ const props = defineProps<{
     id: number;
     text: string;
     status: string;
+    current_instance?: 'RH' | 'Comissao';
     response: string | null;
     attachments: Array<{ name: string; url: string }>;
     responseAttachments?: Array<{ name: string; url: string }>;
@@ -26,9 +27,12 @@ const props = defineProps<{
       original_evaluation_type: string;
     };
     logs: Array<{ status: string; message: string | null; created_at: string }>;
+    last_return?: { by: string; to: 'RH' | 'Comissao' | null; at: string } | null;
   };
   availablePersons: Array<{ id: number; name: string; registration_number: string }>;
   canManageAssignees: boolean;
+  canDecideNow?: boolean;
+  userRole?: 'RH' | 'Comissão' | 'Sem permissão';
 }>();
 
 const response = ref('');
@@ -36,6 +40,7 @@ const decision = ref<'respondido' | 'indeferido' | null>(null);
 const responseAttachments = ref<File[]>([]);
 const fileInput = ref<HTMLInputElement | null>(null);
 const isAnalyzing = ref(props.recourse.status === 'em_analise');
+const canDecideNow = ref(props.canDecideNow ?? true);
 
 // Estados para gerenciar responsáveis
 const selectedPersonId = ref<number | null>(null);
@@ -85,6 +90,10 @@ function submitAnalysis() {
     alert('Informe o parecer e selecione o tipo de decisão.');
     return;
   }
+  if (!canDecideNow.value) {
+    alert('A decisão não pode ser tomada nesta instância. Aguarde o processo retornar para sua instância.');
+    return;
+  }
 
   const formData = new FormData();
   formData.append('status', decision.value);
@@ -97,6 +106,12 @@ function submitAnalysis() {
 
   router.post(route('recourses.respond', props.recourse.id), formData, {
     forceFormData: true,
+  });
+}
+
+function returnToPreviousInstance() {
+  router.post(route('recourses.return', props.recourse.id), {}, {
+    preserveScroll: true,
   });
 }
 
@@ -176,6 +191,10 @@ function goBack() {
                 <icons.FileText class="w-4 h-4" />
                 <strong>Tipo:</strong> {{ recourse.evaluation.type }}
               </span>
+              <span class="flex items-center gap-1">
+                <icons.Building2 class="w-4 h-4" />
+                <strong>Instância Atual:</strong> {{ recourse.current_instance || '—' }}
+              </span>
             </div>
           </div>
           <div class="flex items-center gap-3">
@@ -194,6 +213,18 @@ function goBack() {
               <icons.ArrowLeftIcon class="w-4 h-4 mr-2" />
               Voltar
             </button>
+          </div>
+        </div>
+
+        <!-- Info de última devolução -->
+        <div v-if="recourse.last_return" class="mt-2 p-3 bg-amber-50 border border-amber-200 rounded">
+          <div class="flex items-start gap-2 text-amber-800">
+            <icons.Reply class="w-4 h-4 mt-0.5" />
+            <div class="text-sm">
+              <p>
+                Recurso devolvido para <strong>{{ recourse.last_return.to }}</strong> por <strong>{{ recourse.last_return.by }}</strong> em {{ recourse.last_return.at }}.
+              </p>
+            </div>
           </div>
         </div>
       </div>
@@ -552,14 +583,14 @@ function goBack() {
                 </label>
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <label class="flex items-center justify-center gap-3 p-4 border-2 rounded-lg cursor-pointer transition-colors"
-                         :class="decision === 'respondido' ? 'border-gray-500 bg-gray-50 text-gray-700' : 'border-gray-300 hover:border-gray-400'">
-                    <input type="radio" v-model="decision" value="respondido" class="text-gray-600" />
+                         :class="[decision === 'respondido' ? 'border-gray-500 bg-gray-50 text-gray-700' : 'border-gray-300 hover:border-gray-400', !canDecideNow ? 'opacity-60 cursor-not-allowed' : '']">
+                    <input type="radio" v-model="decision" value="respondido" class="text-gray-600" :disabled="!canDecideNow" />
                     <icons.CheckCircle class="w-5 h-5" />
                     <span class="font-medium">DEFERIR RECURSO</span>
                   </label>
                   <label class="flex items-center justify-center gap-3 p-4 border-2 rounded-lg cursor-pointer transition-colors"
-                         :class="decision === 'indeferido' ? 'border-gray-500 bg-gray-50 text-gray-700' : 'border-gray-300 hover:border-gray-400'">
-                    <input type="radio" v-model="decision" value="indeferido" class="text-gray-600" />
+                         :class="[decision === 'indeferido' ? 'border-gray-500 bg-gray-50 text-gray-700' : 'border-gray-300 hover:border-gray-400', !canDecideNow ? 'opacity-60 cursor-not-allowed' : '']">
+                    <input type="radio" v-model="decision" value="indeferido" class="text-gray-600" :disabled="!canDecideNow" />
                     <icons.XCircle class="w-5 h-5" />
                     <span class="font-medium">INDEFERIR RECURSO</span>
                   </label>
@@ -571,12 +602,13 @@ function goBack() {
                 <button
                   @click="submitAnalysis"
                   class="px-8 py-3 bg-gray-700 text-white rounded-lg hover:bg-gray-800 transition-colors text-lg font-medium flex items-center gap-2 mx-auto"
-                  :disabled="!decision || !response.trim()"
-                  :class="{ 'opacity-50 cursor-not-allowed': !decision || !response.trim() }"
+                  :disabled="!decision || !response.trim() || !canDecideNow"
+                  :class="{ 'opacity-50 cursor-not-allowed': !decision || !response.trim() || !canDecideNow }"
                 >
                   <icons.Save class="w-5 h-5" />
                   Finalizar Análise e Salvar Parecer
                 </button>
+                <div v-if="!canDecideNow" class="text-xs text-gray-500 mt-2">A decisão final só pode ser tomada pela instância atual.</div>
               </div>
             </div>
           </template>
@@ -598,6 +630,24 @@ function goBack() {
               </button>
             </div>
           </template>
+        </div>
+      </div>
+
+      <!-- Ação: Devolver para instância anterior -->
+      <div v-if="(recourse.current_instance === 'RH' && userRole === 'RH') || (recourse.current_instance === 'Comissao' && userRole === 'Comissão')" class="bg-white rounded-lg shadow-sm border p-4">
+        <div class="flex items-center justify-between">
+          <div class="text-sm text-gray-700 flex items-center gap-2">
+            <icons.Reply class="w-4 h-4" />
+            <span>Precisa de complementação? Você pode devolver para a instância anterior.</span>
+          </div>
+          <button
+            class="px-4 py-2 bg-amber-600 text-white rounded hover:bg-amber-700 transition-colors text-sm flex items-center gap-2"
+            type="button"
+            @click="returnToPreviousInstance"
+          >
+            <icons.Reply class="w-4 h-4" />
+            Devolver
+          </button>
         </div>
       </div>
 

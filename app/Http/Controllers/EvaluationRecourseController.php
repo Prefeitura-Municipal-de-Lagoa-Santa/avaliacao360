@@ -360,6 +360,7 @@ class EvaluationRecourseController extends Controller
             'person_id' => $person->id,
             'text' => $request->text,
             'status' => 'aberto',
+            'current_instance' => 'Comissao',
         ]);
 
         $recourse->logs()->create([
@@ -390,6 +391,7 @@ class EvaluationRecourseController extends Controller
             'responseAttachments',
             'person',
             'user',
+            'lastReturnedBy',
             'logs' => fn($q) => $q->orderBy('created_at'),
         ]);
 
@@ -398,8 +400,14 @@ class EvaluationRecourseController extends Controller
                 'id' => $recourse->id,
                 'text' => $recourse->text,
                 'status' => $recourse->status,
+                'current_instance' => $recourse->current_instance,
                 'response' => $recourse->response,
                 'responded_at' => optional($recourse->responded_at)?->format('Y-m-d'),
+                'last_return' => $recourse->lastReturnedBy ? [
+                    'by' => $recourse->lastReturnedBy->name,
+                    'to' => $recourse->last_returned_to_instance,
+                    'at' => optional($recourse->last_returned_at)?->format('d/m/Y H:i'),
+                ] : null,
                 'attachments' => $recourse->attachments->map(fn($a) => [
                     'name' => $a->original_name,
                     'url' => Storage::url($a->file_path),
@@ -483,6 +491,7 @@ class EvaluationRecourseController extends Controller
             'recourse' => [
                 'id' => $recourse->id,
                 'status' => $recourse->status,
+                'current_instance' => $recourse->current_instance,
                 'text' => $recourse->text,
                 'response' => $recourse->response,
                 'attachments' => $recourse->attachments->map(fn($a) => [
@@ -519,10 +528,19 @@ class EvaluationRecourseController extends Controller
                     'message' => $log->message,
                     'created_at' => $log->created_at->format('d/m/Y H:i'),
                 ]),
+                'last_return' => $recourse->lastReturnedBy ? [
+                    'by' => $recourse->lastReturnedBy->name,
+                    'to' => $recourse->last_returned_to_instance,
+                    'at' => optional($recourse->last_returned_at)?->format('d/m/Y H:i'),
+                ] : null,
             ],
             'availablePersons' => $availablePersons,
             'canManageAssignees' => $canManageAssignees, // Apenas RH puro pode gerenciar responsáveis
             'userRole' => $isComissao ? 'Comissão' : ($isRH ? 'RH' : 'Sem permissão'), // Para debug/informação
+            'canDecideNow' => (
+                ($recourse->current_instance === 'RH' && $isRH) ||
+                ($recourse->current_instance === 'Comissao' && $this->isResponsibleForRecourse($recourse))
+            ),
         ]);
     }
 
@@ -551,6 +569,17 @@ class EvaluationRecourseController extends Controller
         // Verifica se o usuário pode responder (RH ou responsável pelo recurso)
         if (!$this->canAccessRecourse($recourse)) {
             return redirect()->back()->with('error', 'Você não tem permissão para responder este recurso.');
+        }
+
+        // Regras de instância: só quem está na instância atual pode deferir/indeferir
+        $user = Auth::user();
+        $isRH = $this->isRH();
+        $isComissao = $user && $user->roles->pluck('name')->contains('Comissão');
+        if ($recourse->current_instance === 'RH' && !$isRH) {
+            return redirect()->back()->with('error', 'A decisão final só pode ser tomada pelo RH nesta etapa.');
+        }
+        if ($recourse->current_instance === 'Comissao' && !$this->isResponsibleForRecourse($recourse)) {
+            return redirect()->back()->with('error', 'A decisão nesta etapa é exclusiva da Comissão responsável.');
         }
 
         $validated = $request->validate([
@@ -585,6 +614,55 @@ class EvaluationRecourseController extends Controller
         return redirect()
             ->back()
             ->with('success', 'Parecer salvo com sucesso!');
+    }
+
+    /**
+     * Devolver o processo para a instância anterior, registrando quem devolveu e para quem foi devolvido.
+     * Regra: RH pode devolver para Comissão quando estiver com RH; Comissão pode devolver para RH quando estiver com Comissão.
+     */
+    public function returnToPreviousInstance(Request $request, EvaluationRecourse $recourse)
+    {
+        if (!$this->canAccessRecourse($recourse)) {
+            return redirect()->back()->with('error', 'Você não tem permissão para devolver este recurso.');
+        }
+
+        $user = Auth::user();
+        $isRH = $this->isRH();
+        $isComissao = $user && $user->roles->pluck('name')->contains('Comissão');
+
+        // Determinar para qual instância será devolvido
+        if ($recourse->current_instance === 'RH') {
+            // Somente RH pode devolver daqui para a Comissão
+            if (!$isRH) {
+                return redirect()->back()->with('error', 'Apenas o RH pode devolver neste estágio.');
+            }
+            $to = 'Comissao';
+        } elseif ($recourse->current_instance === 'Comissao') {
+            // Somente Comissão responsável pode devolver para RH
+            if (!$this->isResponsibleForRecourse($recourse)) {
+                return redirect()->back()->with('error', 'Apenas a Comissão responsável pode devolver neste estágio.');
+            }
+            $to = 'RH';
+        } else {
+            return redirect()->back()->with('error', 'Instância atual inválida.');
+        }
+
+        // Atualiza instância e registra devolução
+        $recourse->update([
+            'current_instance' => $to,
+            'last_returned_by_user_id' => $user->id,
+            'last_returned_to_instance' => $to,
+            'last_returned_at' => now(),
+            'status' => $recourse->status === 'aberto' ? 'em_analise' : $recourse->status, // mantém fluxo ativo
+        ]);
+
+        $byName = $user->name;
+        $recourse->logs()->create([
+            'status' => 'devolvido',
+            'message' => "Recurso devolvido para {$to} por {$byName}.",
+        ]);
+
+        return redirect()->back()->with('success', 'Recurso devolvido com sucesso.');
     }
 
     public function assignResponsible(Request $request, EvaluationRecourse $recourse)
