@@ -12,6 +12,7 @@ const props = defineProps<{
       person: { name: string };
       evaluation: { year: string; id: number };
       responsiblePersons?: Array<{ name: string }>;
+      last_return?: { by: string; to: 'RH' | 'Comissao' | null; at: string } | null;
     }>;
     links: any;
     meta: any;
@@ -25,6 +26,7 @@ const statusLabels: Record<string, string> = {
   em_analise: 'Em Análise',
   respondido: 'Deferidos',
   indeferido: 'Indeferidos',
+  devolvidos: 'Devolvidos',
   todos: 'Todos',
 };
 
@@ -78,6 +80,11 @@ function goBack() {
             <td class="px-4 py-2">{{ r.person.name }}</td>
             <td class="px-4 py-2">{{ r.evaluation.year }}</td>
             <td class="px-4 py-2 capitalize">{{ r.status.replace('_', ' ') }}</td>
+            <td v-if="r.last_return" class="px-4 py-2 text-xs text-amber-700">
+              <div class="inline-flex items-center gap-1 bg-amber-50 border border-amber-200 px-2 py-1 rounded">
+                <icons.Reply class="w-3 h-3" /> devolvido {{ r.last_return.at }}
+              </div>
+            </td>
             <td v-if="canManageAssignees" class="px-4 py-2">
               <div v-if="r.responsiblePersons && r.responsiblePersons.length > 0" class="flex flex-wrap gap-1">
                 <span 

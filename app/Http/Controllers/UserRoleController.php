@@ -27,7 +27,7 @@ class UserRoleController extends Controller
     public function assign(Request $request, User $user)
     {
         $validated = $request->validate([
-            'role' => 'nullable|string|in:RH,Comissão',
+            'role' => 'nullable|string|in:RH,Comissão,Diretor RH,Secretario Gestão',
         ]);
 
         $roleName = $validated['role'] ?? null;

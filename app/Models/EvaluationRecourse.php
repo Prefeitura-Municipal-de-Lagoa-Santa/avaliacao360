@@ -15,16 +15,36 @@ class EvaluationRecourse extends Model
         'text',
         'status',
         'current_instance',
+        'stage',
+        'workflow_stage',
         'last_returned_by_user_id',
         'last_returned_to_instance',
         'last_returned_at',
         'response',
         'responded_at',
+        // Extended workflow fields
+        'dgp_decision',
+        'dgp_decided_at',
+        'dgp_notes',
+        'first_ack_at',
+        'is_second_instance',
+        'second_instance_requested_at',
+        'second_instance_text',
+        'secretary_decision',
+        'secretary_decided_at',
+        'secretary_notes',
+        'second_ack_at',
     ];
 
     protected $casts = [
         'responded_at' => 'datetime',
         'last_returned_at' => 'datetime',
+        'dgp_decided_at' => 'datetime',
+        'first_ack_at' => 'datetime',
+        'is_second_instance' => 'boolean',
+        'second_instance_requested_at' => 'datetime',
+        'secretary_decided_at' => 'datetime',
+        'second_ack_at' => 'datetime',
     ];
 
     public function evaluation()

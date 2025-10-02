@@ -82,6 +82,15 @@ task('build:assets', [
     'npm:build',
 ])->desc('Instalar dependências NPM e compilar assets');
 
+// Garante que o arquivo Vite "hot" não exista em produção (evita apontar para o dev server)
+desc('Remover arquivo Vite hot');
+task('vite:remove-hot', function () {
+    // Remove de um release novo (se existir por engano)
+    run('rm -f {{release_path}}/public/hot || true');
+    // Remove também do release atual (por segurança)
+    run('[ -L {{deploy_path}}/current ] && rm -f $(readlink -f {{deploy_path}}/current)/public/hot || true');
+});
+
 
 desc('Subir containers Docker');
 task('docker:up', function () {
@@ -98,6 +107,45 @@ desc('Executar migrations');
 task('artisan:migrate', function () {
     run('[ -L {{deploy_path}}/current ] && cd $(readlink -f {{deploy_path}}/current) && docker compose --project-name {{docker_project_name}} exec -T app php artisan migrate --force || (cd {{release_path}} && docker compose --project-name {{docker_project_name}} run --rm --no-deps --entrypoint "" -w /var/www/html app php artisan migrate --force)');
 });
+
+// Seeders opcionais (não executam automaticamente no deploy)
+desc('Rodar seeder: CreatePermissionsFromRoutesSeeder');
+task('seed:permissions', function () {
+    $cmd = 'php artisan db:seed --class="Database\\Seeders\\CreatePermissionsFromRoutesSeeder" --force';
+    $script = 'if [ -L {{deploy_path}}/current ]; then \
+        cd $(readlink -f {{deploy_path}}/current); \
+        if docker compose --project-name {{docker_project_name}} ps -q app | grep -q .; then \
+            docker compose --project-name {{docker_project_name}} exec -T app ' . $cmd . '; \
+        else \
+            docker compose --project-name {{docker_project_name}} run --rm --no-deps --entrypoint "" -w /var/www/html app ' . $cmd . '; \
+        fi; \
+    else \
+        echo "Nenhum release atual encontrado. Execute um deploy primeiro."; exit 1; \
+    fi';
+    run($script);
+});
+
+desc('Rodar seeder: CreateRolesSeeder');
+task('seed:roles', function () {
+    $cmd = 'php artisan db:seed --class="Database\\Seeders\\CreateRolesSeeder" --force';
+    $script = 'if [ -L {{deploy_path}}/current ]; then \
+        cd $(readlink -f {{deploy_path}}/current); \
+        if docker compose --project-name {{docker_project_name}} ps -q app | grep -q .; then \
+            docker compose --project-name {{docker_project_name}} exec -T app ' . $cmd . '; \
+        else \
+            docker compose --project-name {{docker_project_name}} run --rm --no-deps --entrypoint "" -w /var/www/html app ' . $cmd . '; \
+        fi; \
+    else \
+        echo "Nenhum release atual encontrado. Execute um deploy primeiro."; exit 1; \
+    fi';
+    run($script);
+});
+
+desc('Rodar seeders de permissões e papéis');
+task('seed:all', [
+    'seed:permissions',
+    'seed:roles',
+]);
 
 desc('Cachear configurações Laravel');
 task('artisan:cache', function () {
@@ -195,6 +243,7 @@ task('deploy', [
     'permissions:fix',
     'deploy:vendors',
     'build:assets',
+    'vite:remove-hot',
     'deploy:publish',
     'docker:up',
     'docker:wait',
@@ -226,6 +275,7 @@ task('deploy:quick', [
     'deploy:shared',
     'permissions:fix',
     'deploy:vendors',
+    'vite:remove-hot',
     'deploy:publish',
     'docker:up',
     'docker:wait',
@@ -283,5 +333,50 @@ task('status', function () {
     run('cd $(readlink -f {{deploy_path}}/current) && docker compose --project-name {{docker_project_name}} ps');
     run('df -h | grep -E "Filesystem|/var/www"');
     run('free -h');
+});
+
+// ============================
+// HEALTH CHECKS
+// ============================
+desc('Health: testar acesso via HOST (porta 8006)');
+task('health:host', function () {
+    // Mostra cabeçalhos e status ao acessar a porta mapeada pelo host
+    run('curl -sS -I http://127.0.0.1:8006 | sed -n "1,20p" || true');
+    run('curl -sS -o /dev/null -w "HOST HTTP %{http_code} -> %{url_effective}\n" http://127.0.0.1:8006 || true');
+});
+
+desc('Health: testar acesso dentro do CONTAINER');
+task('health:container', function () {
+    $cmd = 'curl -sS -I http://localhost | sed -n "1,20p" || true';
+    run('cd $(readlink -f {{deploy_path}}/current) && docker compose --project-name {{docker_project_name}} exec -T app bash -lc '.escapeshellarg($cmd));
+    $cmd2 = 'curl -sS -o /dev/null -w "CONTAINER HTTP %{http_code} -> %{url_effective}\n" http://localhost || true';
+    run('cd $(readlink -f {{deploy_path}}/current) && docker compose --project-name {{docker_project_name}} exec -T app bash -lc '.escapeshellarg($cmd2));
+});
+
+// Verificar se o arquivo public/hot existe no release atual remoto
+desc('Checar arquivo Vite hot remoto');
+task('check:hot', function () {
+    run('[ -L {{deploy_path}}/current ] && ls -l $(readlink -f {{deploy_path}}/current)/public/hot || echo "(sem arquivo hot)"');
+});
+
+// Inspecionar Nginx do HOST (proxy reverso externo)
+desc('Proxy: listar portas e processos (host)');
+task('proxy:ss', function () {
+    run('sudo ss -ltnp | grep -E ":80|:443|:8006" || true');
+});
+
+desc('Proxy: verificar configuração Nginx (host)');
+task('proxy:nginx:config', function () {
+    run('sudo nginx -T | sed -n "1,120p"');
+});
+
+desc('Proxy: últimos erros do Nginx (host)');
+task('proxy:nginx:errors', function () {
+    run('sudo tail -n 100 /var/log/nginx/error.log || true');
+});
+
+desc('Health: HOST com fallback (curl/wget)');
+task('health:host2', function () {
+    run('(command -v curl >/dev/null 2>&1 && curl -sS -I http://127.0.0.1:8006 | sed -n "1,20p") || (command -v wget >/dev/null 2>&1 && wget -S --spider http://127.0.0.1:8006 2>&1 | sed -n "1,20p") || echo "Nem curl nem wget disponíveis"');
 });
 

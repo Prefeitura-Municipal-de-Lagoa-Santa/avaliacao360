@@ -11,7 +11,20 @@ const props = defineProps<{
     text: string;
     status: string;
     current_instance?: 'RH' | 'Comissao';
+    stage?: string | null;
     response: string | null;
+  last_return?: { by: string; to: 'RH' | 'Comissao' | null; at: string | null } | null;
+    actions?: {
+      canForwardToCommission?: boolean;
+      forwardToCommissionDisabledReason?: string | null;
+      canForwardToDgp?: boolean;
+      canDgpDecide?: boolean;
+      canDgpReturnToCommission?: boolean;
+      canRhFinalizeFirst?: boolean;
+      canForwardToSecretary?: boolean;
+      canSecretaryDecide?: boolean;
+      canRhFinalizeSecond?: boolean;
+    };
     attachments: Array<{ name: string; url: string }>;
     responseAttachments?: Array<{ name: string; url: string }>;
     responsiblePersons: Array<{ id: number; name: string; registration_number: string }>;
@@ -26,8 +39,7 @@ const props = defineProps<{
       is_chef_evaluation: boolean;
       original_evaluation_type: string;
     };
-    logs: Array<{ status: string; message: string | null; created_at: string }>;
-    last_return?: { by: string; to: 'RH' | 'Comissao' | null; at: string } | null;
+  logs: Array<{ status: string; message: string | null; created_at: string }>;
   };
   availablePersons: Array<{ id: number; name: string; registration_number: string }>;
   canManageAssignees: boolean;
@@ -37,10 +49,17 @@ const props = defineProps<{
 
 const response = ref('');
 const decision = ref<'respondido' | 'indeferido' | null>(null);
+const dgpNotes = ref('');
 const responseAttachments = ref<File[]>([]);
 const fileInput = ref<HTMLInputElement | null>(null);
 const isAnalyzing = ref(props.recourse.status === 'em_analise');
 const canDecideNow = ref(props.canDecideNow ?? true);
+const showReturnModal = ref(false);
+const showForwardModal = ref(false);
+const forwardMessage = ref('');
+const showDgpReturnModal = ref(false);
+const dgpReturnMessage = ref('');
+const returnMessage = ref('');
 
 // Estados para gerenciar responsáveis
 const selectedPersonId = ref<number | null>(null);
@@ -51,6 +70,7 @@ const showRemoveModal = ref(false);
 const responsibleToRemove = ref<{ id: number; name: string; registration_number: string } | null>(null);
 
 function markAsAnalyzing() {
+  if (!canDecideNow.value) return;
   router.post(route('recourses.markAnalyzing', props.recourse.id), {}, {
     preserveScroll: true,
     onSuccess: () => {
@@ -60,7 +80,7 @@ function markAsAnalyzing() {
 }
 
 function openFile(file: { name: string; url: string }) {
-  if (!isAnalyzing.value) markAsAnalyzing();
+  if (!isAnalyzing.value && canDecideNow.value) markAsAnalyzing();
 
   const link = document.createElement('a');
   link.href = file.url;
@@ -110,8 +130,36 @@ function submitAnalysis() {
 }
 
 function returnToPreviousInstance() {
-  router.post(route('recourses.return', props.recourse.id), {}, {
+  if (!returnMessage.value.trim()) {
+    alert('Descreva uma justificativa para a devolução.');
+    return;
+  }
+  router.post(route('recourses.return', props.recourse.id), { message: returnMessage.value }, {
     preserveScroll: true,
+    onFinish: () => {
+      showReturnModal.value = false;
+      returnMessage.value = '';
+    }
+  });
+}
+
+function handleForwardToCommission() {
+  if (!props.recourse.actions?.canForwardToCommission) return;
+  // Se houve devolução anterior, exigir justificativa via modal
+  if (props.recourse.last_return) {
+    showForwardModal.value = true;
+    return;
+  }
+  router.post(route('recourses.forwardToCommission', props.recourse.id));
+}
+
+function confirmForwardToCommission() {
+  if (!forwardMessage.value.trim()) return;
+  router.post(route('recourses.forwardToCommission', props.recourse.id), { message: forwardMessage.value }, {
+    onSuccess: () => {
+      showForwardModal.value = false;
+      forwardMessage.value = '';
+    }
   });
 }
 
@@ -194,6 +242,10 @@ function goBack() {
               <span class="flex items-center gap-1">
                 <icons.Building2 class="w-4 h-4" />
                 <strong>Instância Atual:</strong> {{ recourse.current_instance || '—' }}
+              </span>
+              <span v-if="recourse.stage" class="flex items-center gap-1">
+                <icons.Flag class="w-4 h-4" />
+                <strong>Etapa:</strong> {{ recourse.stage }}
               </span>
             </div>
           </div>
@@ -448,6 +500,126 @@ function goBack() {
         </div>
       </div>
 
+      <!-- Ação RH: encaminhar para Comissão -->
+      <div v-if="userRole === 'RH' && recourse.current_instance === 'RH'" class="bg-white rounded-lg shadow-sm border p-4">
+        <div class="flex items-center justify-between">
+          <div class="text-sm text-gray-700 flex items-center gap-2">
+            <icons.Send class="w-4 h-4" />
+            <span>Encaminhar o recurso para a Comissão iniciar a análise.</span>
+          </div>
+          <button
+            class="px-4 py-2 rounded transition-colors text-sm flex items-center gap-2"
+            :class="recourse.actions?.canForwardToCommission ? 'bg-gray-700 text-white hover:bg-gray-800' : 'bg-gray-300 text-gray-600 cursor-not-allowed'"
+            type="button"
+            :disabled="!recourse.actions?.canForwardToCommission"
+            @click="handleForwardToCommission"
+          >
+            <icons.Send class="w-4 h-4" />
+            Encaminhar para Comissão
+          </button>
+        </div>
+        <p class="text-xs mt-2" :class="recourse.actions?.canForwardToCommission ? 'text-gray-500' : 'text-amber-700'">
+          {{ recourse.actions?.canForwardToCommission ? 'Dica: atribua ao menos um membro da Comissão como responsável antes de encaminhar.' : (recourse.actions?.forwardToCommissionDisabledReason || 'Ação indisponível no momento.') }}
+        </p>
+      </div>
+
+      <!-- Ações adicionais de fluxo -->
+      <div class="space-y-3">
+        <!-- RH: Encaminhar à DGP (removido: agora automático após parecer da Comissão) -->
+
+        <!-- DGP: Registrar decisão -->
+        <div v-if="recourse.actions?.canDgpDecide" class="bg-white rounded-lg shadow-sm border p-4">
+          <div class="flex items-center gap-2 mb-3 text-sm text-gray-700">
+            <icons.BadgeCheck class="w-4 h-4" /> Registrar decisão da DGP
+          </div>
+          <div class="mt-2">
+            <label class="block text-sm text-gray-700 mb-1">Justificativa (obrigatória para indeferir)</label>
+            <textarea v-model="dgpNotes" rows="3" class="w-full border rounded p-2" placeholder="Descreva a justificativa caso vá indeferir..."></textarea>
+          </div>
+          <div class="flex flex-wrap gap-2 mt-3">
+            <button class="px-4 py-2 bg-green-600 text-white rounded text-sm" @click="router.post(route('recourses.dgpDecision', recourse.id), { decision: 'homologado', notes: dgpNotes })">Deferir</button>
+            <button class="px-4 py-2 bg-red-600 text-white rounded text-sm" :disabled="!dgpNotes.trim()" @click="router.post(route('recourses.dgpDecision', recourse.id), { decision: 'nao_homologado', notes: dgpNotes })">Indeferir</button>
+          </div>
+        </div>
+
+        <!-- DGP: Devolver para Comissão (com justificativa) -->
+        <div v-if="recourse.actions?.canDgpReturnToCommission" class="bg-white rounded-lg shadow-sm border p-4 flex items-center justify-between">
+          <div class="text-sm text-gray-700 flex items-center gap-2">
+            <icons.RotateCcw class="w-4 h-4" />
+            <span>Devolver para a Comissão com justificativa.</span>
+          </div>
+          <button class="px-4 py-2 bg-amber-600 text-white rounded hover:bg-amber-700 text-sm" @click="showDgpReturnModal = true">Devolver à Comissão</button>
+        </div>
+
+        <!-- RH: Finalizar primeira instância -->
+        <div v-if="userRole === 'RH' && recourse.actions?.canRhFinalizeFirst" class="bg-white rounded-lg shadow-sm border p-4 flex items-center justify-between">
+          <div class="text-sm text-gray-700 flex items-center gap-2">
+            <icons.Check class="w-4 h-4" />
+            <span>Finalizar trâmites e comunicar o servidor (1ª instância).</span>
+          </div>
+          <button class="px-4 py-2 bg-gray-700 text-white rounded hover:bg-gray-800 text-sm" @click="router.post(route('recourses.rhFinalizeFirst', recourse.id))">Finalizar RH (1ª)</button>
+        </div>
+
+        <!-- RH: Encaminhar ao Secretário (2ª instância) -->
+        <div v-if="userRole === 'RH' && recourse.actions?.canForwardToSecretary" class="bg-white rounded-lg shadow-sm border p-4 flex items-center justify-between">
+          <div class="text-sm text-gray-700 flex items-center gap-2">
+            <icons.Send class="w-4 h-4" />
+            <span>Encaminhar o processo ao Secretário para análise (2ª instância).</span>
+          </div>
+          <button class="px-4 py-2 bg-gray-700 text-white rounded hover:bg-gray-800 text-sm" @click="router.post(route('recourses.forwardToSecretary', recourse.id))">Enviar ao Secretário</button>
+        </div>
+
+        <!-- Secretário: Registrar decisão -->
+        <div v-if="recourse.actions?.canSecretaryDecide" class="bg-white rounded-lg shadow-sm border p-4">
+          <div class="flex items-center gap-2 mb-3 text-sm text-gray-700">
+            <icons.BadgeCheck class="w-4 h-4" /> Registrar decisão do Secretário (2ª instância)
+          </div>
+          <div class="flex flex-wrap gap-2">
+            <button class="px-4 py-2 bg-green-600 text-white rounded text-sm" @click="router.post(route('recourses.secretaryDecision', recourse.id), { decision: 'homologado' })">Homologar</button>
+            <button class="px-4 py-2 bg-red-600 text-white rounded text-sm" @click="router.post(route('recourses.secretaryDecision', recourse.id), { decision: 'nao_homologado' })">Não homologar</button>
+          </div>
+        </div>
+
+        <!-- RH: Finalizar segunda instância -->
+        <div v-if="userRole === 'RH' && recourse.actions?.canRhFinalizeSecond" class="bg-white rounded-lg shadow-sm border p-4 flex items-center justify-between">
+          <div class="text-sm text-gray-700 flex items-center gap-2">
+            <icons.Check class="w-4 h-4" />
+            <span>Finalizar trâmites e comunicar o servidor (2ª instância).</span>
+          </div>
+          <button class="px-4 py-2 bg-gray-700 text-white rounded hover:bg-gray-800 text-sm" @click="router.post(route('recourses.rhFinalizeSecond', recourse.id))">Finalizar RH (2ª)</button>
+        </div>
+      </div>
+
+      <!-- Modal: Justificativa para reencaminhar à Comissão -->
+      <div v-if="showForwardModal" class="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+        <div class="bg-white rounded-lg shadow-xl w-full max-w-lg p-6">
+          <h3 class="text-lg font-semibold text-gray-900">Justificar reenvio para a Comissão</h3>
+          <p class="text-sm text-gray-600 mt-2">Este recurso foi devolvido ao RH. Informe a justificativa para reencaminhar à Comissão.</p>
+          <div class="mt-4">
+            <textarea v-model="forwardMessage" rows="4" class="w-full border rounded p-2" placeholder="Descreva a justificativa..."></textarea>
+          </div>
+          <div class="mt-4 flex justify-end gap-2">
+            <button class="px-4 py-2 bg-gray-100 text-gray-700 rounded hover:bg-gray-200" @click="showForwardModal = false">Cancelar</button>
+            <button class="px-4 py-2 bg-gray-700 text-white rounded hover:bg-gray-800" :disabled="!forwardMessage.trim()" @click="confirmForwardToCommission">Confirmar envio</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Modal: DGP devolver para Comissão -->
+      <div v-if="showDgpReturnModal" class="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+        <div class="bg-white rounded-lg shadow-xl w-full max-w-lg p-6">
+          <h3 class="text-lg font-semibold text-gray-900">Devolver para a Comissão</h3>
+          <p class="text-sm text-gray-600 mt-2">Informe a justificativa para devolver o recurso à Comissão.</p>
+          <div class="mt-4">
+            <textarea v-model="dgpReturnMessage" rows="4" class="w-full border rounded p-2" placeholder="Descreva a justificativa..."></textarea>
+          </div>
+          <div class="mt-4 flex justify-end gap-2">
+            <button class="px-4 py-2 bg-gray-100 text-gray-700 rounded hover:bg-gray-200" @click="showDgpReturnModal = false">Cancelar</button>
+            <button class="px-4 py-2 bg-amber-600 text-white rounded hover:bg-amber-700" :disabled="!dgpReturnMessage.trim()" @click="router.post(route('recourses.dgpReturnToCommission', recourse.id), { message: dgpReturnMessage }, { onSuccess: () => { showDgpReturnModal = false; dgpReturnMessage = ''; } })">Confirmar devolução</button>
+          </div>
+        </div>
+      </div>
+
       <!-- SEÇÃO: Análise e Parecer da Comissão -->
       <div class="bg-white rounded-lg shadow-sm border">
         <div class="bg-gray-800 text-white p-4 rounded-t-lg">
@@ -505,8 +677,8 @@ function goBack() {
             </div>
           </template>
 
-          <!-- Formulário de análise -->
-          <template v-else-if="isAnalyzing">
+          <!-- Formulário de análise: somente Comissão responsável -->
+          <template v-else-if="isAnalyzing && canDecideNow">
             <div class="space-y-6">
               <!-- Área de texto para parecer -->
               <div>
@@ -613,8 +785,8 @@ function goBack() {
             </div>
           </template>
 
-          <!-- Botão para iniciar análise -->
-          <template v-else>
+          <!-- Botão para iniciar análise: somente Comissão responsável -->
+          <template v-else-if="canDecideNow">
             <div class="text-center py-8">
               <icons.Play class="w-12 h-12 text-gray-500 mx-auto mb-4" />
               <h3 class="text-lg font-semibold text-gray-800 mb-2">Pronto para Análise</h3>
@@ -630,11 +802,19 @@ function goBack() {
               </button>
             </div>
           </template>
+          <!-- Modo somente leitura para quem não pode decidir -->
+          <template v-else>
+            <div class="text-center py-8">
+              <icons.Lock class="w-12 h-12 text-gray-400 mx-auto mb-4" />
+              <h3 class="text-lg font-semibold text-gray-800 mb-2">Aguardando Comissão</h3>
+              <p class="text-gray-600">Somente a Comissão responsável pode iniciar a análise e registrar o parecer.</p>
+            </div>
+          </template>
         </div>
       </div>
 
-      <!-- Ação: Devolver para instância anterior -->
-      <div v-if="(recourse.current_instance === 'RH' && userRole === 'RH') || (recourse.current_instance === 'Comissao' && userRole === 'Comissão')" class="bg-white rounded-lg shadow-sm border p-4">
+  <!-- Ação: Devolver para instância anterior (somente Comissão responsável) -->
+  <div v-if="recourse.current_instance === 'Comissao' && userRole === 'Comissão' && canDecideNow" class="bg-white rounded-lg shadow-sm border p-4">
         <div class="flex items-center justify-between">
           <div class="text-sm text-gray-700 flex items-center gap-2">
             <icons.Reply class="w-4 h-4" />
@@ -643,11 +823,29 @@ function goBack() {
           <button
             class="px-4 py-2 bg-amber-600 text-white rounded hover:bg-amber-700 transition-colors text-sm flex items-center gap-2"
             type="button"
-            @click="returnToPreviousInstance"
+            @click="showReturnModal = true"
           >
             <icons.Reply class="w-4 h-4" />
             Devolver
           </button>
+        </div>
+      </div>
+
+      <!-- Modal de Devolução com Justificativa -->
+      <div v-if="showReturnModal" class="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+        <div class="bg-white rounded-lg shadow-xl max-w-lg w-full mx-4">
+          <div class="p-5 border-b">
+            <h3 class="text-lg font-semibold text-gray-900">Devolver Recurso</h3>
+            <p class="text-sm text-gray-500">Informe a justificativa para a devolução. Esta informação ficará registrada no histórico.</p>
+          </div>
+          <div class="p-5 space-y-3">
+            <label class="block text-sm font-medium text-gray-700">Justificativa</label>
+            <textarea v-model="returnMessage" rows="4" class="w-full border rounded p-2" placeholder="Descreva o que precisa ser complementado ou esclarecido..."></textarea>
+          </div>
+          <div class="p-5 border-t flex justify-end gap-2">
+            <button class="px-4 py-2 bg-gray-100 text-gray-700 rounded hover:bg-gray-200" @click="showReturnModal = false">Cancelar</button>
+            <button class="px-4 py-2 bg-amber-600 text-white rounded hover:bg-amber-700" @click="returnToPreviousInstance" :disabled="!returnMessage.trim()">Confirmar Devolução</button>
+          </div>
         </div>
       </div>
 

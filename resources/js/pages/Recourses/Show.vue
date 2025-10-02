@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { Head, Link, router } from '@inertiajs/vue3';
+import { ref } from 'vue';
 import DashboardLayout from '@/layouts/DashboardLayout.vue';
 import * as icons from 'lucide-vue-next';
 
@@ -10,6 +11,7 @@ const props = defineProps<{
     status: string;
     response?: string;
     responded_at?: string;
+    final_score?: number | null;
     attachments: Array<{ name: string; url: string }>;
     responseAttachments?: Array<{ name: string; url: string }>;
     evaluation: {
@@ -18,8 +20,15 @@ const props = defineProps<{
     };
     person: { name: string };
     logs: Array<{ status: string; message: string; created_at: string }>;
+    actions?: {
+      canAcknowledgeFirst: boolean;
+      canRequestSecondInstance: boolean;
+      canAcknowledgeSecond: boolean;
+    };
   };
 }>();
+
+const secondInstanceText = ref('');
 
 function openFile(file: { name: string; url: string }) {
   const link = document.createElement('a');
@@ -79,6 +88,17 @@ function goBack() {
         </div>
       </div>
 
+      <!-- Nota final após decisão da DGP -->
+      <div v-if="recourse.final_score !== null && recourse.final_score !== undefined" class="mt-4">
+        <div class="flex items-center gap-2 text-sm text-gray-700 font-medium mb-1">
+          <icons.BadgeCheck class="w-4 h-4 text-gray-700" /> Nota Final após decisão da DGP
+        </div>
+        <div class="flex items-center gap-2 bg-gray-50 border rounded px-4 py-3 inline-flex">
+          <span class="text-2xl font-bold text-blue-700">{{ recourse.final_score?.toFixed(1) }}</span>
+          <span class="text-sm text-gray-500">pts</span>
+        </div>
+      </div>
+
       <!-- Texto enviado -->
       <div class="mt-6">
         <h3 class="font-semibold text-sm text-gray-700">Texto enviado por você:</h3>
@@ -129,6 +149,35 @@ function goBack() {
               </a>
             </li>
           </ul>
+        </div>
+      </div>
+
+      <!-- Ações do Servidor -->
+      <div class="mt-6 space-y-3">
+        <div v-if="recourse.actions?.canAcknowledgeFirst" class="flex justify-end">
+          <button
+            class="px-4 py-2 bg-gray-700 text-white rounded hover:bg-gray-800 text-sm flex items-center gap-2"
+            @click="router.post(route('recourses.acknowledgeFirst', recourse.id))"
+          >
+            <icons.CheckCircleIcon class="w-4 h-4" /> Registrar ciência (1ª instância)
+          </button>
+        </div>
+        <div v-if="recourse.actions?.canRequestSecondInstance" class="flex items-center gap-2">
+          <input id="secondText" type="text" class="flex-1 border rounded p-2 text-sm" placeholder="Fundamentação para 2ª instância" v-model="secondInstanceText" />
+          <button
+            class="px-4 py-2 bg-amber-600 text-white rounded hover:bg-amber-700 text-sm"
+            @click="router.post(route('recourses.requestSecondInstance', recourse.id), { text: secondInstanceText })"
+          >
+            Solicitar 2ª instância
+          </button>
+        </div>
+        <div v-if="recourse.actions?.canAcknowledgeSecond" class="flex justify-end">
+          <button
+            class="px-4 py-2 bg-gray-700 text-white rounded hover:bg-gray-800 text-sm flex items-center gap-2"
+            @click="router.post(route('recourses.acknowledgeSecond', recourse.id))"
+          >
+            <icons.CheckCircleIcon class="w-4 h-4" /> Registrar ciência (2ª instância)
+          </button>
         </div>
       </div>
 

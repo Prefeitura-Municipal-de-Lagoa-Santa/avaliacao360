@@ -91,6 +91,8 @@ function goBack() {
                 <option value="">Remover papel</option>
                 <option value="RH">RH</option>
                 <option value="Comissão">Comissão</option>
+                <option value="Diretor RH">Diretor RH</option>
+                <option value="Secretario Gestão">Secretario Gestão</option>
               </select>
               <button
                 class="bg-blue-600 text-white px-3 py-1 rounded hover:bg-blue-700"

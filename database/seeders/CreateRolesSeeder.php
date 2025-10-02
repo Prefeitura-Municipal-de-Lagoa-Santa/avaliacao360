@@ -14,14 +14,17 @@ class CreateRolesSeeder extends Seeder
         $rh       = Role::updateOrCreate(['name' => 'RH'], ['level' => 5]);
         $comissao = Role::updateOrCreate(['name' => 'Comissão'], ['level' => 3]);
         $servidor = Role::updateOrCreate(['name' => 'Servidor'], ['level' => 1]);
+        $diretorRh = Role::updateOrCreate(['name' => 'Diretor RH'], ['level' => 6]);
+        $secretarioGestao = Role::updateOrCreate(['name' => 'Secretario Gestão'], ['level' => 6]);
 
         $permissions = Permission::all()->pluck('id', 'name');
 
         // Admin: tudo
         $admin->permissions()->sync($permissions->values());
 
-        // RH
-        $rh->permissions()->sync($permissions->only([
+        // RH (visualização e gestão de responsáveis; não inicia, não responde, não devolve)
+        $rhPermissions = [
+            'recourse',
             'configs',
             'configs.create',
             'configs.destroy',
@@ -47,21 +50,42 @@ class CreateRolesSeeder extends Seeder
             'people.update',
             'persons.confirm',
             'persons.preview',
-            'recourses',
+            // Recursos (somente acompanhar e gerenciar responsáveis)
+            'recourses.index',
+            'recourses.review',
+            'recourses.assignResponsible',
+            'recourses.removeResponsible',
+            'recourses.forwardToCommission',
             'releases.generate',
             'reports',
             'storage.local',
             'users.manage-roles',
             'users.assign-role',
-        ])->values());
+        ];
+        $rh->permissions()->sync($permissions->only($rhPermissions)->values());
+        // Diretor RH e Secretario Gestão herdam as permissões do RH
+        $diretorRh->permissions()->sync($permissions->only($rhPermissions)->values());
+        $secretarioGestao->permissions()->sync($permissions->only($rhPermissions)->values());
 
-        // Comissão
+        // Acrescenta permissões específicas às roles de direção
+        // Diretor RH: pode registrar decisão da DGP
+        if ($permissions->has('recourses.dgpDecision')) {
+            $diretorRh->permissions()->syncWithoutDetaching([$permissions['recourses.dgpDecision']]);
+        }
+        // Secretario Gestão: pode registrar decisão do Secretário
+        if ($permissions->has('recourses.secretaryDecision')) {
+            $secretarioGestao->permissions()->syncWithoutDetaching([$permissions['recourses.secretaryDecision']]);
+        }
+
+        // Comissão (atua no recurso)
         $comissao->permissions()->sync($permissions->only([
             'recourse',
             'recourses.index',
+            'recourses.review',
+            'recourses.personEvaluations',
             'recourses.markAnalyzing',
             'recourses.respond',
-            'recourses.review',
+            'recourses.return',
             'storage.local',
         ])->values());
 
