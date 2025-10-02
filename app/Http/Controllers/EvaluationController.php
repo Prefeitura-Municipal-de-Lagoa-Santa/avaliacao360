@@ -914,6 +914,8 @@ class EvaluationController extends Controller
 
             // Determinar se é gestor baseado na função organizacional da pessoa
             $isGestor = $person->jobFunction && $person->jobFunction->is_manager;
+            // Evita variável indefinida quando não for gestor
+            $deveTeravaliacaoEquipe = false;
 
             // Lógica da nota final
             if ($isGestor) {
