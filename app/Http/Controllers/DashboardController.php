@@ -336,12 +336,16 @@ class DashboardController extends Controller
     public function recourse()
     {
         $user = Auth::user();
-        $isRH = user_can('recourse');
+    $isRH = user_can('recourse');
 
         // Verifica se é RH ou se tem role "Comissão"
         $isComissao = $user && $user->roles->pluck('name')->contains('Comissão');
+        // Diretor/DGP (quem decide na etapa DGP)
+    $isDgp = $user && ($user->roles->pluck('name')->contains('Diretor RH') || $user->roles->pluck('name')->contains('DGP') || user_can('recourses.dgpDecision'));
+    // Secretário pode decidir na etapa do secretário
+    $isSecretary = $user && ($user->roles->pluck('name')->contains('Secretario Gestão') || $user->roles->pluck('name')->contains('Secretário') || $user->roles->pluck('name')->contains('Secretaria') || user_can('recourses.secretaryDecision'));
 
-        if (!$isRH && !$isComissao) {
+        if (!$isRH && !$isComissao && !$isDgp && !$isSecretary) {
             return redirect()->route('evaluations')->with('error', 'Você não tem permissão para acessar essa área.');
         }
 
@@ -361,20 +365,50 @@ class DashboardController extends Controller
                 $q->where('person_id', $person->id);
             });
 
-            $total = $responsibleRecourses->count();
-            $responded = (clone $responsibleRecourses)->where('status', 'respondido')->count();
-            $denied = (clone $responsibleRecourses)->where('status', 'indeferido')->count();
+            // Contar apenas os que ainda estão aguardando análise da Comissão
+            $awaitingCommissionCount = (clone $responsibleRecourses)
+                ->where('current_instance', 'Comissao')
+                ->where(function($q){
+                    $q->where('workflow_stage', 'commission_analysis')
+                      ->orWhere(function($q2){ $q2->whereNull('workflow_stage')->where('stage', 'commission_analysis'); });
+                })
+                ->whereNotIn('status', ['respondido', 'indeferido'])
+                ->count();
 
             return Inertia::render('Dashboard/Recourse', [
                 'recourse' => $recourse,
-                'totals' => [
-                    'opened' => (clone $responsibleRecourses)->where('status', 'aberto')->count(),
-                    'under_analysis' => (clone $responsibleRecourses)->where('status', 'em_analise')->count(),
-                    'responded' => $responded,
-                    'denied' => $denied,
-                    'analyzed_percent' => $total > 0 ? round($responded / $total * 100) . '%' : '0%',
-                ],
+                'commissionAwaitingCount' => $awaitingCommissionCount,
                 'userRole' => 'Comissão',
+            ]);
+        }
+
+    // Se for Diretor/DGP, mostrar um card focado no que aguarda sua decisão
+        if ($isDgp) {
+            $awaitingDgpCount = EvaluationRecourse::where(function($q){
+                    $q->where('workflow_stage', 'dgp_review')
+                      ->orWhere(function($q2){ $q2->whereNull('workflow_stage')->where('stage', 'dgp_review'); });
+                })
+                ->count();
+
+            return Inertia::render('Dashboard/Recourse', [
+                'recourse' => $recourse,
+                'awaitingDgpCount' => $awaitingDgpCount,
+                'userRole' => 'DGP',
+            ]);
+        }
+
+        // Se for Secretário, mostrar um card focado no que aguarda sua decisão
+        if ($isSecretary) {
+            $awaitingSecretaryCount = EvaluationRecourse::where(function($q){
+                    $q->where('workflow_stage', 'secretary_review')
+                      ->orWhere(function($q2){ $q2->whereNull('workflow_stage')->where('stage', 'secretary_review'); });
+                })
+                ->count();
+
+            return Inertia::render('Dashboard/Recourse', [
+                'recourse' => $recourse,
+                'awaitingSecretaryCount' => $awaitingSecretaryCount,
+                'userRole' => 'Secretário',
             ]);
         }
 

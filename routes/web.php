@@ -191,31 +191,37 @@ Route::middleware(['auth', 'verified', EnsureCpfIsFilled::class, RedirectIfMustC
     Route::post('/recourses/{recourse}/respond', [EvaluationRecourseController::class, 'respond'])
         ->name('recourses.respond');
 
-    // Diretoria do RH decide (homologação)
-    Route::post('/recourses/{recourse}/director-decision', [EvaluationRecourseController::class, 'directorDecision'])
-        ->name('recourses.directorDecision');
-
-    // Requerente registra ciência (1ª ou final)
-    Route::post('/recourses/{recourse}/acknowledge', [EvaluationRecourseController::class, 'acknowledge'])
-        ->name('recourses.acknowledge');
-
-    // RH encaminha à 2ª instância
-    Route::post('/recourses/{recourse}/escalate', [EvaluationRecourseController::class, 'escalateToSecretary'])
-        ->name('recourses.escalate');
-
-    // Secretário decide 2ª instância
-    Route::post('/recourses/{recourse}/secretary-decision', [EvaluationRecourseController::class, 'secretaryDecision'])
-        ->name('recourses.secretaryDecision');
-
-    // Devolver à instância anterior
-    Route::post('/recourses/{recourse}/return', [EvaluationRecourseController::class, 'returnToPrevious'])
+    Route::post('/recourses/{recourse}/return', [EvaluationRecourseController::class, 'returnToPreviousInstance'])
         ->name('recourses.return');
+
+    Route::post('/recourses/{recourse}/forward-to-commission', [EvaluationRecourseController::class, 'forwardToCommission'])
+        ->name('recourses.forwardToCommission');
 
     Route::post('/recourses/{recourse}/assign-responsible', [EvaluationRecourseController::class, 'assignResponsible'])
         ->name('recourses.assignResponsible');
 
     Route::delete('/recourses/{recourse}/remove-responsible', [EvaluationRecourseController::class, 'removeResponsible'])
         ->name('recourses.removeResponsible');
+
+    // Novas rotas para o fluxo pós-Comissão (DGP, RH, Secretário e ciência)
+    Route::post('/recourses/{recourse}/forward-to-dgp', [EvaluationRecourseController::class, 'forwardToDgp'])
+        ->name('recourses.forwardToDgp');
+    Route::post('/recourses/{recourse}/dgp-return', [EvaluationRecourseController::class, 'dgpReturnToCommission'])
+        ->name('recourses.dgpReturnToCommission');
+    Route::post('/recourses/{recourse}/dgp-decision', [EvaluationRecourseController::class, 'dgpDecision'])
+        ->name('recourses.dgpDecision');
+    Route::post('/recourses/{recourse}/ack-first', [EvaluationRecourseController::class, 'acknowledgeFirst'])
+        ->name('recourses.acknowledgeFirst');
+    Route::post('/recourses/{recourse}/second-instance', [EvaluationRecourseController::class, 'requestSecondInstance'])
+        ->name('recourses.requestSecondInstance');
+    Route::post('/recourses/{recourse}/forward-to-secretary', [EvaluationRecourseController::class, 'forwardToSecretary'])
+        ->name('recourses.forwardToSecretary');
+    Route::post('/recourses/{recourse}/secretary-decision', [EvaluationRecourseController::class, 'secretaryDecision'])
+        ->name('recourses.secretaryDecision');
+    Route::post('/recourses/{recourse}/rh-finalize-second', [EvaluationRecourseController::class, 'rhFinalizeSecond'])
+        ->name('recourses.rhFinalizeSecond');
+    Route::post('/recourses/{recourse}/ack-second', [EvaluationRecourseController::class, 'acknowledgeSecond'])
+        ->name('recourses.acknowledgeSecond');
 
     Route::get('/evaluations/unanswered', [EvaluationController::class, 'unanswered'])->name('evaluations.unanswered');
         // Rota de PDI não respondidas
