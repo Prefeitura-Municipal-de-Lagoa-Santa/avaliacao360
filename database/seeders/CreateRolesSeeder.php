@@ -12,6 +12,8 @@ class CreateRolesSeeder extends Seeder
     {
         $admin    = Role::updateOrCreate(['name' => 'Admin'], ['level' => 10]);
         $rh       = Role::updateOrCreate(['name' => 'RH'], ['level' => 5]);
+        $diretoriaRH = Role::updateOrCreate(['name' => 'Diretoria RH'], ['level' => 6]);
+        $secretario  = Role::updateOrCreate(['name' => 'Secretário'], ['level' => 7]);
         $comissao = Role::updateOrCreate(['name' => 'Comissão'], ['level' => 3]);
         $servidor = Role::updateOrCreate(['name' => 'Servidor'], ['level' => 1]);
     $diretorRh = Role::updateOrCreate(['name' => 'Diretor RH'], ['level' => 6]);

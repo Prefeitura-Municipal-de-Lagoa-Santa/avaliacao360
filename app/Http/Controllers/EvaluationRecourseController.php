@@ -512,6 +512,11 @@ class EvaluationRecourseController extends Controller
 
     public function show(EvaluationRecourse $recourse)
     {
+        $user = Auth::user();
+        $person = Person::where('cpf', $user->cpf)->first();
+        $isRH = user_can('recourse');
+        $isComissao = $user && $user->roles->pluck('name')->contains('Comissão');
+        $isRequerente = $person && $recourse->person_id === $person->id;
         $recourse->load([
             'evaluation.evaluation.form',
             'attachments',
@@ -645,6 +650,12 @@ class EvaluationRecourseController extends Controller
             return redirect()->route('dashboard')->with('error', 'Você não tem permissão para acessar este recurso.');
         }
 
+        $user = Auth::user();
+        $person = Person::where('cpf', $user->cpf)->first();
+        $isRH = $this->isRH();
+        $isComissao = $user && $user->roles->pluck('name')->contains('Comissão');
+        $isRequerente = $person && $recourse->person_id === $person->id;
+
         $recourse->load([
             'evaluation.evaluation.form',
             'evaluation.evaluation.evaluatedPerson',
@@ -671,9 +682,6 @@ class EvaluationRecourseController extends Controller
         $evaluationToShow = $chefEvaluation ?? $recourse->evaluation->evaluation;
 
         // Busca apenas pessoas com role "Comissão" para poder atribuir responsáveis (apenas RH puro)
-        $user = Auth::user();
-        $isRH = $this->isRH();
-        $isComissao = $user && $user->roles->pluck('name')->contains('Comissão');
         $canManageAssignees = $isRH && !$isComissao; // Apenas RH puro pode gerenciar
         
         $availablePersons = $canManageAssignees 
@@ -961,7 +969,7 @@ class EvaluationRecourseController extends Controller
 
         $recourse->logs()->create([
             'status' => $validated['status'],
-            'message' => 'Parecer da comissão registrado.',
+            'message' => 'Parecer da Comissão registrado.',
         ]);
 
         // Salva anexos de resposta se houver

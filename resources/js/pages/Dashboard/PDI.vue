@@ -72,14 +72,38 @@ function handleAccessClick() {
 
 // Função para formatar o prazo para exibição
 function formatPrazo(prazo: { term_first: string; term_end: string; } | null): string {
-  if (!prazo) return 'Não definido';
- 
-  const options: Intl.DateTimeFormatOptions = { day: '2-digit', month: '2-digit' };
-  
-  const inicio = new Date(prazo.term_first).toLocaleDateString('pt-BR', options);
-  const fim = new Date(prazo.term_end).toLocaleDateString('pt-BR', options);
-  
-  return `${inicio} - ${fim}`;
+  if (!prazo || !prazo.term_first || !prazo.term_end) return 'Não definido';
+
+  try {
+    // Normalizar removendo parte de hora se vier em formato ISO completo
+    const normalize = (s: string) => (s || '').split('T')[0];
+    const termFirst = normalize(prazo.term_first);
+    const termEnd = normalize(prazo.term_end);
+
+    if (termFirst.length !== 10 || termEnd.length !== 10) {
+      console.error('Formato inesperado de data PDI:', { term_first: prazo.term_first, term_end: prazo.term_end });
+      return 'Data inválida';
+    }
+
+    const [startYear, startMonth, startDay] = termFirst.split('-').map(v => parseInt(v, 10));
+    const [endYear, endMonth, endDay] = termEnd.split('-').map(v => parseInt(v, 10));
+
+    const inicio = new Date(startYear, startMonth - 1, startDay);
+    const fim = new Date(endYear, endMonth - 1, endDay);
+
+    if (isNaN(inicio.getTime()) || isNaN(fim.getTime())) {
+      console.error('Datas inválidas PDI:', { term_first: prazo.term_first, term_end: prazo.term_end });
+      return 'Data inválida';
+    }
+
+    const options: Intl.DateTimeFormatOptions = { day: '2-digit', month: '2-digit', timeZone: 'America/Sao_Paulo' };
+    const inicioFmt = inicio.toLocaleDateString('pt-BR', options);
+    const fimFmt = fim.toLocaleDateString('pt-BR', options);
+    return `${inicioFmt} - ${fimFmt}`;
+  } catch (e) {
+    console.error('Erro formatPrazo PDI:', e, prazo);
+    return 'Erro na data';
+  }
 }
 
 function goToPdiList() {

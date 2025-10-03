@@ -364,6 +364,9 @@ function submitSecretaryDecision(decision: 'homologado' | 'nao_homologado') {
             </div>
           </div>
           <div class="flex items-center gap-3">
+            <span class="text-xs px-3 py-1 rounded-full bg-gray-100 text-gray-700 border">
+              Etapa: {{ recourse.stage?.toUpperCase() || '—' }}
+            </span>
             <span
               class="text-sm font-medium text-white px-4 py-2 rounded-full"
               :class="{
@@ -821,12 +824,37 @@ function submitSecretaryDecision(decision: 'homologado' | 'nao_homologado') {
             <icons.Scale class="w-5 h-5" />
             Análise e Parecer da Comissão
           </h2>
-          <p class="text-sm text-gray-300 mt-1">
-            Decisão sobre o recurso baseada na avaliação das notas
-          </p>
+          <p class="text-sm text-gray-300 mt-1">Decisão sobre o recurso baseada na avaliação das notas</p>
         </div>
 
         <div class="p-4">
+          <!-- Ações rápidas por etapa -->
+          <div class="mb-4 flex flex-wrap gap-2">
+            <!-- Comissão decide -->
+            <button v-if="props.permissions?.isComissao && recourse.stage === 'comissao' && recourse.status !== 'respondido' && recourse.status !== 'indeferido'"
+              @click="isAnalyzing ? null : markAsAnalyzing()"
+              class="px-3 py-2 text-xs bg-gray-200 rounded">Iniciar/continuar análise</button>
+
+            <!-- Diretoria homologa -->
+            <template v-if="props.permissions?.isRH && recourse.stage === 'diretoria_rh'">
+              <button @click="directorDecision('deferido')" class="px-3 py-2 text-xs bg-green-600 text-white rounded">Diretoria: Deferir</button>
+              <button @click="directorDecision('indeferido')" class="px-3 py-2 text-xs bg-red-600 text-white rounded">Diretoria: Indeferir</button>
+            </template>
+
+            <!-- RH encaminha à 2ª instância -->
+            <button v-if="props.permissions?.isRH && recourse.stage === 'requerente'" @click="escalateToSecretary" class="px-3 py-2 text-xs bg-indigo-600 text-white rounded">Encaminhar ao Secretário</button>
+
+            <!-- Secretário decide -->
+            <template v-if="props.permissions?.isRH && recourse.stage === 'secretario'">
+              <button @click="secretaryDecision('deferido')" class="px-3 py-2 text-xs bg-green-700 text-white rounded">Secretário: Deferir</button>
+              <button @click="secretaryDecision('indeferido')" class="px-3 py-2 text-xs bg-red-700 text-white rounded">Secretário: Indeferir</button>
+            </template>
+
+            <!-- Devolver à instância anterior -->
+            <button v-if="(props.permissions?.isRH || props.permissions?.isComissao) && ['comissao','diretoria_rh','requerente','secretario'].includes(recourse.stage || '')"
+              @click="returnToPrevious" class="px-3 py-2 text-xs bg-yellow-500 text-white rounded">Devolver etapa</button>
+          </div>
+
           <!-- Mostrar parecer final -->
           <template v-if="recourse.status === 'respondido' || recourse.status === 'indeferido'">
             <div class="space-y-4">

@@ -42,21 +42,23 @@ const dentroDoPrazo = computed(() => {
   if (!props.prazo?.term_first || !props.prazo?.term_end) return false;
   
   try {
+    // Usar construção de data sem timezone para evitar problemas
+    const [startYear, startMonth, startDay] = props.prazo.term_first.split('-').map(Number);
+    const [endYear, endMonth, endDay] = props.prazo.term_end.split('-').map(Number);
+    
     const hoje = new Date();
-    const inicio = new Date(props.prazo.term_first + 'T12:00:00');
-    const fim = new Date(props.prazo.term_end + 'T12:00:00');
+    const inicio = new Date(startYear, startMonth - 1, startDay);
+    const fim = new Date(endYear, endMonth - 1, endDay);
     
     // Se ainda são inválidas, retorna false
     if (isNaN(inicio.getTime()) || isNaN(fim.getTime())) {
       return false;
     }
 
+    // Normalizar apenas as datas (sem horário) para comparação inclusiva
     hoje.setHours(0, 0, 0, 0);
     inicio.setHours(0, 0, 0, 0);
-    fim.setHours(0, 0, 0, 0);
-    
-    // Adiciona 1 dia ao fim do prazo
-    fim.setDate(fim.getDate() + 1);
+    fim.setHours(23, 59, 59, 999); // Fim do dia para incluir todo o dia final
 
     return hoje >= inicio && hoje <= fim;
   } catch (error) {
@@ -71,9 +73,12 @@ function formatPrazo(prazo: { term_first: string; term_end: string; } | null): s
   if (!prazo || !prazo.term_first || !prazo.term_end) return 'Não definido';
   
   try {
-    // Agora que o backend está enviando formato Y-m-d, podemos usar diretamente
-    const inicio = new Date(prazo.term_first + 'T12:00:00');
-    const fim = new Date(prazo.term_end + 'T12:00:00');
+    // Usar formato direto da string YYYY-MM-DD para evitar problemas de timezone
+    const [startYear, startMonth, startDay] = prazo.term_first.split('-').map(Number);
+    const [endYear, endMonth, endDay] = prazo.term_end.split('-').map(Number);
+    
+    const inicio = new Date(startYear, startMonth - 1, startDay);
+    const fim = new Date(endYear, endMonth - 1, endDay);
     
     // Se ainda são inválidas, retorna erro
     if (isNaN(inicio.getTime()) || isNaN(fim.getTime())) {
@@ -83,7 +88,8 @@ function formatPrazo(prazo: { term_first: string; term_end: string; } | null): s
     
     const options: Intl.DateTimeFormatOptions = { 
       day: '2-digit', 
-      month: '2-digit'
+      month: '2-digit',
+      timeZone: 'America/Sao_Paulo'
     };
     
     const inicioFmt = inicio.toLocaleDateString('pt-BR', options);

@@ -9,6 +9,7 @@ const props = defineProps<{
     id: number;
     text: string;
     status: string;
+    stage?: string;
     response?: string;
     responded_at?: string;
     final_score?: number | null;
@@ -29,6 +30,7 @@ const props = defineProps<{
       canAcknowledgeSecond: boolean;
     };
   };
+  permissions?: { isRH: boolean; isComissao: boolean; isRequerente: boolean };
 }>();
 
 const secondInstanceText = ref('');
@@ -78,7 +80,7 @@ function goBack() {
   if (window.history.length > 1) {
     window.history.back();
   } else {
-    router.get(route('recourses.dashboard'));
+    router.get(route('recourse'));
   }
 }
 </script>
@@ -98,8 +100,16 @@ function goBack() {
         </button>
       </div>
 
-      <!-- Status -->
+      <!-- Status/Etapa -->
       <div class="space-y-2">
+        <div class="flex gap-2 items-center">
+          <span class="text-xs px-3 py-1 rounded-full bg-gray-100 text-gray-700 border">
+            Etapa: {{ recourse.stage?.toUpperCase() || '—' }}
+          </span>
+          <span class="text-xs px-3 py-1 rounded-full bg-gray-100 text-gray-700 border">
+            Status: {{ recourse.status?.toUpperCase() || '—' }}
+          </span>
+        </div>
         <p class="text-sm text-gray-700 font-medium">Status do Recurso:</p>
 
         <div v-if="recourse.status === 'aberto'" class="text-yellow-700 bg-yellow-50 px-4 py-2 rounded flex items-center gap-2">
