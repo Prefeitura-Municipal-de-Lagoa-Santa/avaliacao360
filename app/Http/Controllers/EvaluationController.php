@@ -975,27 +975,41 @@ class EvaluationController extends Controller
 
             $recourse = $existingRecourses->get($id);
 
-            // Verificar se o recurso foi DEFERIDO e calcular nova nota
+            // Verificar aprovação do recurso considerando precedência (Secretário > DGP > Comissão)
             $finalScoreAfterRecourse = null;
             $calcFinalAfterRecourse = null;
             $isRecourseApproved = false;
 
-            if ($recourse && $recourse->status === 'respondido') {
-                $isRecourseApproved = true;
+            if ($recourse) {
+                $higherDecision = null; // 'homologado' | 'nao_homologado' | null
+                if (!empty($recourse->secretary_decision)) {
+                    $higherDecision = $recourse->secretary_decision;
+                } elseif (!empty($recourse->dgp_decision)) {
+                    $higherDecision = $recourse->dgp_decision;
+                }
 
-                // Calcular nova nota SEM a nota do chefe (deferido)
-                if ($isGestor && $notaEquipe !== null && $equipes->count() > 0) {
-                    // Com equipe: 75% auto + 25% equipe
-                    $finalScoreAfterRecourse = round(($notaAuto * 0.75) + ($notaEquipe * 0.25), 2);
-                    $calcFinalAfterRecourse = "Recurso DEFERIDO (com equipe): ($notaAuto x 75%) + ($notaEquipe x 25%) = $finalScoreAfterRecourse";
-                } else if ($notaAuto > 0) {
-                    // Sem equipe: 100% auto
-                    $finalScoreAfterRecourse = $notaAuto;
-                    $calcFinalAfterRecourse = "Recurso DEFERIDO (sem equipe): ($notaAuto x 100%) = $finalScoreAfterRecourse";
+                if ($higherDecision !== null) {
+                    $isRecourseApproved = $higherDecision === 'homologado';
                 } else {
-                    // Fallback se não há autoavaliação
-                    $finalScoreAfterRecourse = 0;
-                    $calcFinalAfterRecourse = "Recurso DEFERIDO: Sem dados de autoavaliação disponíveis";
+                    // Fallback: decisão da Comissão (status antigo)
+                    $isRecourseApproved = $recourse->status === 'respondido';
+                }
+
+                if ($isRecourseApproved) {
+                    // Calcular nova nota SEM a nota do chefe (deferido)
+                    if ($isGestor && $notaEquipe !== null && $equipes->count() > 0) {
+                        // Com equipe: 75% auto + 25% equipe
+                        $finalScoreAfterRecourse = round((($notaAuto ?? 0) * 0.75) + ($notaEquipe * 0.25), 2);
+                        $calcFinalAfterRecourse = "Recurso DEFERIDO (com equipe): ($notaAuto x 75%) + ($notaEquipe x 25%) = $finalScoreAfterRecourse";
+                    } elseif ($notaAuto !== null) {
+                        // Sem equipe: 100% auto
+                        $finalScoreAfterRecourse = $notaAuto;
+                        $calcFinalAfterRecourse = "Recurso DEFERIDO (sem equipe): ($notaAuto x 100%) = $finalScoreAfterRecourse";
+                    } else {
+                        // Fallback se não há autoavaliação
+                        $finalScoreAfterRecourse = 0;
+                        $calcFinalAfterRecourse = "Recurso DEFERIDO: Sem dados de autoavaliação disponíveis";
+                    }
                 }
             }
 

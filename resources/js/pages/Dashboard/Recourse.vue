@@ -12,15 +12,15 @@ const props = defineProps<{
     responded: number;
     denied: number;
   };
-  userRole?: string; // 'RH' ou 'Comissão'
+  userRole?: string; // 'RH' | 'Comissão' | 'DGP'
+  awaitingDgpCount?: number;
+  commissionAwaitingCount?: number;
+  awaitingSecretaryCount?: number;
 }>();
 
-function formatPrazo(prazo: { term_first: string; term_end: string } | null): string {
-  if (!prazo) return 'Não definido';
-  const options: Intl.DateTimeFormatOptions = { day: '2-digit', month: '2-digit' };
-  const inicio = new Date(prazo.term_first).toLocaleDateString('pt-BR', options);
-  const fim = new Date(prazo.term_end).toLocaleDateString('pt-BR', options);
-  return `${inicio} - ${fim}`;
+function goToCommissionAwaiting() {
+  // Comissão: listagem mostra itens que aguardam minha análise por etapa
+  router.get(route('recourses.index'));
 }
 
 function goToOpenedRecourses() {
@@ -44,34 +44,65 @@ function goToRespondedRecourses() {
 function goToDeniedRecourses() {
   router.get(route('recourses.index', { status: 'indeferido' }));
 }
+
+function goToDgpAwaiting() {
+  // Para DGP, a listagem ignora status e mostra por etapa, então basta ir ao index
+  router.get(route('recourses.index'));
+}
+
+function goToSecretaryAwaiting() {
+  // Para Secretário, a listagem ignora status e mostra por etapa, então basta ir ao index
+  router.get(route('recourses.index'));
+}
 </script>
 
 <template>
-  <Head :title="props.userRole === 'Comissão' ? 'Meus Recursos' : 'Recursos'" />
-  <DashboardLayout :pageTitle="props.userRole === 'Comissão' ? 'Meus Recursos para Análise' : 'Dashboard de Recursos'">
-    <!-- Informação do papel do usuário -->
-    <div v-if="props.userRole === 'Comissão'" class="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
-      <div class="flex items-center gap-2 text-blue-800">
-        <icons.Info class="w-4 h-4" />
-        <span class="text-sm font-medium">
-          Você está visualizando apenas os recursos pelos quais é responsável como membro da Comissão.
-        </span>
-      </div>
-    </div>
+  <Head :title="props.userRole === 'Comissão' ? 'Recursos - Comissão' : (props.userRole === 'Secretário' ? 'Recursos - Secretário' : 'Recursos')" />
+  <DashboardLayout :pageTitle="props.userRole === 'Comissão' ? 'Recursos - Comissão' : (props.userRole === 'DGP' ? 'Recursos - DGP' : (props.userRole === 'Secretário' ? 'Recursos - Secretário' : 'Dashboard de Recursos'))">
 
     <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
 
       <!-- Para Comissão: apenas um card com recursos atribuídos -->
-      <template v-if="props.userRole === 'Comissão'">
+          <template v-if="props.userRole === 'Comissão'">
+            <div class="col-span-full flex justify-center">
+              <DashboardCard
+                :value="props.commissionAwaitingCount ?? 0"
+                label="Aguardando minha análise (Comissão)"
+                buttonText="Ver agora"
+                iconBgColor="#1d82c4"
+                :buttonAction="goToCommissionAwaiting"
+              >
+                <template #icon><icons.FileSignature /></template>
+              </DashboardCard>
+            </div>
+          </template>
+
+      <!-- Para DGP/Diretor: card focado no que aguarda decisão -->
+      <template v-else-if="props.userRole === 'DGP'">
         <div class="col-span-full flex justify-center">
           <DashboardCard
-            :value="(props.totals?.opened ?? 0) + (props.totals?.under_analysis ?? 0) + (props.totals?.responded ?? 0) + (props.totals?.denied ?? 0)"
-            label="Meus Recursos para Análise"
-            buttonText="Ver Recursos"
-            iconBgColor="#1d82c4"
-            :buttonAction="goToOpenedRecourses"
+            :value="props.awaitingDgpCount ?? 0"
+            label="Aguardando decisão (DGP)"
+            buttonText="Ver agora"
+            iconBgColor="#7c3aed"
+            :buttonAction="goToDgpAwaiting"
           >
-            <template #icon><icons.FileSignature /></template>
+            <template #icon><icons.UserCheck /></template>
+          </DashboardCard>
+        </div>
+      </template>
+
+      <!-- Para Secretário: card focado no que aguarda decisão -->
+      <template v-else-if="props.userRole === 'Secretário'">
+        <div class="col-span-full flex justify-center">
+          <DashboardCard
+            :value="props.awaitingSecretaryCount ?? 0"
+            label="Aguardando decisão (Secretário)"
+            buttonText="Ver agora"
+            iconBgColor="#16a34a"
+            :buttonAction="goToSecretaryAwaiting"
+          >
+            <template #icon><icons.Stamp /></template>
           </DashboardCard>
         </div>
       </template>

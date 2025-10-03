@@ -8,6 +8,7 @@ const props = defineProps<{
     data: Array<{
       id: number;
       status: string;
+      stage?: string | null;
       text: string;
       person: { name: string };
       evaluation: { year: string; id: number };
@@ -17,6 +18,7 @@ const props = defineProps<{
     links: any;
     meta: any;
   };
+  awaiting?: Array<{ id: number; status: string; text: string; person: { name: string }; evaluation: { id: number; year: string } }>;
   status: string;
   canManageAssignees: boolean;
   userRole?: string; // 'RH' ou 'Comissão'
@@ -31,6 +33,12 @@ const statusLabels: Record<string, string> = {
 };
 
 const statusLabel = statusLabels[props.status] ?? '—';
+const pageTitle = (() => {
+  if (props.userRole === 'Comissão') return `Meus Recursos ${statusLabel}`;
+  if (props.userRole === 'DGP') return `Recursos aguardando decisão (DGP)`;
+  if (props.userRole === 'Secretário') return `Recursos aguardando decisão (Secretário)`;
+  return `Recursos ${statusLabel}`;
+})();
 
 function goBack() {
   if (window.history.length > 1) {
@@ -39,12 +47,37 @@ function goBack() {
     router.get(route('recourse')); // Dashboard de recursos
   }
 }
+
+function scrollToAwaiting() {
+  const el = document.getElementById('awaiting-list');
+  if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
 </script>
 
 <template>
-  <Head :title="props.userRole === 'Comissão' ? `Meus Recursos ${statusLabel}` : `Recursos ${statusLabel}`" />
-  <DashboardLayout :page-title="props.userRole === 'Comissão' ? `Meus Recursos ${statusLabel}` : `Recursos ${statusLabel}`">
+  <Head :title="pageTitle" />
+  <DashboardLayout :page-title="pageTitle">
     <div class="space-y-4">
+      <!-- Bloco: Aguardando minha decisão -->
+      <div v-if="props.awaiting && props.awaiting.length > 0" id="awaiting-list" class="bg-white border rounded shadow p-4">
+        <div class="flex items-center justify-between mb-2">
+          <h3 class="text-base font-semibold text-gray-800 flex items-center gap-2">
+            <icons.Clock class="w-4 h-4" /> Aguardando minha decisão
+          </h3>
+          <span class="text-xs text-gray-500">Mostrando até 10 itens</span>
+        </div>
+        <div class="divide-y">
+          <div v-for="r in props.awaiting" :key="r.id" class="py-2 flex items-center justify-between">
+            <div>
+              <div class="font-medium text-gray-900">{{ r.person.name }}</div>
+              <div class="text-xs text-gray-500">Recurso • Ano: {{ r.evaluation.year || '—' }}</div>
+            </div>
+            <Link :href="route('recourses.review', r.id)" class="inline-flex items-center text-sm text-blue-600 hover:underline">
+              <icons.Eye class="w-4 h-4 mr-1" /> Ver
+            </Link>
+          </div>
+        </div>
+      </div>
       <!-- Informação do papel do usuário -->
       <div v-if="props.userRole === 'Comissão'" class="p-3 bg-blue-50 border border-blue-200 rounded-lg">
         <div class="flex items-center gap-2 text-blue-800">
@@ -55,14 +88,40 @@ function goBack() {
         </div>
       </div>
 
+      <div v-else-if="props.userRole === 'DGP'" class="p-3 bg-purple-50 border border-purple-200 rounded-lg">
+        <div class="flex items-center gap-2 text-purple-800">
+          <icons.Info class="w-4 h-4" />
+          <span class="text-sm font-medium">
+            Mostrando recursos que aguardam sua decisão (DGP). Filtros por status são ignorados.
+          </span>
+        </div>
+      </div>
+
+      <div v-else-if="props.userRole === 'Secretário'" class="p-3 bg-indigo-50 border border-indigo-200 rounded-lg">
+        <div class="flex items-center gap-2 text-indigo-800">
+          <icons.Info class="w-4 h-4" />
+          <span class="text-sm font-medium">
+            Mostrando recursos que aguardam sua decisão (Secretário). Filtros por status são ignorados.
+          </span>
+        </div>
+      </div>
+
       <div class="detail-page-header flex justify-between items-center">
-        <h2 class="text-2xl font-bold text-gray-800">
-          {{ props.userRole === 'Comissão' ? 'Meus Recursos' : 'Recursos' }} {{ statusLabel }}
-        </h2>
-        <button @click="goBack" class="back-btn inline-flex items-center text-sm text-gray-600 hover:text-gray-800">
-          <icons.ArrowLeftIcon class="size-4 mr-2" />
-          Voltar
-        </button>
+        <h2 class="text-2xl font-bold text-gray-800">{{ pageTitle }}</h2>
+        <div class="flex items-center gap-2">
+          <button
+            v-if="props.userRole === 'DGP'"
+            @click="scrollToAwaiting"
+            class="inline-flex items-center text-sm text-purple-700 hover:text-purple-900 border border-purple-200 hover:border-purple-300 bg-purple-50 hover:bg-purple-100 rounded px-3 py-1"
+            title="Ver recursos atribuídos a mim (aguardando minha decisão)"
+          >
+            <icons.UserCheck class="w-4 h-4 mr-1" /> Recursos atribuídos a mim
+          </button>
+          <button @click="goBack" class="back-btn inline-flex items-center text-sm text-gray-600 hover:text-gray-800">
+            <icons.ArrowLeftIcon class="size-4 mr-2" />
+            Voltar
+          </button>
+        </div>
       </div>
 
       <table class="w-full bg-white shadow rounded text-sm">
@@ -79,7 +138,10 @@ function goBack() {
           <tr v-for="r in recourses.data" :key="r.id" class="border-b hover:bg-gray-50">
             <td class="px-4 py-2">{{ r.person.name }}</td>
             <td class="px-4 py-2">{{ r.evaluation.year }}</td>
-            <td class="px-4 py-2 capitalize">{{ r.status.replace('_', ' ') }}</td>
+            <td class="px-4 py-2 capitalize">
+              <span v-if="r.stage === 'completed'" class="text-green-700">Concluído</span>
+              <span v-else>{{ r.status.replace('_', ' ') }}</span>
+            </td>
             <td v-if="r.last_return" class="px-4 py-2 text-xs text-amber-700">
               <div class="inline-flex items-center gap-1 bg-amber-50 border border-amber-200 px-2 py-1 rounded">
                 <icons.Reply class="w-3 h-3" /> devolvido {{ r.last_return.at }}

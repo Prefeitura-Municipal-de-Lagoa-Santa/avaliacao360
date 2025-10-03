@@ -14,8 +14,10 @@ class CreateRolesSeeder extends Seeder
         $rh       = Role::updateOrCreate(['name' => 'RH'], ['level' => 5]);
         $comissao = Role::updateOrCreate(['name' => 'Comissão'], ['level' => 3]);
         $servidor = Role::updateOrCreate(['name' => 'Servidor'], ['level' => 1]);
-        $diretorRh = Role::updateOrCreate(['name' => 'Diretor RH'], ['level' => 6]);
-        $secretarioGestao = Role::updateOrCreate(['name' => 'Secretario Gestão'], ['level' => 6]);
+    $diretorRh = Role::updateOrCreate(['name' => 'Diretor RH'], ['level' => 6]);
+    $secretarioGestao = Role::updateOrCreate(['name' => 'Secretario Gestão'], ['level' => 6]);
+    $secretario = Role::updateOrCreate(['name' => 'Secretário'], ['level' => 6]);
+    $secretaria = Role::updateOrCreate(['name' => 'Secretaria'], ['level' => 6]);
 
         $permissions = Permission::all()->pluck('id', 'name');
 
@@ -63,19 +65,28 @@ class CreateRolesSeeder extends Seeder
             'users.assign-role',
         ];
         $rh->permissions()->sync($permissions->only($rhPermissions)->values());
-        // Diretor RH e Secretario Gestão herdam as permissões do RH
-        $diretorRh->permissions()->sync($permissions->only($rhPermissions)->values());
-        $secretarioGestao->permissions()->sync($permissions->only($rhPermissions)->values());
+    // Diretor RH herda as permissões do RH
+    $diretorRh->permissions()->sync($permissions->only($rhPermissions)->values());
 
         // Acrescenta permissões específicas às roles de direção
-        // Diretor RH: pode registrar decisão da DGP
+        // Diretor RH: pode registrar decisão da DGP (e devolver à comissão, se existir)
         if ($permissions->has('recourses.dgpDecision')) {
             $diretorRh->permissions()->syncWithoutDetaching([$permissions['recourses.dgpDecision']]);
         }
-        // Secretario Gestão: pode registrar decisão do Secretário
-        if ($permissions->has('recourses.secretaryDecision')) {
-            $secretarioGestao->permissions()->syncWithoutDetaching([$permissions['recourses.secretaryDecision']]);
+        if ($permissions->has('recourses.dgpReturnToCommission')) {
+            $diretorRh->permissions()->syncWithoutDetaching([$permissions['recourses.dgpReturnToCommission']]);
         }
+        // Secretário (usuário comum com acesso a recursos): não herda RH; apenas permissões necessárias
+        $secretaryPerms = [
+            'recourse',
+            'recourses.index',
+            'recourses.review',
+            'recourses.secretaryDecision',
+            'storage.local',
+        ];
+        $secretarioGestao->permissions()->sync($permissions->only($secretaryPerms)->values());
+        $secretario->permissions()->sync($permissions->only($secretaryPerms)->values());
+        $secretaria->permissions()->sync($permissions->only($secretaryPerms)->values());
 
         // Comissão (atua no recurso)
         $comissao->permissions()->sync($permissions->only([
@@ -121,6 +132,10 @@ class CreateRolesSeeder extends Seeder
             'recourses.create',
             'recourses.show',
             'recourses.store',
+            // Permissões do fluxo do servidor no recurso
+            'recourses.acknowledgeFirst',
+            'recourses.requestSecondInstance',
+            'recourses.acknowledgeSecond',
             'storage.local',
         ])->values());
 

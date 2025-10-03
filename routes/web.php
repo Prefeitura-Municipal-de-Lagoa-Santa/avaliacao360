@@ -205,8 +205,6 @@ Route::middleware(['auth', 'verified', EnsureCpfIsFilled::class, RedirectIfMustC
         ->name('recourses.dgpReturnToCommission');
     Route::post('/recourses/{recourse}/dgp-decision', [EvaluationRecourseController::class, 'dgpDecision'])
         ->name('recourses.dgpDecision');
-    Route::post('/recourses/{recourse}/rh-finalize-first', [EvaluationRecourseController::class, 'rhFinalizeFirst'])
-        ->name('recourses.rhFinalizeFirst');
     Route::post('/recourses/{recourse}/ack-first', [EvaluationRecourseController::class, 'acknowledgeFirst'])
         ->name('recourses.acknowledgeFirst');
     Route::post('/recourses/{recourse}/second-instance', [EvaluationRecourseController::class, 'requestSecondInstance'])
