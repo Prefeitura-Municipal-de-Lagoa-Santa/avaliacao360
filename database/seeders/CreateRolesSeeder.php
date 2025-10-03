@@ -14,8 +14,6 @@ class CreateRolesSeeder extends Seeder
         $admin          = Role::updateOrCreate(['name' => 'Admin'], ['level' => 100]);
         $rh             = Role::updateOrCreate(['name' => 'RH'], ['level' => 5]);
         $diretorRh      = Role::updateOrCreate(['name' => 'Diretor RH'], ['level' => 6]);
-        $secretario     = Role::updateOrCreate(['name' => 'Secretário'], ['level' => 6]);
-        $secretaria     = Role::updateOrCreate(['name' => 'Secretaria'], ['level' => 6]);
         $secretarioGestao = Role::updateOrCreate(['name' => 'Secretario Gestão'], ['level' => 6]);
         $comissao       = Role::updateOrCreate(['name' => 'Comissão'], ['level' => 3]);
         $servidor       = Role::updateOrCreate(['name' => 'Servidor'], ['level' => 1]);
@@ -86,8 +84,6 @@ class CreateRolesSeeder extends Seeder
             'storage.local',
         ];
     $secretarioGestao->permissions()->sync($permissions->only($secretaryPerms)->values());
-    $secretario->permissions()->sync($permissions->only($secretaryPerms)->values());
-    $secretaria->permissions()->sync($permissions->only($secretaryPerms)->values());
 
         // Comissão (atua no recurso)
         $comissao->permissions()->sync($permissions->only([
