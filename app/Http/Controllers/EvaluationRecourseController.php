@@ -556,10 +556,12 @@ class EvaluationRecourseController extends Controller
                 // Determina o status efetivo para cálculo conforme decisão DGP/Secretário
                 // homologado/homologar => tratar como 'respondido' (deferido) para anular chefe; nao_homologado/nao_homologar => 'indeferido'
                 $statusForScore = $recourse->status; // padrão: decisão da comissão
-                if (!empty($recourse->secretary_decision)) {
-                    $statusForScore = in_array($recourse->secretary_decision, ['homologado']) ? 'respondido' : 'indeferido';
+                    if (!empty($recourse->secretary_decision)) {
+                        $approved = ['homologado','homologar','deferido','deferir','aprovado','aprovar','sim'];
+                        $statusForScore = in_array($recourse->secretary_decision, $approved, true) ? 'respondido' : 'indeferido';
                 } elseif (!empty($recourse->dgp_decision)) {
-                    $statusForScore = in_array($recourse->dgp_decision, ['homologado']) ? 'respondido' : 'indeferido';
+                        $approved = ['homologado','homologar','deferido','deferir','aprovado','aprovar','sim'];
+                        $statusForScore = in_array($recourse->dgp_decision, $approved, true) ? 'respondido' : 'indeferido';
                 }
 
                 // Usa a mesma regra de cálculo aplicada na análise completa
@@ -1057,7 +1059,7 @@ class EvaluationRecourseController extends Controller
         ]);
 
         $recourse->update([
-            'dgp_decision' => $validated['decision'],
+            'dgp_decision' => $this->adaptDecisionForDatabase('dgp_decision', $validated['decision']),
             'dgp_decided_at' => now(),
             'dgp_notes' => $validated['notes'] ?? null,
             // Após decisão da DGP, pular a etapa manual de "Finalizar RH (1ª)" e ir direto para ciência do servidor
@@ -1232,11 +1234,12 @@ class EvaluationRecourseController extends Controller
             'secretary_decision_attachments.*' => ['file', 'max:10240'],
         ]);
 
-        // Normaliza para valores aceitos pelo banco (usar 'homologado'/'nao_homologado')
+        // Normaliza para valores canônicos e adapta ao tipo de coluna no banco (ENUM em MySQL pode ter variantes)
         $inputDecision = $validated['decision'];
-        $normalizedDecision = in_array($inputDecision, ['homologar', 'homologado'])
+        $canonicalDecision = in_array($inputDecision, ['homologar', 'homologado'])
             ? 'homologado'
             : (in_array($inputDecision, ['nao_homologar', 'nao_homologado']) ? 'nao_homologado' : $inputDecision);
+        $normalizedDecision = $this->adaptDecisionForDatabase('secretary_decision', $canonicalDecision);
 
         // Em ambiente SQLite, contornar CHECK antigo com PRAGMA durante a escrita
         $usingSqlite = DB::connection()->getDriverName() === 'sqlite';
@@ -1275,6 +1278,50 @@ class EvaluationRecourseController extends Controller
         }
 
         return redirect()->route('recourses.review', $recourse->id)->with('success', 'Decisão do Secretário registrada.');
+    }
+
+    /**
+     * Ajusta a decisão ('homologado'/'nao_homologado') para o valor aceito pela coluna no banco,
+     * especialmente quando a coluna é ENUM em MySQL com valores como 'homologar'/'nao_homologar' ou 'deferido'/'indeferido'.
+     */
+    private function adaptDecisionForDatabase(string $column, string $canonical): string
+    {
+        // Apenas tenta adaptar para MySQL; outros drivers guardam o canônico.
+        try {
+            if (DB::getDriverName() !== 'mysql') {
+                return $canonical;
+            }
+            $row = collect(DB::select("SHOW COLUMNS FROM `evaluation_recourses` WHERE Field = ?", [$column]))->first();
+            $colType = $row->Type ?? null; // MySQL returns 'Type' like enum('a','b')
+            if (!$colType || stripos($colType, 'enum(') === false) {
+                return $canonical;
+            }
+            if (!preg_match_all("/'([^']+)'/", $colType, $m)) {
+                return $canonical;
+            }
+            $allowedOriginal = $m[1] ?? [];
+            if (empty($allowedOriginal)) {
+                return $canonical;
+            }
+            // Build lowercase map to preserve original tokens when returning
+            $allowedLowerMap = [];
+            foreach ($allowedOriginal as $tok) {
+                $allowedLowerMap[mb_strtolower($tok)] = $tok;
+            }
+            $isApprove = ($canonical === 'homologado');
+            $preferredApprove = ['homologado','homologar','deferido','deferir','aprovado','aprovar','sim'];
+            $preferredDeny    = ['nao_homologado','nao_homologar','indeferido','indeferir','rejeitado','reprovar','nao'];
+            $prefs = $isApprove ? $preferredApprove : $preferredDeny;
+            foreach ($prefs as $opt) {
+                $key = mb_strtolower($opt);
+                if (array_key_exists($key, $allowedLowerMap)) {
+                    return $allowedLowerMap[$key]; // Return with original case/diacritics as defined in enum
+                }
+            }
+            return $canonical;
+        } catch (\Throwable $e) {
+            return $canonical;
+        }
     }
 
     /**
