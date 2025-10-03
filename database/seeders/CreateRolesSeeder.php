@@ -10,21 +10,20 @@ class CreateRolesSeeder extends Seeder
 {
     public function run(): void
     {
-        $admin    = Role::updateOrCreate(['name' => 'Admin'], ['level' => 10]);
-        $rh       = Role::updateOrCreate(['name' => 'RH'], ['level' => 5]);
-        $diretoriaRH = Role::updateOrCreate(['name' => 'Diretoria RH'], ['level' => 6]);
-        $secretario  = Role::updateOrCreate(['name' => 'Secretário'], ['level' => 7]);
-        $comissao = Role::updateOrCreate(['name' => 'Comissão'], ['level' => 3]);
-        $servidor = Role::updateOrCreate(['name' => 'Servidor'], ['level' => 1]);
-    $diretorRh = Role::updateOrCreate(['name' => 'Diretor RH'], ['level' => 6]);
-    $secretarioGestao = Role::updateOrCreate(['name' => 'Secretario Gestão'], ['level' => 6]);
-    $secretario = Role::updateOrCreate(['name' => 'Secretário'], ['level' => 6]);
-    $secretaria = Role::updateOrCreate(['name' => 'Secretaria'], ['level' => 6]);
+        // Definição única e idempotente das roles (sem duplicidades de nomes similares)
+        $admin          = Role::updateOrCreate(['name' => 'Admin'], ['level' => 100]);
+        $rh             = Role::updateOrCreate(['name' => 'RH'], ['level' => 5]);
+        $diretorRh      = Role::updateOrCreate(['name' => 'Diretor RH'], ['level' => 6]);
+        $secretario     = Role::updateOrCreate(['name' => 'Secretário'], ['level' => 6]);
+        $secretaria     = Role::updateOrCreate(['name' => 'Secretaria'], ['level' => 6]);
+        $secretarioGestao = Role::updateOrCreate(['name' => 'Secretario Gestão'], ['level' => 6]);
+        $comissao       = Role::updateOrCreate(['name' => 'Comissão'], ['level' => 3]);
+        $servidor       = Role::updateOrCreate(['name' => 'Servidor'], ['level' => 1]);
 
         $permissions = Permission::all()->pluck('id', 'name');
 
         // Admin: tudo
-        $admin->permissions()->sync($permissions->values());
+    $admin->permissions()->sync($permissions->values());
 
         // RH (visualização e gestão de responsáveis; não inicia, não responde, não devolve)
         $rhPermissions = [
@@ -67,8 +66,8 @@ class CreateRolesSeeder extends Seeder
             'users.assign-role',
         ];
         $rh->permissions()->sync($permissions->only($rhPermissions)->values());
-    // Diretor RH herda as permissões do RH
-    $diretorRh->permissions()->sync($permissions->only($rhPermissions)->values());
+        // Diretor RH herda as permissões do RH
+        $diretorRh->permissions()->sync($permissions->only($rhPermissions)->values());
 
         // Acrescenta permissões específicas às roles de direção
         // Diretor RH: pode registrar decisão da DGP (e devolver à comissão, se existir)
@@ -86,9 +85,9 @@ class CreateRolesSeeder extends Seeder
             'recourses.secretaryDecision',
             'storage.local',
         ];
-        $secretarioGestao->permissions()->sync($permissions->only($secretaryPerms)->values());
-        $secretario->permissions()->sync($permissions->only($secretaryPerms)->values());
-        $secretaria->permissions()->sync($permissions->only($secretaryPerms)->values());
+    $secretarioGestao->permissions()->sync($permissions->only($secretaryPerms)->values());
+    $secretario->permissions()->sync($permissions->only($secretaryPerms)->values());
+    $secretaria->permissions()->sync($permissions->only($secretaryPerms)->values());
 
         // Comissão (atua no recurso)
         $comissao->permissions()->sync($permissions->only([
