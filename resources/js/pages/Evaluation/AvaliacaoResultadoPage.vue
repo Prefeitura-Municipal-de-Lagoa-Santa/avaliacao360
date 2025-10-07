@@ -71,7 +71,7 @@ const grandTotal = computed(() => {
 
 // Formatação com duas casas decimais (string) mantendo separador padrão brasileiro se desejar no futuro
 const grandTotalFormatted = computed(() => {
-  return grandTotal.value.toFixed(1).replace('.', ',');
+  return (Math.round(grandTotal.value * 100) / 100).toFixed(2).replace('.', ',');
 });
 
 
@@ -136,7 +136,7 @@ const cargoOuFuncao = computed(() => {
               <td class="px-4 py-3 align-top">{{ question.text_content }}</td>
               <td class="px-4 py-3 text-center">
                 <span class="inline-flex justify-center items-center bg-blue-100 text-blue-800 font-bold rounded-full text-lg w-20 h-10">
-                  {{ (() => { const s = props.evaluation.answers?.find((ans: any) => ans.question_id === question.id)?.score; return (s === undefined || s === null) ? '-' : Number(s).toFixed(1).replace('.', ','); })() }}
+                  {{ (() => { const s = props.evaluation.answers?.find((ans: any) => ans.question_id === question.id)?.score; return (s === undefined || s === null) ? '-' : s; })() }}
                 </span>
               </td>
             </tr>

@@ -118,9 +118,16 @@ const completedEvaluations = computed(() =>
   allEvaluations.value.filter(e => e.nota !== null)
 );
 
+// Formata apenas a nota final. As notas individuais agora serão exibidas sem forçar duas casas.
+function formatNotaFinal(value: number | null): string {
+  if (value === null || value === undefined) return '—';
+  return (Math.round(value * 100) / 100).toFixed(2).replace('.', ',');
+}
+
+// Agora também vamos formatar a nota total de cada bloco (avaliação individual)
 function formatNota(value: number | null): string {
   if (value === null || value === undefined) return '—';
-  return (Math.round(value * 10) / 10).toFixed(1).replace('.', ',');
+  return (Math.round(value * 100) / 100).toFixed(2).replace('.', ',');
 }
 </script>
 
@@ -301,10 +308,10 @@ function formatNota(value: number | null): string {
                       :class="getScoreColor(answer.score)"
                     />
                     <span 
-                      class="text-lg font-bold min-w-[24px] text-center"
+                      class="text-lg font-bold min-w-[40px] text-center"
                       :class="getScoreColor(answer.score)"
                     >
-                      {{ answer.score ?? '—' }}
+                      {{ answer.score !== null ? answer.score : '—' }}
                     </span>
                   </div>
                 </div>
@@ -358,7 +365,7 @@ function formatNota(value: number | null): string {
           </div>
           <div class="text-right">
             <div class="text-4xl font-bold text-blue-600">
-              {{ final_score }}
+              {{ formatNotaFinal(final_score) }}
             </div>
             <div class="text-sm text-gray-500">Nota Final</div>
           </div>
