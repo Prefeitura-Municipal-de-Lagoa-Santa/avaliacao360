@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted, watch } from 'vue'; // 1. Importar 'watch'
-import { Head, usePage, router } from '@inertiajs/vue3';
+import { Head, usePage, router, useForm } from '@inertiajs/vue3';
 import DashboardLayout from '@/layouts/DashboardLayout.vue';
 import * as icons from 'lucide-vue-next';
 import axios from 'axios';
@@ -85,6 +85,13 @@ const isPrazoModalVisible = ref(false);
 const prazoGroup = ref<'avaliacao' | 'pdi' | null>(null);
 const prazoDateInicio = ref('');
 const prazoDateFim = ref('');
+
+// Garante que a data fim nunca fique antes da data início
+watch(prazoDateInicio, (inicio) => {
+  if (inicio && prazoDateFim.value && prazoDateFim.value < inicio) {
+    prazoDateFim.value = inicio;
+  }
+});
 
 // --- ESTADO PARA UPLOAD DE CSV DE PESSOAS ---
 const isPreviewModalVisible = ref(false);
@@ -174,19 +181,32 @@ function openPrazoModal(group: 'avaliacao' | 'pdi') {
   isPrazoModalVisible.value = true;
 }
 
+const isSavingPrazo = ref(false);
 function handleSetPrazo() {
   if (!prazoGroup.value || !prazoDateInicio.value || !prazoDateFim.value) {
     showFlashModal('error', 'Por favor, preencha as datas de início e encerramento.');
     return;
   }
-  router.post(route('configs.prazo.store'), {
-    year: selectedYear.value,
-    group: prazoGroup.value,
-    term_first: prazoDateInicio.value,
-    term_end: prazoDateFim.value,
-  }, {
-    onSuccess: () => { isPrazoModalVisible.value = false; },
-    preserveScroll: true,
+  isSavingPrazo.value = true;
+  router.visit(route('configs.prazo.store'), {
+    method: 'post',
+    data: {
+      year: selectedYear.value,
+      group: prazoGroup.value,
+      term_first: prazoDateInicio.value,
+      term_end: prazoDateFim.value,
+    },
+    onSuccess: () => {
+      isSavingPrazo.value = false;
+      isPrazoModalVisible.value = false;
+      showFlashModal('success', 'Prazo salvo com sucesso!');
+    },
+    onError: (errors) => {
+      isSavingPrazo.value = false;
+      const first = Object.values(errors || {})[0];
+      showFlashModal('error', first || 'Erro ao salvar o prazo. Verifique as datas.');
+    },
+    onFinish: () => { isSavingPrazo.value = false; }
   });
 }
 
@@ -210,11 +230,12 @@ function handleLiberar(group: 'avaliacao' | 'pdi') {
 function confirmAndLiberar() {
   if (!groupToLiberar.value) return;
 
-  router.post(route('configs.liberar.store'), {
-    year: selectedYear.value,
-    group: groupToLiberar.value
-  }, {
-    preserveScroll: true,
+  router.visit(route('configs.liberar.store'), {
+    method: 'post',
+    data: {
+      year: selectedYear.value,
+      group: groupToLiberar.value
+    },
     onSuccess: () => {
       isLiberarModalVisible.value = false;
       generateRelease();
@@ -223,16 +244,14 @@ function confirmAndLiberar() {
 }
 
 function saveSettings() {
-  router.post(route('configs.store'), {
+  const form = useForm({
     year: selectedYear.value,
     gradesPeriod: gradesPeriod.value,
     awarePeriod: awarePeriod.value,
     recoursePeriod: recoursePeriod.value,
-  }, {
-    preserveScroll: true,
-    onSuccess: () => {
-      showFlashModal('success', 'Configurações salvas com sucesso!');
-    },
+  });
+  form.post(route('configs.store'), {
+    onSuccess: () => showFlashModal('success', 'Configurações salvas com sucesso!'),
     onError: (errors) => {
       const firstError = Object.values(errors)[0];
       showFlashModal('error', `Erro ao salvar: ${firstError}`);
@@ -298,7 +317,7 @@ async function handleConfirmUpload() {
     });
     showFlashModal('success', response.data.message);
     closePreviewModal();
-    router.reload({ preserveScroll: true });
+  router.reload();
   } catch (error: any) {
     showFlashModal('error', 'Erro ao confirmar o upload: ' + (error.response?.data?.message || error.message));
   } finally {
@@ -307,30 +326,27 @@ async function handleConfirmUpload() {
 }
 
 function generateRelease() {
-  router.post(route('releases.generate', { year: selectedYear.value }), {
-    preserveScroll: true,
+  router.visit(route('releases.generate', { year: selectedYear.value }), {
+    method: 'post',
     onSuccess: () => {
       showFlashModal('success', 'Avaliações geradas com sucesso!');
       closePreviewModal();
     },
-    onError: (errors) => {
-      console.error('Erro ao gerar avaliações:', errors);
+    onError: () => {
       showFlashModal('error', 'Ocorreu um erro ao gerar as avaliações.');
-    },
+    }
   });
 }
 
 function generatePdiRelease() {
-  router.post(route('pdi.generate', { year: selectedYear.value }), {
-    preserveScroll: true,
+  router.visit(route('pdi.generate', { year: selectedYear.value }), {
+    method: 'post',
     onSuccess: () => {
       showFlashModal('success', 'A geração dos PDIs foi iniciada com sucesso!');
-      // Você pode fechar um modal aqui se estiver usando um
     },
-    onError: (errors) => {
-      console.error('Erro ao gerar PDIs:', errors);
+    onError: () => {
       showFlashModal('error', 'Ocorreu um erro ao gerar os PDIs.');
-    },
+    }
   });
 }
 
@@ -632,7 +648,7 @@ onUnmounted(() => {
 
         <div class="setting-item">
           <label for="release-date">Definir data de divulgação das notas:</label>
-          <input type="date" id="release-date" class="input-date" v-model="gradesPeriod">
+          <input type="date" id="release-date" class="input-date" v-model="gradesPeriod" :min="new Date().toISOString().substring(0,10)" />
         </div>
 
         <div class="setting-item">
@@ -717,16 +733,23 @@ onUnmounted(() => {
         <div class="my-4">
           <label for="prazo-date-inicio" class="block font-medium text-sm text-gray-700 mb-1">Data de início:</label>
           <input type="date" id="prazo-date-inicio" v-model="prazoDateInicio"
+            :min="new Date().toISOString().substring(0,10)"
             class="form-input rounded-md w-full border-gray-300 shadow-sm text-black">
         </div>
         <div class="my-4">
           <label for="prazo-date-fim" class="block font-medium text-sm text-gray-700 mb-1">Data de encerramento:</label>
           <input type="date" id="prazo-date-fim" v-model="prazoDateFim"
+            :min="(prazoDateInicio || new Date().toISOString().substring(0,10))"
             class="form-input rounded-md w-full border-gray-300 shadow-sm text-black">
         </div>
         <div class="flex justify-end gap-3 mt-6">
           <button @click="isPrazoModalVisible = false" class="btn btn-gray">Cancelar</button>
-          <button @click="handleSetPrazo" class="btn btn-blue">Salvar Prazo</button>
+          <button @click="handleSetPrazo" :disabled="!prazoDateInicio || !prazoDateFim || isSavingPrazo" class="btn btn-blue disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2">
+            <span v-if="!isSavingPrazo">Salvar Prazo</span>
+            <span v-else class="flex items-center gap-2">
+              <icons.LoaderCircleIcon class="size-4 animate-spin" /> Salvando...
+            </span>
+          </button>
         </div>
       </div>
     </div>
@@ -799,7 +822,7 @@ onUnmounted(() => {
                   <ul v-if="detail.status === 'updated' && detail.changes && Object.keys(detail.changes).length > 0"
                     class="text-xs list-disc pl-8 mt-1.5 text-gray-600 space-y-1">
                     <li v-for="(change, field) in detail.changes" :key="field">
-                      <strong class="capitalize font-medium">{{ field.replace(/_/g, ' ') }}:</strong>
+                      <strong class="capitalize font-medium">{{ String(field).replace(/_/g, ' ') }}:</strong>
                       de <code class="bg-red-100 text-red-800 px-1.5 py-0.5 rounded">'{{ change.from }}'</code>
                       para <code class="bg-green-100 text-green-800 px-1.5 py-0.5 rounded">'{{ change.to }}'</code>
                     </li>

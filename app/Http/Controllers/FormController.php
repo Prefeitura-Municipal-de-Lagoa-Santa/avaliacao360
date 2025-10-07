@@ -144,13 +144,25 @@ class FormController extends Controller
 
     public function setPrazo(Request $request)
     {
-        
-        // 1. Validar as duas datas recebidas do formulário
+        // 1. Validar as duas datas recebidas do formulário, garantindo que não sejam passadas
         $validated = $request->validate([
             'year' => 'required|digits:4',
             'group' => ['required', Rule::in(['avaliacao', 'pdi'])],
-            'term_first' => 'required|date',
-            'term_end' => 'required|date|after_or_equal:term_first',
+            'term_first' => ['required','date', function($attribute,$value,$fail){
+                $inicio = Carbon::parse($value)->startOfDay();
+                $hoje = Carbon::now()->startOfDay();
+                if ($inicio->lt($hoje)) {
+                    $fail('A data de início do prazo não pode ser menor que a data atual.');
+                }
+            }],
+            'term_end' => ['required','date','after_or_equal:term_first', function($attribute,$value,$fail) use ($request){
+                if (!$request->term_first) { return; }
+                $fim = Carbon::parse($value)->startOfDay();
+                $inicio = Carbon::parse($request->term_first)->startOfDay();
+                if ($fim->lt($inicio)) {
+                    $fail('A data de encerramento deve ser igual ou posterior à data de início.');
+                }
+            }],
         ]);
 
         // 2. Definir para quais tipos de formulário a regra se aplica

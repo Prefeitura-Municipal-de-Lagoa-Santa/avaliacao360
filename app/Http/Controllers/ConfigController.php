@@ -29,7 +29,13 @@ class ConfigController extends Controller
     {
         $validatedData = $request->validate([
             'year' => 'required|integer|min:2000|max:2100',
-            'gradesPeriod' => 'required|date',
+            'gradesPeriod' => ['required','date', function($attribute,$value,$fail){
+                $data = \Carbon\Carbon::parse($value)->startOfDay();
+                $hoje = \Carbon\Carbon::now()->startOfDay();
+                if ($data->lt($hoje)) {
+                    $fail('A data de divulgação das notas não pode ser menor que a data atual.');
+                }
+            }],
             'awarePeriod' => 'required|integer|min:0',
             'recoursePeriod' => 'required|integer|min:0',
         ]);
