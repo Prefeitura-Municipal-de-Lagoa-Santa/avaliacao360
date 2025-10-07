@@ -1,6 +1,6 @@
 <script setup>
 import { ref, onMounted, watch, computed } from 'vue';
-import { Head } from '@inertiajs/vue3';
+import { Head, Link } from '@inertiajs/vue3';
 import DashboardLayout from '@/layouts/DashboardLayout.vue'; // Confirme o nome do seu layout
 import { OrgChart } from 'd3-org-chart';
 import * as icons from 'lucide-vue-next';
@@ -72,6 +72,16 @@ const getNodeColor = (type) => {
     };
     return colors[type] || '#FBC02D'; // Cor para 'Outro'
 };
+
+// Botão de voltar com fallback para rota 'configs'
+const goBack = () => {
+  if (window.history.length > 1) {
+    window.history.back();
+  } else {
+    // fallback
+    window.location.href = route('configs');
+  }
+};
 </script>
 
 <style>
@@ -112,12 +122,11 @@ const getNodeColor = (type) => {
               </option>
             </select>
           </div>
-          <Link :href="route('configs')">
-            <button class="back-btn">
-              <component :is="icons.ArrowLeftIcon" class="size-4 mr-2" />
-              Voltar
-            </button>
-          </Link>
+          <button type="button" @click="goBack"
+            class="inline-flex items-center px-4 py-2 border text-sm font-medium rounded-md shadow-sm text-white bg-purple-600 border-purple-600 hover:bg-purple-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-purple-500 mt-4 sm:mt-0 transition-colors">
+            <component :is="icons.ArrowLeftIcon" class="size-4 mr-2" />
+            Voltar
+          </button>
         </div>
       </div>
 

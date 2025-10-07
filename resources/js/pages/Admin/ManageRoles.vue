@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref } from 'vue';
+import { ref, computed } from 'vue';
 import { Head, router } from '@inertiajs/vue3';
 import DashboardLayout from '@/layouts/DashboardLayout.vue';
 import { route } from 'ziggy-js';
@@ -23,6 +23,11 @@ props.users.forEach((user) => {
   const customRole = user.roles.find(r => r.name.toLowerCase() !== 'servidor');
   selectedRoles.value[user.id] = customRole ? customRole.name : '';
 });
+
+// Computed list excluding any user with role 'admin'
+const filteredUsers = computed(() =>
+  props.users.filter(user => !user.roles.some(r => r.name.toLowerCase() === 'admin'))
+);
 
 function assignRole(userId: number) {
   const role = selectedRoles.value[userId];
@@ -54,7 +59,7 @@ function goBack() {
     <div class="overflow-x-auto bg-white shadow rounded p-4">
         <div class="detail-page-header flex justify-between items-center">
         <h2 class="text-2xl font-bold text-gray-800">
-          Editar Pápeis
+          Editar Papéis
         </h2>
         <button @click="goBack" class="back-btn">
           <ArrowLeftIcon class="size-4 mr-2" />
@@ -72,7 +77,7 @@ function goBack() {
         </thead>
         <tbody>
           <tr
-            v-for="user in props.users"
+            v-for="user in filteredUsers"
             :key="user.id"
             class="border-b hover:bg-gray-50"
           >

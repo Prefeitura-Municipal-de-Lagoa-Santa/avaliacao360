@@ -696,7 +696,7 @@ onUnmounted(() => {
       <div class="settings-section">
         <h3>Gestão de Usuários</h3>
         <div class="setting-item">
-          <label>Editar Pápeis:</label>
+          <label>Editar Papéis:</label>
           <button @click="router.get(route('users.manage-roles'))" class="btn btn-yellow">
             <span>Editar</span>
             <component :is="icons.UserIcon" class="size-5" />
