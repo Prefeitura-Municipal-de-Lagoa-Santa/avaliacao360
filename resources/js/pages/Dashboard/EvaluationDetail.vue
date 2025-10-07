@@ -145,9 +145,9 @@ const completedEvaluations = computed(() =>
               </span>
             </div>
           </div>
-          <button 
-            @click="goBack" 
-            class="inline-flex items-center px-4 py-2 text-sm text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded-lg transition-colors"
+          <button
+            @click="goBack"
+            class="inline-flex items-center px-4 py-2 border text-sm font-medium rounded-md shadow-sm text-white bg-purple-600 border-purple-600 hover:bg-purple-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-purple-500 transition-colors"
           >
             <icons.ArrowLeft class="w-4 h-4 mr-2" />
             Voltar
