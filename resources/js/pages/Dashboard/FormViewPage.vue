@@ -30,6 +30,19 @@ const isPdiForm = computed(() => {
   return pdiTypes.includes(props.form.type);
 });
 
+// Função para formatar peso com decimais quando necessário
+const formatWeight = (weight: number | null) => {
+  if (weight === null || weight === undefined) {
+    return '0';
+  }
+  // Se for um número inteiro, exibe sem decimais
+  if (weight % 1 === 0) {
+    return weight.toString();
+  }
+  // Senão, exibe com até 2 casas decimais, removendo zeros desnecessários
+  return parseFloat(weight.toFixed(2)).toString().replace('.', ',');
+};
+
 // Função para navegar para a página anterior.
 function goBack() {
   window.history.back();
@@ -58,7 +71,7 @@ function goBack() {
             <div class="group-header-view">
                 <h3 class="flex-grow font-semibold text-gray-800">{{ group.name }}</h3>
                 <span v-if="!isPdiForm" class="font-bold text-indigo-500 bg-white px-3 py-1 rounded-full text-sm ml-4">
-                    Peso do Grupo: {{ group.weight }}%
+                    Peso do Grupo: {{ formatWeight(group.weight) }}%
                 </span>
             </div>
 
@@ -73,7 +86,7 @@ function goBack() {
                         <p class="text-gray-800">{{ question.text_content }}</p>
                     </div>
                     <div v-if="!isPdiForm" class="w-2/12 text-center">
-                        <span class="font-medium text-gray-700">{{ question.weight }}%</span>
+                        <span class="font-medium text-gray-700">{{ formatWeight(question.weight) }}%</span>
                     </div>
                 </div>
             </div>

@@ -48,6 +48,29 @@ const page = usePage();
 const flash = computed(() => page.props.flash as { success?: string; error?: string });
 const selectedYear = ref(String(new Date().getFullYear()));
 
+// Limpar mensagens flash automaticamente
+watch(() => flash.value.success, (newMessage) => {
+  if (newMessage) {
+    setTimeout(() => {
+      const flashProps = page.props.flash as { success?: string | null; error?: string | null };
+      if (flashProps.success) {
+        flashProps.success = null;
+      }
+    }, 1000); // Remove a mensagem após 1 segundo
+  }
+}, { immediate: true });
+
+watch(() => flash.value.error, (newMessage) => {
+  if (newMessage) {
+    setTimeout(() => {
+      const flashProps = page.props.flash as { success?: string | null; error?: string | null };
+      if (flashProps.error) {
+        flashProps.error = null;
+      }
+    }, 1000); // Remove a mensagem após 1 segundo
+  }
+}, { immediate: true });
+
 const gradesPeriod = ref('');
 const awarePeriod = ref<number | string>('');
 const recoursePeriod = ref<number | string>('');

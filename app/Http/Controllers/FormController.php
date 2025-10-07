@@ -133,7 +133,7 @@ class FormController extends Controller
                     $finalWeight = ($groupData['weight'] / 100.0) * $questionData['weight'];
                     $groupQuestion->questions()->create([
                         'text_content' => $questionData['text'],
-                        'weight' => round($finalWeight, 2),
+                        'weight' => $finalWeight,
                     ]);
                 }
             }
@@ -249,7 +249,7 @@ class FormController extends Controller
 
                     $groupQuestion->questions()->create([
                         'text_content' => $questionData['text'],
-                        'weight' => round($finalWeight), // Salva o peso final calculado
+                        'weight' => $finalWeight, // Salva o peso final calculado sem arredondamento
                     ]);
                 }
             }
