@@ -30,17 +30,32 @@ const isPdiForm = computed(() => {
   return pdiTypes.includes(props.form.type);
 });
 
-// Função para formatar peso com decimais quando necessário
-const formatWeight = (weight: number | null) => {
-  if (weight === null || weight === undefined) {
+// Função para formatar peso com decimais quando necessário (robusta contra valores não numéricos)
+const formatWeight = (weight: number | string | null | undefined) => {
+  if (weight === null || weight === undefined || weight === '') {
     return '0';
   }
-  // Se for um número inteiro, exibe sem decimais
-  if (weight % 1 === 0) {
-    return weight.toString();
+
+  // Se vier como string (ex: '10', '10,5', '20%') normaliza
+  let raw = weight;
+  if (typeof raw === 'string') {
+    raw = raw.replace('%', '').replace(',', '.').trim();
   }
-  // Senão, exibe com até 2 casas decimais, removendo zeros desnecessários
-  return parseFloat(weight.toFixed(2)).toString().replace('.', ',');
+
+  const num = typeof raw === 'number' ? raw : Number(raw);
+  if (isNaN(num)) {
+    return '0';
+  }
+
+  // Inteiro?
+  if (Number.isInteger(num)) {
+    return num.toString();
+  }
+
+  // Limita a 2 casas, removendo zeros supérfluos e usa vírgula
+  const fixed = num.toFixed(2); // string
+  const trimmed = fixed.replace(/\.00$/, '').replace(/(\.[1-9])0$/, '$1');
+  return trimmed.replace('.', ',');
 };
 
 // Função para navegar para a página anterior.
