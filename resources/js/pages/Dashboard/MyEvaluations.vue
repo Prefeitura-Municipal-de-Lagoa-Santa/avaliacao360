@@ -10,7 +10,7 @@ const props = defineProps<{
   evaluations: Array<{
     year: string;
     user: string;
-    final_score: number;
+    final_score: number | null;
     calc_final: string;
     calc_auto?: string;
     calc_chefia?: string;
@@ -37,9 +37,8 @@ const props = defineProps<{
   }>;
 }>();
 
-const visibleEvaluations = computed(() =>
-  (props.evaluations ?? []).filter(eva => eva && eva.is_in_aware_period)
-);
+// Mostrar todas as avaliações; o botão de assinatura será controlado por is_in_aware_period
+const visibleEvaluations = computed(() => props.evaluations ?? []);
 
 const showModal = ref(false);
 const selectedEvaluationYear = ref<string | null>(null);
@@ -47,6 +46,10 @@ const canvas = ref<HTMLCanvasElement | null>(null);
 let signaturePad: SignaturePad | null = null;
 
 function openSignatureModal(evaluation: any) {
+  if (!evaluation.is_in_aware_period) {
+    alert('Fora do período de ciência da nota.');
+    return;
+  }
   selectedEvaluationYear.value = evaluation.year;
   showModal.value = true;
   nextTick(() => initSignature());
@@ -152,13 +155,12 @@ function goBack() {
             <td class="px-6 py-4">
               <div class="space-y-2">
                 <!-- Nota original -->
-                <div class="flex items-center" :class="{ 'opacity-50': eva.is_recourse_approved }">
+                <div v-if="eva.final_score !== null" class="flex items-center" :class="{ 'opacity-50': eva.is_recourse_approved }">
                   <span class="text-2xl font-bold mr-2" :class="eva.is_recourse_approved ? 'text-gray-400 line-through' : (eva.final_score === 0 ? 'text-red-600' : 'text-blue-600')">
                     {{ eva.final_score }}
                   </span>
                   <span class="text-sm text-gray-500">pts</span>
                   <span v-if="eva.is_recourse_approved" class="ml-2 text-xs text-gray-500">(original)</span>
-                  <!-- Tooltip para nota zerada -->
                   <div v-if="eva.final_score === 0" class="ml-2 group relative">
                     <icons.InfoIcon class="w-4 h-4 text-red-500 cursor-help" />
                     <div class="absolute bottom-6 left-1/2 transform -translate-x-1/2 bg-gray-800 text-white text-xs rounded py-2 px-3 opacity-0 group-hover:opacity-100 transition-opacity duration-300 z-10 whitespace-nowrap">
@@ -166,6 +168,9 @@ function goBack() {
                       <div class="absolute top-full left-1/2 transform -translate-x-1/2 border-4 border-transparent border-t-gray-800"></div>
                     </div>
                   </div>
+                </div>
+                <div v-else class="flex items-center text-gray-400 italic text-sm">
+                  Aguardando divulgação
                 </div>
                 
                 <!-- Nota após recurso (se aprovado) -->
@@ -196,12 +201,14 @@ function goBack() {
               </template>
               <template v-else>
                 <button
+                  v-if="eva.is_in_aware_period"
                   @click="openSignatureModal(eva)"
                   class="inline-flex items-center px-3 py-2 text-sm font-medium text-green-700 bg-green-50 rounded-md hover:bg-green-100 transition-colors"
                 >
                   <icons.PenLineIcon class="size-4 mr-1" />
                   Assinar Ciência
                 </button>
+                <span v-else class="text-xs text-gray-400">Período encerrado</span>
               </template>
             </td>
             <td class="px-6 py-4 text-right">
