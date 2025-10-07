@@ -117,6 +117,11 @@ const allEvaluations = computed(() => {
 const completedEvaluations = computed(() => 
   allEvaluations.value.filter(e => e.nota !== null)
 );
+
+function formatNota(value: number | null): string {
+  if (value === null || value === undefined) return '—';
+  return (Math.round(value * 10) / 10).toFixed(1).replace('.', ',');
+}
 </script>
 
 <template>
@@ -208,7 +213,7 @@ const completedEvaluations = computed(() =>
               </div>
               <div class="text-right">
                 <div class="text-2xl font-bold">
-                  {{ evaluation.nota !== null ? evaluation.nota : '—' }}
+                  {{ evaluation.nota !== null ? formatNota(evaluation.nota) : '—' }}
                 </div>
                 <div class="text-xs opacity-75">
                   {{ evaluation.answers.filter(a => a.score !== null).length }}/{{ evaluation.answers.length }} questões
@@ -307,21 +312,15 @@ const completedEvaluations = computed(() =>
 
               <!-- Estatísticas da avaliação -->
               <div v-if="evaluation.nota !== null" class="mt-4 pt-4 border-t border-gray-200">
-                <div class="grid grid-cols-3 gap-4 text-sm">
+                <div class="grid grid-cols-2 gap-4 text-sm">
                   <div class="text-center">
                     <div 
                       class="text-xl font-bold"
                       :class="getScoreColor(evaluation.nota)"
                     >
-                      {{ evaluation.nota }}
+                      {{ formatNota(evaluation.nota) }}
                     </div>
-                    <div class="text-gray-600">Média</div>
-                  </div>
-                  <div class="text-center">
-                    <div class="text-xl font-bold text-blue-600">
-                      {{ evaluation.answers.filter(a => a.score !== null).reduce((sum, a) => sum + (a.score || 0), 0) }}
-                    </div>
-                    <div class="text-gray-600">Total</div>
+                    <div class="text-gray-600">Nota Total</div>
                   </div>
                   <div class="text-center">
                     <div class="text-xl font-bold text-gray-800">
