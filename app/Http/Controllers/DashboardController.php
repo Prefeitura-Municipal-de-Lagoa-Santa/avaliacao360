@@ -485,10 +485,10 @@ class DashboardController extends Controller
                 ];
             }
 
-            // 4. Cria o evento para o "Período de Ciência"
+            // 4. Cria o evento para o "Período de Ciência" (inicia na data de divulgação)
             if ($config->gradesPeriod && isset($config->awarePeriod)) {
-                $startDate = Carbon::parse($config->gradesPeriod)->addDay();
-                $endDate = $startDate->copy()->addDays($config->awarePeriod - 1);
+                $startDate = Carbon::parse($config->gradesPeriod); // início = divulgação
+                $endDate = $startDate->copy()->addDays(max(0, $config->awarePeriod - 1));
 
                 $newEvents[] = [
                     'start' => $startDate->toDateString(),
