@@ -1107,6 +1107,7 @@ class EvaluationController extends Controller
         $evaluatedPersonId = $evaluation->evaluated_person_id;
         $evaluatedPerson = Person::with('jobFunction')->find($evaluatedPersonId);
         
+        // Buscar todas as requisições (completed e pending) para exibir no detalhe
         $requestsAno = EvaluationRequest::with([
             'evaluation.form.groupQuestions.questions',
             'requested',
@@ -1118,7 +1119,6 @@ class EvaluationController extends Controller
                           $formQuery->where('year', $year);
                       });
             })
-            ->where('status', 'completed')
             ->get();
 
         // Busca TODAS as requisições (incluindo pending) para verificar se deveria ter avaliação de equipe
@@ -1199,6 +1199,7 @@ class EvaluationController extends Controller
                 'answers' => $byQuestion,
                 'evidencias' => $r->evidencias ?? null,
                 'evaluator_name' => $evaluatorName,
+                'status' => $r->status,
             ];
         }
 
