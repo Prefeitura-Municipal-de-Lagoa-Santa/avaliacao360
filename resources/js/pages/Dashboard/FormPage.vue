@@ -5,9 +5,10 @@ import DashboardLayout from '@/layouts/DashboardLayout.vue';
 import FormCreator from '@/pages/Dashboard/Forms.vue';
 
 // --- Interfaces para Tipagem ---
+// QuestionPayload.weight aqui representa o PESO RELATIVO (%) dentro do grupo (0-100)
 interface QuestionPayload {
   text: string;
-  weight: number | null;
+  weight: number | null; // relativo
 }
 interface GroupPayload {
   name: string;
@@ -73,21 +74,22 @@ const form = useForm({
 
 
 function handleSave(groupsPayload: GroupPayload[]) {
-  form.groups = groupsPayload;
+  // Backend espera que a soma dos pesos das questões dentro do grupo seja 100 (relativos).
+  // Mantemos 'question.weight' como percentual relativo e enviamos direto.
+  // (A interface de criação mostra o peso final, mas converte de volta para relativo internamente.)
+  form.groups = groupsPayload as any;
 
   if (isEditing.value) {
-    // Ao editar, usa form.put() que envia uma requisição PUT.
     form.put(route('configs.form.update', { formulario: props.form!.id }), {
-        onError: (errors) => {
-            console.error("Erro ao atualizar:", errors);
-        },
+      onError: (errors) => {
+        console.error('Erro ao atualizar:', errors);
+      },
     });
   } else {
-    // Ao criar, usa form.post() que envia uma requisição POST.
     form.post(route('configs.form.store'), {
-        onError: (errors) => {
-            console.error("Erro ao criar:", errors);
-        },
+      onError: (errors) => {
+        console.error('Erro ao criar:', errors);
+      },
     });
   }
 }
