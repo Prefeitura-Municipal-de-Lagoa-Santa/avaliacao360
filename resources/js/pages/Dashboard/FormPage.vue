@@ -74,10 +74,32 @@ const form = useForm({
 
 
 function handleSave(groupsPayload: GroupPayload[]) {
-  // Backend espera que a soma dos pesos das questões dentro do grupo seja 100 (relativos).
-  // Mantemos 'question.weight' como percentual relativo e enviamos direto.
-  // (A interface de criação mostra o peso final, mas converte de volta para relativo internamente.)
-  form.groups = groupsPayload as any;
+  // Normaliza pesos relativos das questões para garantir soma 100 exata em cada grupo.
+  const normalized = groupsPayload.map(g => {
+    const qs = g.questions.slice();
+    // Trabalha em centésimos para minimizar erro acumulado
+    let rawCents = qs.map(q => Math.round(((Number(q.weight) || 0)) * 100)); // ex: 16.67 -> 1667
+    let sumCents = rawCents.reduce((a,b) => a+b, 0);
+    const targetCents = 100 * 100; // 100.00%
+    let diff = targetCents - sumCents; // positivo: falta; negativo: sobra
+    if (diff !== 0 && qs.length > 0) {
+      // Distribui ajuste de 1 cent por iteração priorizando maiores pesos quando adicionando
+      const order = rawCents.map((v,i)=>({i,v})).sort((a,b)=> diff>0 ? b.v - a.v : a.v - b.v);
+      let idx=0;
+      while(diff !== 0) {
+        rawCents[order[idx].i] += diff>0 ? 1 : -1;
+        diff += diff>0 ? -1 : 1;
+        idx = (idx + 1) % order.length;
+      }
+    }
+    const finalQuestions = qs.map((q, i) => ({
+      text: q.text,
+      weight: parseFloat((rawCents[i]/100).toFixed(2))
+    }));
+    return { name: g.name, weight: g.weight, questions: finalQuestions };
+  });
+
+  form.groups = normalized as any;
 
   if (isEditing.value) {
     form.put(route('configs.form.update', { formulario: props.form!.id }), {
