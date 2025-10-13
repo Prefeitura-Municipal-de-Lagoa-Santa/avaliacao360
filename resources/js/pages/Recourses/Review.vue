@@ -48,7 +48,31 @@ const props = defineProps<{
   canManageAssignees: boolean;
   canDecideNow?: boolean;
   userRole?: 'RH' | 'Comissão' | 'Sem permissão';
+  permissions?: { isRH?: boolean; isComissao?: boolean };
 }>();
+
+// Mapeia valores internos de etapa para rótulos em português
+const stageLabels: Record<string, string> = {
+  rh_analysis: 'Análise do RH',
+  commission_analysis: 'Análise da Comissão',
+  dgp_review: 'Revisão da DGP',
+  await_first_ack: 'Aguardando ciência (1ª instância)',
+  secretary_review: 'Decisão do Secretário',
+  rh_finalize_second: 'Finalização do RH (2ª instância)',
+  await_second_ack: 'Aguardando ciência (2ª instância)',
+  completed: 'Concluído',
+};
+
+function formatStageLabel(stage?: string | null): string {
+  if (!stage) return '—';
+  return stageLabels[stage] ?? stage.replaceAll('_', ' ').toUpperCase();
+}
+
+function formatInstance(instance?: string | null): string {
+  if (!instance) return '—';
+  if (instance === 'Comissao') return 'Comissão';
+  return instance;
+}
 
 const response = ref('');
 const decision = ref<'respondido' | 'indeferido' | null>(null);
@@ -145,6 +169,10 @@ function submitAnalysis() {
 
   router.post(route('recourses.respond', props.recourse.id), formData, {
     forceFormData: true,
+    onSuccess: () => {
+      // Após salvar o parecer, voltar para a lista de recursos abertos
+      router.get(route('recourses.index'));
+    },
   });
 }
 
@@ -219,11 +247,8 @@ function cancelRemoveResponsible() {
 }
 
 function goBack() {
-  if (window.history.length > 1) {
-    window.history.back();
-  } else {
-    router.get(route('recourse')); // Dashboard de recursos
-  }
+  // Sempre voltar para a lista de recursos abertos
+  router.get(route('recourses.index'));
 }
 
 function handleForwardFiles(event: Event) {
@@ -327,6 +352,22 @@ function submitSecretaryDecision(decision: 'homologado' | 'nao_homologado') {
   secretaryDecisionAttachments.value.forEach((f, idx) => fd.append(`secretary_decision_attachments[${idx}]`, f));
   router.post(route('recourses.secretaryDecision', props.recourse.id), fd, { forceFormData: true });
 }
+
+// Compat: botões do template utilizam rótulos deferido/indeferido
+function directorDecision(decision: 'deferido' | 'indeferido') {
+  const map = { deferido: 'homologado', indeferido: 'nao_homologado' } as const;
+  submitDgpDecision(map[decision]);
+}
+function secretaryDecision(decision: 'deferido' | 'indeferido') {
+  const map = { deferido: 'homologado', indeferido: 'nao_homologado' } as const;
+  submitSecretaryDecision(map[decision]);
+}
+function escalateToSecretary() {
+  router.post(route('recourses.forwardToSecretary', props.recourse.id));
+}
+function returnToPrevious() {
+  showReturnModal.value = true;
+}
 </script>
 
 <template>
@@ -335,12 +376,14 @@ function submitSecretaryDecision(decision: 'homologado' | 'nao_homologado') {
     <div class="max-w-6xl mx-auto space-y-6">
       <!-- Cabeçalho Principal -->
       <div class="bg-white p-6 rounded-lg shadow-sm border">
-        <div class="flex justify-between items-start mb-4">
-          <div>
-            <h1 class="text-2xl font-bold text-gray-900 mb-2">
-              Análise de Recurso de Avaliação
-            </h1>
-            <div class="flex items-center gap-4 text-sm text-gray-600">
+        <!-- Cabeçalho com título à esquerda e Voltar à direita -->
+        <div class="flex items-center justify-between mb-3 gap-3">
+          <h1 class="text-2xl font-bold text-gray-900">Análise de Recurso de Avaliação</h1>
+          <button @click="goBack" class="back-btn inline-flex items-center whitespace-nowrap">
+            <icons.ArrowLeftIcon class="size-4 mr-2" /> Voltar
+          </button>
+        </div>
+        <div class="flex items-center gap-4 text-sm text-gray-600">
               <span class="flex items-center gap-1">
                 <icons.User class="w-4 h-4" />
                 <strong>Avaliado:</strong> {{ recourse.person.name }}
@@ -355,34 +398,30 @@ function submitSecretaryDecision(decision: 'homologado' | 'nao_homologado') {
               </span>
               <span class="flex items-center gap-1">
                 <icons.Building2 class="w-4 h-4" />
-                <strong>Instância Atual:</strong> {{ recourse.current_instance || '—' }}
+                <strong>Instância Atual:</strong> {{ formatInstance(recourse.current_instance) }}
               </span>
               <span v-if="recourse.stage" class="flex items-center gap-1">
                 <icons.Flag class="w-4 h-4" />
-                <strong>Etapa:</strong> {{ recourse.stage }}
+                <strong>Etapa:</strong> {{ formatStageLabel(recourse.stage) }}
               </span>
-            </div>
-          </div>
-          <div class="flex items-center gap-3">
-            <span class="text-xs px-3 py-1 rounded-full bg-gray-100 text-gray-700 border">
-              Etapa: {{ recourse.stage?.toUpperCase() || '—' }}
-            </span>
-            <span
-              class="text-sm font-medium text-white px-4 py-2 rounded-full"
-              :class="{
-                'bg-gray-500': recourse.status === 'aberto',
-                'bg-gray-600': recourse.status === 'em_analise',
-                'bg-gray-700': recourse.status === 'respondido',
-                'bg-gray-800': recourse.status === 'indeferido',
-              }"
-            >
-              {{ recourse.status.replace('_', ' ').toUpperCase() }}
-            </span>
-            <button @click="goBack" class="inline-flex items-center px-3 py-2 text-sm text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded-lg transition-colors">
-              <icons.ArrowLeftIcon class="w-4 h-4 mr-2" />
-              Voltar
-            </button>
-          </div>
+        </div>
+        <!-- Chips de etapa/status -->
+        <div class="flex flex-wrap items-center gap-3 mt-2">
+          <span class="text-xs px-3 py-1 rounded-full bg-gray-100 text-gray-700 border whitespace-nowrap">
+            Etapa: {{ formatStageLabel(recourse.stage) }}
+          </span>
+          <span
+            class="text-sm font-medium text-white px-4 py-2 rounded-full"
+            :class="{
+              'bg-gray-500': recourse.status === 'aberto',
+              'bg-gray-600': recourse.status === 'em_analise',
+              'bg-gray-700': recourse.status === 'respondido',
+              'bg-gray-800': recourse.status === 'indeferido',
+            }"
+          >
+            {{ recourse.status.replace('_', ' ').toUpperCase() }}
+          </span>
+        </div>
         </div>
 
         <!-- Info de última devolução -->
@@ -396,7 +435,7 @@ function submitSecretaryDecision(decision: 'homologado' | 'nao_homologado') {
             </div>
           </div>
         </div>
-      </div>
+      
 
       <!-- Layout em Grid: Notas vs Recurso -->
       <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -648,6 +687,33 @@ function submitSecretaryDecision(decision: 'homologado' | 'nao_homologado') {
         <div v-if="recourse.actions?.canDgpDecide" class="bg-white rounded-lg shadow-sm border p-4">
           <div class="flex items-center gap-2 mb-3 text-sm text-gray-700">
             <icons.BadgeCheck class="w-4 h-4" /> Registrar decisão da DGP
+          </div>
+          <!-- Contexto para a DGP: parecer final da Comissão -->
+          <div class="bg-gray-50 border border-gray-200 rounded p-3 mb-3 space-y-2">
+            <div class="flex items-center gap-2 text-sm font-semibold text-gray-800">
+              <icons.Scale class="w-4 h-4" /> Parecer da Comissão
+            </div>
+            <template v-if="recourse.response || (recourse.responseAttachments && recourse.responseAttachments.length) || recourse.status === 'respondido' || recourse.status === 'indeferido'">
+              <div v-if="recourse.status === 'respondido' || recourse.status === 'indeferido'" class="text-sm text-gray-700 flex items-center gap-2">
+                <span class="font-medium">Decisão:</span>
+                <span class="uppercase">{{ recourse.status === 'respondido' ? 'DEFERIDO' : 'INDEFERIDO' }}</span>
+              </div>
+              <div v-if="recourse.response" class="bg-white border rounded p-2 text-sm text-gray-700 whitespace-pre-wrap">
+                {{ recourse.response }}
+              </div>
+              <div v-if="recourse.responseAttachments && recourse.responseAttachments.length" class="mt-1">
+                <h4 class="text-xs font-medium text-gray-700 mb-1 flex items-center gap-1">
+                  <icons.Paperclip class="w-4 h-4" /> Documentos do Parecer
+                </h4>
+                <ul class="space-y-1">
+                  <li v-for="(f,i) in recourse.responseAttachments" :key="i" class="flex items-center justify-between bg-white border rounded px-2 py-1 text-xs">
+                    <span class="truncate">{{ f.name }}</span>
+                    <a :href="f.url" target="_blank" class="text-gray-700 hover:underline">abrir</a>
+                  </li>
+                </ul>
+              </div>
+            </template>
+            <p v-else class="text-xs text-gray-500">A Comissão ainda não registrou o parecer final.</p>
           </div>
           <div class="mt-2">
             <label class="block text-sm text-gray-700 mb-1">Justificativa (obrigatória para indeferir)</label>
