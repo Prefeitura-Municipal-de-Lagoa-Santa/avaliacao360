@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref } from 'vue';
+import { ref, computed } from 'vue';
 import { Head, router } from '@inertiajs/vue3';
 import DashboardLayout from '@/layouts/DashboardLayout.vue';
 import * as icons from 'lucide-vue-next';
@@ -112,6 +112,32 @@ const showAssignForm = ref(false);
 const showRemoveModal = ref(false);
 const responsibleToRemove = ref<{ id: number; name: string; registration_number: string } | null>(null);
 
+// Contador de devoluções anteriores com base nos logs
+const returnsCount = computed(() => {
+  try {
+    return (props.recourse.logs || []).filter((log) => {
+      const s = (log.status || '').toLowerCase();
+      const m = (log.message || '').toLowerCase();
+      return s.includes('devolv') || s.includes('return') || m.includes('devolv') || m.includes('return');
+    }).length;
+  } catch {
+    return 0;
+  }
+});
+
+// Mostrar aviso de última devolução apenas quando ainda pertinente
+const showLastReturnBanner = computed(() => {
+  const lr = props.recourse.last_return;
+  if (!lr) return false;
+  // Se o recurso já mudou de instância desde a devolução, não exibir
+  if (props.recourse.current_instance !== lr.to) return false;
+  // Se já houve decisão final, não exibir
+  if (props.recourse.status === 'respondido' || props.recourse.status === 'indeferido') return false;
+  // Caso haja parecer registrado (texto), considerar tratado
+  if (props.recourse.response && props.recourse.response.trim().length > 0) return false;
+  return true;
+});
+
 function markAsAnalyzing() {
   if (!canDecideNow.value) return;
   router.post(route('recourses.markAnalyzing', props.recourse.id), {}, {
@@ -199,6 +225,8 @@ function confirmForwardToCommission() {
       showForwardModal.value = false;
       forwardMessage.value = '';
       forwardAttachments.value = [];
+      // Feedback visual
+      try { alert('Recurso reencaminhado para a Comissão.'); } catch {}
     }
   });
 }
@@ -313,6 +341,7 @@ function confirmDgpReturn() {
       showDgpReturnModal.value = false;
       dgpReturnMessage.value = '';
       dgpReturnAttachments.value = [];
+      try { alert('Recurso devolvido para a Comissão.'); } catch {}
     }
   });
 }
@@ -333,6 +362,7 @@ function returnToPreviousInstance() {
       showReturnModal.value = false;
       returnMessage.value = '';
       returnAttachments.value = [];
+      try { alert('Recurso devolvido para a instância anterior.'); } catch {}
     }
   });
 }
@@ -407,6 +437,9 @@ function returnToPrevious() {
         </div>
         <!-- Chips de etapa/status -->
         <div class="flex flex-wrap items-center gap-3 mt-2">
+          <span v-if="returnsCount > 0" class="text-xs px-3 py-1 rounded-full bg-amber-100 text-amber-800 border border-amber-300 whitespace-nowrap">
+            Devolvido {{ returnsCount }} vez{{ returnsCount > 1 ? 'es' : '' }}
+          </span>
           <span class="text-xs px-3 py-1 rounded-full bg-gray-100 text-gray-700 border whitespace-nowrap">
             Etapa: {{ formatStageLabel(recourse.stage) }}
           </span>
@@ -425,12 +458,12 @@ function returnToPrevious() {
         </div>
 
         <!-- Info de última devolução -->
-        <div v-if="recourse.last_return" class="mt-2 p-3 bg-amber-50 border border-amber-200 rounded">
+        <div v-if="showLastReturnBanner" class="mt-2 p-3 bg-amber-50 border border-amber-200 rounded">
           <div class="flex items-start gap-2 text-amber-800">
             <icons.Reply class="w-4 h-4 mt-0.5" />
             <div class="text-sm">
               <p>
-                Recurso devolvido para <strong>{{ recourse.last_return.to }}</strong> por <strong>{{ recourse.last_return.by }}</strong> em {{ recourse.last_return.at }}.
+                Recurso devolvido para <strong>{{ recourse.last_return?.to }}</strong> por <strong>{{ recourse.last_return?.by }}</strong> em {{ recourse.last_return?.at }}.
               </p>
             </div>
           </div>
