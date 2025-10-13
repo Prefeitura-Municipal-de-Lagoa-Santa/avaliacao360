@@ -112,7 +112,18 @@ function goBack() {
         </div>
         <p class="text-sm text-gray-700 font-medium">Status do Recurso:</p>
 
-        <div v-if="recourse.status === 'aberto'" class="text-yellow-700 bg-yellow-50 px-4 py-2 rounded flex items-center gap-2">
+        <!-- Prioridade: decisão da DGP (1ª instância) -->
+        <div v-if="recourse.dgp && recourse.dgp.decision && !(recourse.secretary && recourse.secretary.decision)" class="text-indigo-700 bg-indigo-50 px-4 py-2 rounded flex items-center gap-2">
+          <icons.Stamp class="w-5 h-5" />
+          <span>
+            Decisão da DGP registrada
+            <span v-if="recourse.dgp && recourse.dgp.decision">: <strong>{{ recourse.dgp.decision.toUpperCase() }}</strong></span>
+            <span v-if="recourse.actions && recourse.actions.canAcknowledgeFirst"> — Aguardando sua ciência (1ª instância).</span>
+            <span v-else> — Aguardando trâmites do RH.</span>
+          </span>
+        </div>
+
+        <div v-else-if="recourse.status === 'aberto'" class="text-yellow-700 bg-yellow-50 px-4 py-2 rounded flex items-center gap-2">
           <icons.AlertCircleIcon class="w-5 h-5" />
           <span>Aguardando análise da comissão.</span>
         </div>
@@ -120,6 +131,15 @@ function goBack() {
         <div v-else-if="recourse.status === 'em_analise'" class="text-blue-700 bg-blue-50 px-4 py-2 rounded flex items-center gap-2">
           <icons.LoaderIcon class="w-5 h-5 animate-spin" />
           <span>Recurso em análise. Em breve você receberá uma resposta oficial.</span>
+        </div>
+
+        <div v-else-if="recourse.secretary && recourse.secretary.decision" class="text-purple-700 bg-purple-50 px-4 py-2 rounded flex items-center gap-2">
+          <icons.Stamp class="w-5 h-5" />
+          <span>
+            Decisão do Secretário registrada
+            <span v-if="recourse.secretary && recourse.secretary.decision">: <strong>{{ recourse.secretary.decision.toUpperCase() }}</strong></span>
+            <span v-if="recourse.actions && recourse.actions.canAcknowledgeSecond"> — Aguardando sua ciência (2ª instância).</span>
+          </span>
         </div>
 
         <div v-else-if="recourse.status === 'respondido'" class="text-green-700 bg-green-50 px-4 py-2 rounded flex items-center gap-2">
