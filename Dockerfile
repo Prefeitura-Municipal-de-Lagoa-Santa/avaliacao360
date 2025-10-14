@@ -43,6 +43,13 @@ RUN rm -f /etc/nginx/sites-enabled/default && \
     ln -s /etc/nginx/sites-available/default /etc/nginx/sites-enabled/default && \
     chmod +x /usr/local/bin/entrypoint.sh
 
+# Configura limites de upload no PHP para corresponder ao Nginx
+RUN echo "upload_max_filesize=100M" >> /etc/php/8.3/fpm/php.ini \
+    && echo "post_max_size=100M" >> /etc/php/8.3/fpm/php.ini \
+    && echo "max_file_uploads=50" >> /etc/php/8.3/fpm/php.ini \
+    && echo "file_uploads=On" >> /etc/php/8.3/fpm/php.ini \
+    && echo "memory_limit=256M" >> /etc/php/8.3/fpm/php.ini
+
 # Diretório de trabalho já definido; permissões serão ajustadas no entrypoint se necessário
 
 # Expõe a porta 80, que o Nginx usará
