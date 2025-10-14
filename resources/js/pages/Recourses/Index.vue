@@ -130,7 +130,7 @@ function scrollToAwaiting() {
             <th class="px-4 py-2">Servidor</th>
             <th class="px-4 py-2">Ano</th>
             <th class="px-4 py-2">Status</th>
-            <th v-if="canManageAssignees" class="px-4 py-2">Responsáveis</th>
+            <th v-if="canManageAssignees" class="px-4 py-2">Presidente</th>
             <th class="px-4 py-2">Ações</th>
           </tr>
         </thead>
@@ -149,15 +149,11 @@ function scrollToAwaiting() {
             </td>
             <td v-if="canManageAssignees" class="px-4 py-2">
               <div v-if="r.responsiblePersons && r.responsiblePersons.length > 0" class="flex flex-wrap gap-1">
-                <span 
-                  v-for="person in r.responsiblePersons" 
-                  :key="person.name"
-                  class="inline-flex items-center px-2 py-1 rounded-full text-xs bg-blue-100 text-blue-800"
-                >
-                  {{ person.name }}
+                <span class="inline-flex items-center px-2 py-1 rounded-full text-xs bg-blue-100 text-blue-800">
+                  {{ r.responsiblePersons[0].name }}
                 </span>
               </div>
-              <span v-else class="text-gray-400 text-xs">Sem responsáveis</span>
+              <span v-else class="text-gray-400 text-xs">Sem presidente</span>
             </td>
             <td class="px-4 py-2">
               <Link

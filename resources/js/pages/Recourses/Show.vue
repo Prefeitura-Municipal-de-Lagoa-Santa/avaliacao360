@@ -289,7 +289,7 @@ function goBack() {
             <button type="button" @click="triggerSecondFileInput" class="inline-flex items-center gap-2 px-3 py-2 rounded border border-gray-300 bg-white text-gray-700 hover:bg-gray-50 text-sm">
               <icons.PaperclipIcon class="w-4 h-4" /> Selecionar arquivos
             </button>
-            <div class="mt-2 text-xs text-gray-500">Até 10MB por arquivo.</div>
+            <div class="mt-2 text-xs text-gray-500">Até 100MB por arquivo.</div>
             <ul v-if="secondFiles.length" class="mt-2 space-y-1">
               <li v-for="(f,i) in secondFiles" :key="i" class="flex items-center justify-between bg-gray-50 border rounded px-2 py-1 text-xs">
                 <span class="truncate">{{ f.name }}</span>

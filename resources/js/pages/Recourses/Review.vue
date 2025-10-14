@@ -13,6 +13,7 @@ const props = defineProps<{
     current_instance?: 'RH' | 'Comissao';
     stage?: string | null;
     response: string | null;
+    commission?: { decision?: string | null; response?: string | null; decided_at?: string | null };
     dgp?: { decision?: string | null; decided_at?: string | null; notes?: string | null };
     second_instance?: { enabled: boolean; requested_at?: string | null; text?: string | null };
     secretary?: { decision?: string | null; decided_at?: string | null; notes?: string | null };
@@ -77,6 +78,7 @@ function formatInstance(instance?: string | null): string {
 const response = ref('');
 const decision = ref<'respondido' | 'indeferido' | null>(null);
 const dgpNotes = ref('');
+const dgpDecision = ref<'homologado' | 'nao_homologado' | null>(null);
 const responseAttachments = ref<File[]>([]);
 const fileInput = ref<HTMLInputElement | null>(null);
 // DGP decisão: anexos
@@ -88,6 +90,8 @@ const secretaryDecisionAttachments = ref<File[]>([]);
 const secretaryDecisionFileInput = ref<HTMLInputElement | null>(null);
 const isAnalyzing = ref(props.recourse.status === 'em_analise');
 const canDecideNow = ref(props.canDecideNow ?? true);
+// Após encaminhamento para a Comissão o perfil RH deve apenas visualizar histórico
+const isRhViewerPostForward = computed(() => props.userRole === 'RH' && props.recourse.current_instance !== 'RH');
 const showReturnModal = ref(false);
 const showForwardModal = ref(false);
 const forwardMessage = ref('');
@@ -179,6 +183,10 @@ function submitAnalysis() {
     alert('Informe o parecer e selecione o tipo de decisão.');
     return;
   }
+  if (responseAttachments.value.length === 0) {
+    alert('Envie pelo menos um documento de apoio antes de salvar o parecer.');
+    return;
+  }
   if (!canDecideNow.value) {
     alert('A decisão não pode ser tomada nesta instância. Aguarde o processo retornar para sua instância.');
     return;
@@ -206,18 +214,20 @@ function submitAnalysis() {
 
 function handleForwardToCommission() {
   if (!props.recourse.actions?.canForwardToCommission) return;
-  // Se houve devolução anterior, exigir justificativa via modal
-  if (props.recourse.last_return) {
-    showForwardModal.value = true;
-    return;
-  }
-  router.post(route('recourses.forwardToCommission', props.recourse.id));
+  // Sempre abrir modal para permitir anexos e mensagem
+  showForwardModal.value = true;
 }
 
 function confirmForwardToCommission() {
-  if (!forwardMessage.value.trim()) return;
+  // Mensagem obrigatória apenas se houve devolução anterior
+  if (props.recourse.last_return && !forwardMessage.value.trim()) {
+    alert('Informe a justificativa do reenvio.');
+    return;
+  }
   const formData = new FormData();
-  formData.append('message', forwardMessage.value);
+  if (forwardMessage.value.trim()) {
+    formData.append('message', forwardMessage.value.trim());
+  }
   forwardAttachments.value.forEach((file, index) => formData.append(`forward_attachments[${index}]`, file));
   router.post(route('recourses.forwardToCommission', props.recourse.id), formData, {
     forceFormData: true,
@@ -225,8 +235,10 @@ function confirmForwardToCommission() {
       showForwardModal.value = false;
       forwardMessage.value = '';
       forwardAttachments.value = [];
-      // Feedback visual
-      try { alert('Recurso reencaminhado para a Comissão.'); } catch {}
+  // Removido alerta de confirmação após encaminhar para a Comissão
+    },
+    onError: () => {
+      // Mantém modal aberto para correção
     }
   });
 }
@@ -375,6 +387,17 @@ function submitDgpDecision(decision: 'homologado' | 'nao_homologado') {
   dgpDecisionAttachments.value.forEach((f, idx) => fd.append(`dgp_decision_attachments[${idx}]`, f));
   router.post(route('recourses.dgpDecision', props.recourse.id), fd, { forceFormData: true });
 }
+function saveDgpDecision() {
+  if (!dgpDecision.value) {
+    alert('Selecione uma decisão (Deferir ou Indeferir).');
+    return;
+  }
+  if (dgpDecision.value === 'nao_homologado' && !dgpNotes.value.trim()) {
+    alert('Justificativa obrigatória para indeferir.');
+    return;
+  }
+  submitDgpDecision(dgpDecision.value);
+}
 function submitSecretaryDecision(decision: 'homologado' | 'nao_homologado') {
   const fd = new FormData();
   fd.append('decision', decision);
@@ -439,9 +462,6 @@ function returnToPrevious() {
         <div class="flex flex-wrap items-center gap-3 mt-2">
           <span v-if="returnsCount > 0" class="text-xs px-3 py-1 rounded-full bg-amber-100 text-amber-800 border border-amber-300 whitespace-nowrap">
             Devolvido {{ returnsCount }} vez{{ returnsCount > 1 ? 'es' : '' }}
-          </span>
-          <span class="text-xs px-3 py-1 rounded-full bg-gray-100 text-gray-700 border whitespace-nowrap">
-            Etapa: {{ formatStageLabel(recourse.stage) }}
           </span>
           <span
             class="text-sm font-medium text-white px-4 py-2 rounded-full"
@@ -590,107 +610,99 @@ function returnToPrevious() {
         </div>
       </div>
 
-      <!-- SEÇÃO: Gestão de Responsáveis (RH) -->
-      <div v-if="canManageAssignees" class="bg-white rounded-lg shadow-sm border">
+      <!-- SEÇÃO: Presidente da Comissão (RH) -->
+  <div v-if="canManageAssignees && !isRhViewerPostForward" class="bg-white rounded-lg shadow-sm border">
         <div class="bg-gray-600 text-white p-4 rounded-t-lg">
           <h2 class="text-lg font-semibold flex items-center gap-2">
-            <icons.Users class="w-5 h-5" />
-            Comissão Responsável
+            <icons.UserCircle2 class="w-5 h-5" />
+            Presidente da Comissão
           </h2>
           <p class="text-sm text-gray-300 mt-1">
-            Gerenciar membros responsáveis pela análise do recurso
+            Defina o Presidente da Comissão responsável pela análise deste recurso.
           </p>
         </div>
-        
-        <div class="p-4 space-y-4">
-          <!-- Lista de responsáveis atuais -->
-          <div v-if="recourse.responsiblePersons.length">
-            <h3 class="font-medium text-gray-700 mb-3">Membros Atuais da Comissão</h3>
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
-              <div
-                v-for="responsible in recourse.responsiblePersons"
-                :key="responsible.id"
-                class="flex items-center justify-between bg-gray-50 p-3 rounded-lg border border-gray-200"
-              >
-                <div class="flex items-center gap-2">
-                  <div class="w-8 h-8 bg-gray-600 text-white rounded-full flex items-center justify-center text-sm font-medium">
-                    {{ responsible.name.charAt(0).toUpperCase() }}
+
+        <div class="p-4 space-y-6">
+          <!-- Presidente atual -->
+            <div>
+              <h3 class="font-medium text-gray-700 mb-3">Presidente Atual</h3>
+              <div v-if="recourse.responsiblePersons.length" class="flex items-center justify-between bg-gray-50 p-4 rounded-lg border border-gray-200">
+                <div class="flex items-center gap-3">
+                  <div class="w-10 h-10 bg-gray-600 text-white rounded-full flex items-center justify-center text-sm font-medium">
+                    {{ recourse.responsiblePersons[0].name.charAt(0).toUpperCase() }}
                   </div>
                   <div>
-                    <p class="text-sm font-medium text-gray-900">{{ responsible.name }}</p>
-                    <p class="text-xs text-gray-500">{{ responsible.registration_number }}</p>
+                    <p class="text-sm font-semibold text-gray-900">{{ recourse.responsiblePersons[0].name }}</p>
+                    <p class="text-xs text-gray-500">{{ recourse.responsiblePersons[0].registration_number }}</p>
                   </div>
                 </div>
                 <button
-                  @click="removeResponsible(responsible.id)"
-                  class="text-red-500 hover:text-red-700 p-2 rounded-lg hover:bg-red-50 transition-colors group"
+                  @click="removeResponsible(recourse.responsiblePersons[0].id)"
+                  class="text-red-600 hover:text-red-700 p-2 rounded-lg hover:bg-red-50 transition-colors flex items-center gap-1 text-xs font-medium"
                   type="button"
-                  title="Remover membro da comissão"
+                  title="Remover Presidente"
                 >
-                  <icons.UserMinus class="w-4 h-4 group-hover:scale-110 transition-transform" />
+                  <icons.Trash2 class="w-4 h-4" /> Remover
                 </button>
               </div>
-            </div>
-          </div>
-          
-          <div v-else class="text-center py-4">
-            <icons.UserPlus class="w-8 h-8 text-gray-400 mx-auto mb-2" />
-            <p class="text-sm text-gray-500">Nenhum membro atribuído à comissão ainda.</p>
-          </div>
-
-          <!-- Formulário para adicionar responsável -->
-          <div class="border-t pt-4">
-            <div v-if="!showAssignForm">
-              <button
-                @click="showAssignForm = true"
-                class="w-full px-4 py-3 bg-gray-700 text-white rounded-lg hover:bg-gray-800 transition-colors flex items-center justify-center gap-2"
-              >
-                <icons.UserPlus class="w-4 h-4" />
-                Adicionar Membro à Comissão
-              </button>
+              <div v-else class="text-center py-6 bg-gray-50 rounded-lg border border-dashed border-gray-300">
+                <p class="text-sm text-gray-500 flex items-center justify-center gap-2">
+                  <icons.AlertCircle class="w-4 h-4" /> Nenhum Presidente definido.
+                </p>
+              </div>
             </div>
 
-            <div v-else class="space-y-3">
-              <div>
-                <label class="block text-sm font-medium text-gray-700 mb-2">
-                  Selecionar Novo Membro
-                </label>
-                <select
-                  v-model="selectedPersonId"
-                  class="w-full border border-gray-300 rounded-lg p-3 text-sm focus:ring-2 focus:ring-gray-500 focus:border-transparent"
+            <!-- Formulário para definir/alterar Presidente -->
+            <div class="border-t pt-4">
+              <div v-if="!showAssignForm">
+                <button
+                  @click="showAssignForm = true"
+                  class="w-full px-4 py-3 bg-gray-700 text-white rounded-lg hover:bg-gray-800 transition-colors flex items-center justify-center gap-2"
                 >
-                  <option value="" disabled>Escolha uma pessoa...</option>
-                  <option
-                    v-for="person in availablePersons.filter(p => !recourse.responsiblePersons.some(r => r.id === p.id))"
-                    :key="person.id"
-                    :value="person.id"
+                  <icons.UserPlus class="w-4 h-4" />
+                  {{ recourse.responsiblePersons.length ? 'Alterar Presidente' : 'Definir Presidente' }}
+                </button>
+              </div>
+
+              <div v-else class="space-y-4">
+                <div>
+                  <label class="block text-sm font-medium text-gray-700 mb-2">Selecionar Presidente</label>
+                  <select
+                    v-model="selectedPersonId"
+                    class="w-full border border-gray-300 rounded-lg p-3 text-sm focus:ring-2 focus:ring-gray-500 focus:border-transparent"
                   >
-                    {{ person.registration_number }} - {{ person.name }}
-                  </option>
-                </select>
-              </div>
-              <div class="flex gap-2">
-                <button
-                  @click="assignResponsible"
-                  class="flex-1 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors text-sm font-medium"
-                  :disabled="!selectedPersonId"
-                >
-                  Atribuir
-                </button>
-                <button
-                  @click="showAssignForm = false; selectedPersonId = null"
-                  class="flex-1 px-4 py-2 bg-gray-500 text-white rounded-lg hover:bg-gray-600 transition-colors text-sm font-medium"
-                >
-                  Cancelar
-                </button>
+                    <option value="" disabled>Escolha uma pessoa...</option>
+                    <option
+                      v-for="person in availablePersons"
+                      :key="person.id"
+                      :value="person.id"
+                    >
+                      {{ person.registration_number }} - {{ person.name }}
+                    </option>
+                  </select>
+                </div>
+                <div class="flex gap-2">
+                  <button
+                    @click="assignResponsible"
+                    class="flex-1 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors text-sm font-medium"
+                    :disabled="!selectedPersonId"
+                  >
+                    Salvar
+                  </button>
+                  <button
+                    @click="showAssignForm = false; selectedPersonId = null"
+                    class="flex-1 px-4 py-2 bg-gray-500 text-white rounded-lg hover:bg-gray-600 transition-colors text-sm font-medium"
+                  >
+                    Cancelar
+                  </button>
+                </div>
               </div>
             </div>
-          </div>
         </div>
       </div>
 
       <!-- Ação RH: encaminhar para Comissão -->
-      <div v-if="userRole === 'RH' && recourse.current_instance === 'RH'" class="bg-white rounded-lg shadow-sm border p-4">
+  <div v-if="userRole === 'RH' && recourse.current_instance === 'RH' && !isRhViewerPostForward" class="bg-white rounded-lg shadow-sm border p-4">
         <div class="flex items-center justify-between">
           <div class="text-sm text-gray-700 flex items-center gap-2">
             <icons.Send class="w-4 h-4" />
@@ -717,59 +729,112 @@ function returnToPrevious() {
         <!-- RH: Encaminhar à DGP (removido: agora automático após parecer da Comissão) -->
 
         <!-- DGP: Registrar decisão -->
-        <div v-if="recourse.actions?.canDgpDecide" class="bg-white rounded-lg shadow-sm border p-4">
-          <div class="flex items-center gap-2 mb-3 text-sm text-gray-700">
-            <icons.BadgeCheck class="w-4 h-4" /> Registrar decisão da DGP
+        <div v-if="recourse.actions?.canDgpDecide" class="bg-white rounded-lg shadow-sm border">
+          <div class="bg-gray-800 text-white p-4 rounded-t-lg">
+            <h2 class="text-lg font-semibold flex items-center gap-2">
+              <icons.BadgeCheck class="w-5 h-5" /> Decisão da DGP
+            </h2>
+            <p class="text-sm text-gray-300 mt-1">Homologação ou não do parecer da Comissão</p>
           </div>
-          <!-- Contexto para a DGP: parecer final da Comissão -->
-          <div class="bg-gray-50 border border-gray-200 rounded p-3 mb-3 space-y-2">
-            <div class="flex items-center gap-2 text-sm font-semibold text-gray-800">
-              <icons.Scale class="w-4 h-4" /> Parecer da Comissão
+          <div class="p-5 space-y-6">
+
+            <!-- Decisão (radio cards) -->
+            <div>
+              <!-- Parecer detalhado da Comissão (reintroduzido para contexto da DGP) -->
+              <div v-if="(recourse.response && recourse.response.trim()) || (recourse.responseAttachments && recourse.responseAttachments.length)" class="mb-6">
+                <div class="bg-gray-50 border border-gray-200 rounded-lg p-4 space-y-3">
+                  <div class="flex items-center justify-between gap-3 flex-wrap">
+                    <h3 class="text-xs font-semibold text-gray-700 flex items-center gap-1">
+                      <icons.FileText class="w-4 h-4" /> Texto do Parecer da Comissão
+                    </h3>
+                    <span v-if="recourse.commission?.decision"
+                      class="text-[10px] tracking-wide font-semibold px-2 py-1 rounded-full border"
+                      :class="recourse.commission.decision === 'deferido' ? 'bg-green-100 text-green-700 border-green-300' : 'bg-red-100 text-red-700 border-red-300'">
+                      {{ recourse.commission.decision === 'deferido' ? 'DEFERIDO' : 'INDEFERIDO' }}
+                    </span>
+                    <span v-else-if="recourse.response && recourse.response.trim()"
+                      class="text-[10px] tracking-wide font-semibold px-2 py-1 rounded-full border bg-gray-100 text-gray-700 border-gray-300">
+                      ANÁLISE CONCLUÍDA
+                    </span>
+                  </div>
+                  <div v-if="recourse.commission?.decision" class="mt-1 text-[11px] text-gray-600 flex items-center gap-2">
+                    <icons.Clock class="w-3 h-3" />
+                    <span>
+                      <span class="font-semibold">Decisão da Comissão:</span>
+                      <strong :class="recourse.commission.decision === 'deferido' ? 'text-green-700' : 'text-red-700'">
+                        {{ recourse.commission.decision === 'deferido' ? 'DEFERIDO' : 'INDEFERIDO' }}
+                      </strong>
+                      <span v-if="recourse.commission.decided_at"> em {{ recourse.commission.decided_at }}</span>
+                    </span>
+                  </div>
+                  <div v-if="recourse.response" class="bg-white border rounded p-3 text-sm text-gray-700 whitespace-pre-wrap max-h-48 overflow-y-auto">
+                    {{ recourse.response }}
+                  </div>
+                  <div v-if="recourse.responseAttachments && recourse.responseAttachments.length" class="pt-2 border-t border-gray-200">
+                    <h4 class="text-xs font-medium text-gray-600 mb-1 flex items-center gap-1"><icons.Paperclip class="w-4 h-4" /> Anexos do Parecer</h4>
+                    <ul class="space-y-1 max-h-40 overflow-y-auto">
+                      <li v-for="(f,i) in recourse.responseAttachments" :key="i" class="flex items-center justify-between bg-white border rounded px-2 py-1 text-xs">
+                        <span class="truncate">{{ f.name }}</span>
+                        <a :href="f.url" target="_blank" class="text-gray-700 hover:underline">abrir</a>
+                      </li>
+                    </ul>
+                  </div>
+                </div>
+              </div>
+              <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <label class="flex items-center justify-center gap-3 p-4 border-2 rounded-lg cursor-pointer transition-colors"
+                       :class="[dgpDecision === 'homologado' ? 'border-gray-500 bg-gray-50 text-gray-700' : 'border-gray-300 hover:border-gray-400']">
+                  <input type="radio" v-model="dgpDecision" value="homologado" class="text-gray-600" />
+                  <icons.CheckCircle class="w-5 h-5" />
+                  <span class="font-medium">DEFERIR (Homologar)</span>
+                </label>
+                <label class="flex items-center justify-center gap-3 p-4 border-2 rounded-lg cursor-pointer transition-colors"
+                       :class="[dgpDecision === 'nao_homologado' ? 'border-gray-500 bg-gray-50 text-gray-700' : 'border-gray-300 hover:border-gray-400']">
+                  <input type="radio" v-model="dgpDecision" value="nao_homologado" class="text-gray-600" />
+                  <icons.XCircle class="w-5 h-5" />
+                  <span class="font-medium">INDEFERIR (Não homologar)</span>
+                </label>
+              </div>
             </div>
-            <template v-if="recourse.response || (recourse.responseAttachments && recourse.responseAttachments.length) || recourse.status === 'respondido' || recourse.status === 'indeferido'">
-              <div v-if="recourse.status === 'respondido' || recourse.status === 'indeferido'" class="text-sm text-gray-700 flex items-center gap-2">
-                <span class="font-medium">Decisão:</span>
-                <span class="uppercase">{{ recourse.status === 'respondido' ? 'DEFERIDO' : 'INDEFERIDO' }}</span>
-              </div>
-              <div v-if="recourse.response" class="bg-white border rounded p-2 text-sm text-gray-700 whitespace-pre-wrap">
-                {{ recourse.response }}
-              </div>
-              <div v-if="recourse.responseAttachments && recourse.responseAttachments.length" class="mt-1">
-                <h4 class="text-xs font-medium text-gray-700 mb-1 flex items-center gap-1">
-                  <icons.Paperclip class="w-4 h-4" /> Documentos do Parecer
-                </h4>
-                <ul class="space-y-1">
-                  <li v-for="(f,i) in recourse.responseAttachments" :key="i" class="flex items-center justify-between bg-white border rounded px-2 py-1 text-xs">
-                    <span class="truncate">{{ f.name }}</span>
-                    <a :href="f.url" target="_blank" class="text-gray-700 hover:underline">abrir</a>
-                  </li>
-                </ul>
-              </div>
-            </template>
-            <p v-else class="text-xs text-gray-500">A Comissão ainda não registrou o parecer final.</p>
-          </div>
-          <div class="mt-2">
-            <label class="block text-sm text-gray-700 mb-1">Justificativa (obrigatória para indeferir)</label>
-            <textarea v-model="dgpNotes" rows="3" class="w-full border rounded p-2" placeholder="Descreva a justificativa caso vá indeferir..."></textarea>
-          </div>
-          <!-- Anexos da decisão da DGP (opcional) -->
-          <div class="mt-3">
-            <label class="block text-sm font-medium text-gray-700 mb-1">Anexos (opcional)</label>
-            <input ref="dgpDecisionFileInput" type="file" multiple @change="handleDgpDecisionFiles" class="hidden" />
-            <button type="button" @click="triggerDgpDecisionFileInput" class="inline-flex items-center gap-2 px-3 py-2 rounded border border-gray-300 bg-white text-gray-700 hover:bg-gray-50 text-sm">
-              <icons.Paperclip class="w-4 h-4" /> Selecionar arquivos
-            </button>
-            <div class="mt-2 text-xs text-gray-500">Até 10MB por arquivo.</div>
-            <ul v-if="dgpDecisionAttachments.length" class="mt-2 space-y-1">
-              <li v-for="(f,i) in dgpDecisionAttachments" :key="i" class="flex items-center justify-between bg-gray-50 border rounded px-2 py-1 text-xs">
-                <span class="truncate">{{ f.name }}</span>
-                <button type="button" class="ml-2 text-red-600 hover:underline" @click="removeDgpDecisionAttachment(i)">remover</button>
-              </li>
-            </ul>
-          </div>
-          <div class="flex flex-wrap gap-2 mt-3">
-            <button class="px-4 py-2 bg-green-600 text-white rounded text-sm" @click="submitDgpDecision('homologado')">Deferir</button>
-            <button class="px-4 py-2 bg-red-600 text-white rounded text-sm" :disabled="!dgpNotes.trim()" @click="submitDgpDecision('nao_homologado')">Indeferir</button>
+
+            <!-- Justificativa -->
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-2">Justificativa <span class="text-red-600" v-if="dgpDecision === 'nao_homologado'">(obrigatória)</span></label>
+              <textarea v-model="dgpNotes" rows="4" class="w-full border border-gray-300 rounded-lg p-3 text-sm focus:ring-2 focus:ring-gray-500 focus:border-transparent" placeholder="Descreva a justificativa para a decisão..."></textarea>
+              <p v-if="dgpDecision === 'nao_homologado' && !dgpNotes.trim()" class="text-xs text-red-600 mt-1">Informe a justificativa para indeferir.</p>
+            </div>
+
+            <!-- Anexos -->
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-2">Anexos (opcional)</label>
+              <input ref="dgpDecisionFileInput" type="file" multiple @change="handleDgpDecisionFiles" class="hidden" />
+              <button
+                type="button"
+                @click="triggerDgpDecisionFileInput"
+                class="w-full px-4 py-3 border-2 border-dashed border-gray-300 bg-gray-50 text-gray-600 rounded-lg hover:bg-gray-100 transition-colors flex items-center justify-center gap-2 text-sm"
+              >
+                <icons.Paperclip class="w-5 h-5" /> Adicionar Anexos
+              </button>
+              <ul v-if="dgpDecisionAttachments.length" class="mt-3 space-y-2">
+                <li v-for="(f,i) in dgpDecisionAttachments" :key="i" class="flex items-center justify-between bg-gray-50 p-2 rounded border text-xs">
+                  <span class="truncate">{{ f.name }}</span>
+                  <button type="button" class="text-red-600 hover:underline" @click="removeDgpDecisionAttachment(i)">remover</button>
+                </li>
+              </ul>
+              <p class="text-xs text-gray-500 mt-2">Até 100MB por arquivo.</p>
+            </div>
+
+            <!-- Botão Salvar -->
+            <div class="pt-4 border-t">
+              <button
+                @click="saveDgpDecision"
+                class="px-8 py-3 bg-gray-700 text-white rounded-lg hover:bg-gray-800 transition-colors text-sm font-medium flex items-center gap-2"
+                :disabled="!dgpDecision || (dgpDecision === 'nao_homologado' && !dgpNotes.trim())"
+                :class="{'opacity-50 cursor-not-allowed': !dgpDecision || (dgpDecision === 'nao_homologado' && !dgpNotes.trim())}"
+              >
+                <icons.Save class="w-4 h-4" /> Registrar Decisão da DGP
+              </button>
+            </div>
           </div>
         </div>
 
@@ -832,7 +897,7 @@ function returnToPrevious() {
             <button type="button" @click="triggerSecretaryDecisionFileInput" class="inline-flex items-center gap-2 px-3 py-2 rounded border border-gray-300 bg-white text-gray-700 hover:bg-gray-50 text-sm">
               <icons.Paperclip class="w-4 h-4" /> Selecionar arquivos
             </button>
-            <div class="mt-2 text-xs text-gray-500">Até 10MB por arquivo.</div>
+            <div class="mt-2 text-xs text-gray-500">Até 100MB por arquivo.</div>
             <ul v-if="secretaryDecisionAttachments.length" class="mt-2 space-y-1">
               <li v-for="(f,i) in secretaryDecisionAttachments" :key="i" class="flex items-center justify-between bg-gray-50 border rounded px-2 py-1 text-xs">
                 <span class="truncate">{{ f.name }}</span>
@@ -859,10 +924,12 @@ function returnToPrevious() {
       <!-- Modal: Justificativa para reencaminhar à Comissão -->
       <div v-if="showForwardModal" class="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
         <div class="bg-white rounded-lg shadow-xl w-full max-w-lg p-6">
-          <h3 class="text-lg font-semibold text-gray-900">Justificar reenvio para a Comissão</h3>
-          <p class="text-sm text-gray-600 mt-2">Este recurso foi devolvido ao RH. Informe a justificativa para reencaminhar à Comissão.</p>
+                <h3 class="text-lg font-semibold text-gray-900">Encaminhar para a Comissão</h3>
+                <p class="text-sm text-gray-600 mt-2">
+                  {{ recourse.last_return ? 'Este recurso foi devolvido. Justifique o reenvio e anexe documentos de suporte se necessário.' : 'Você pode (opcionalmente) adicionar uma mensagem e anexos para contextualizar o envio à Comissão.' }}
+                </p>
           <div class="mt-4">
-            <textarea v-model="forwardMessage" rows="4" class="w-full border rounded p-2" placeholder="Descreva a justificativa..."></textarea>
+                  <textarea v-model="forwardMessage" rows="4" class="w-full border rounded p-2" :placeholder="recourse.last_return ? 'Justificativa (obrigatória após devolução)...' : 'Mensagem (opcional)...'"></textarea>
           </div>
           <!-- Anexos do reenvio (opcional) -->
           <div class="mt-3">
@@ -871,7 +938,7 @@ function returnToPrevious() {
             <button type="button" @click="triggerForwardFileInput" class="inline-flex items-center gap-2 px-3 py-2 rounded border border-gray-300 bg-white text-gray-700 hover:bg-gray-50 text-sm">
               <icons.Paperclip class="w-4 h-4" /> Selecionar arquivos
             </button>
-            <div class="mt-2 text-xs text-gray-500">Até 10MB por arquivo.</div>
+            <div class="mt-2 text-xs text-gray-500">Até 100MB por arquivo.</div>
             <ul v-if="forwardAttachments.length" class="mt-2 space-y-1">
               <li v-for="(f,i) in forwardAttachments" :key="i" class="flex items-center justify-between bg-gray-50 border rounded px-2 py-1 text-xs">
                 <span class="truncate">{{ f.name }}</span>
@@ -881,7 +948,7 @@ function returnToPrevious() {
           </div>
           <div class="mt-4 flex justify-end gap-2">
             <button class="px-4 py-2 bg-gray-100 text-gray-700 rounded hover:bg-gray-200" @click="showForwardModal = false">Cancelar</button>
-            <button class="px-4 py-2 bg-gray-700 text-white rounded hover:bg-gray-800" :disabled="!forwardMessage.trim()" @click="confirmForwardToCommission">Confirmar envio</button>
+            <button class="px-4 py-2 bg-gray-700 text-white rounded hover:bg-gray-800" :disabled="!!recourse.last_return && !forwardMessage.trim()" @click="confirmForwardToCommission">Confirmar envio</button>
           </div>
         </div>
       </div>
@@ -901,7 +968,7 @@ function returnToPrevious() {
             <button type="button" @click="triggerDgpReturnFileInput" class="inline-flex items-center gap-2 px-3 py-2 rounded border border-gray-300 bg-white text-gray-700 hover:bg-gray-50 text-sm">
               <icons.Paperclip class="w-4 h-4" /> Selecionar arquivos
             </button>
-            <div class="mt-2 text-xs text-gray-500">Até 10MB por arquivo.</div>
+            <div class="mt-2 text-xs text-gray-500">Até 100MB por arquivo.</div>
             <ul v-if="dgpReturnAttachments.length" class="mt-2 space-y-1">
               <li v-for="(f,i) in dgpReturnAttachments" :key="i" class="flex items-center justify-between bg-gray-50 border rounded px-2 py-1 text-xs">
                 <span class="truncate">{{ f.name }}</span>
@@ -916,8 +983,8 @@ function returnToPrevious() {
         </div>
       </div>
 
-      <!-- SEÇÃO: Análise e Parecer da Comissão -->
-      <div class="bg-white rounded-lg shadow-sm border">
+    <!-- SEÇÃO: Análise e Parecer da Comissão (oculta para DGP durante decisão) -->
+  <div v-if="!isRhViewerPostForward && !recourse.actions?.canDgpDecide" class="bg-white rounded-lg shadow-sm border">
         <div class="bg-gray-800 text-white p-4 rounded-t-lg">
           <h2 class="text-lg font-semibold flex items-center gap-2">
             <icons.Scale class="w-5 h-5" />
@@ -949,9 +1016,7 @@ function returnToPrevious() {
               <button @click="secretaryDecision('indeferido')" class="px-3 py-2 text-xs bg-red-700 text-white rounded">Secretário: Indeferir</button>
             </template>
 
-            <!-- Devolver à instância anterior -->
-            <button v-if="(props.permissions?.isRH || props.permissions?.isComissao) && ['comissao','diretoria_rh','requerente','secretario'].includes(recourse.stage || '')"
-              @click="returnToPrevious" class="px-3 py-2 text-xs bg-yellow-500 text-white rounded">Devolver etapa</button>
+            <!-- Botão de devolver removido para visão da Comissão -->
           </div>
 
           <!-- Mostrar parecer final -->
@@ -1023,8 +1088,11 @@ function returnToPrevious() {
               <!-- Anexos da resposta -->
               <div>
                 <label class="block text-sm font-medium text-gray-700 mb-2">
-                  Documentos de Apoio (opcional)
+                  Documentos de Apoio (obrigatório)
                 </label>
+                <div v-if="responseAttachments.length === 0" class="text-xs text-red-600 mb-2">
+                  Anexe pelo menos um documento antes de salvar o parecer.
+                </div>
                 
                 <input
                   ref="fileInput"
@@ -1095,13 +1163,16 @@ function returnToPrevious() {
                 <button
                   @click="submitAnalysis"
                   class="px-8 py-3 bg-gray-700 text-white rounded-lg hover:bg-gray-800 transition-colors text-lg font-medium flex items-center gap-2 mx-auto"
-                  :disabled="!decision || !response.trim() || !canDecideNow"
-                  :class="{ 'opacity-50 cursor-not-allowed': !decision || !response.trim() || !canDecideNow }"
+                  :disabled="!decision || !response.trim() || !canDecideNow || responseAttachments.length === 0"
+                  :class="{ 'opacity-50 cursor-not-allowed': !decision || !response.trim() || !canDecideNow || responseAttachments.length === 0 }"
                 >
                   <icons.Save class="w-5 h-5" />
                   Finalizar Análise e Salvar Parecer
                 </button>
-                <div v-if="!canDecideNow" class="text-xs text-gray-500 mt-2">A decisão final só pode ser tomada pela instância atual.</div>
+                <div class="text-xs text-gray-500 mt-2 space-y-1">
+                  <div v-if="!canDecideNow">A decisão final só pode ser tomada pela instância atual.</div>
+                  <div v-if="responseAttachments.length === 0">É obrigatório anexar pelo menos um documento.</div>
+                </div>
               </div>
             </div>
           </template>
@@ -1134,26 +1205,10 @@ function returnToPrevious() {
         </div>
       </div>
 
-  <!-- Ação: Devolver para instância anterior (somente Comissão responsável) -->
-  <div v-if="recourse.current_instance === 'Comissao' && userRole === 'Comissão' && canDecideNow" class="bg-white rounded-lg shadow-sm border p-4">
-        <div class="flex items-center justify-between">
-          <div class="text-sm text-gray-700 flex items-center gap-2">
-            <icons.Reply class="w-4 h-4" />
-            <span>Precisa de complementação? Você pode devolver para a instância anterior.</span>
-          </div>
-          <button
-            class="px-4 py-2 bg-amber-600 text-white rounded hover:bg-amber-700 transition-colors text-sm flex items-center gap-2"
-            type="button"
-            @click="showReturnModal = true"
-          >
-            <icons.Reply class="w-4 h-4" />
-            Devolver
-          </button>
-        </div>
-      </div>
+  <!-- Bloco de devolução removido para visão da Comissão -->
 
       <!-- Modal de Devolução com Justificativa -->
-      <div v-if="showReturnModal" class="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+  <div v-if="false && showReturnModal" class="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
         <div class="bg-white rounded-lg shadow-xl max-w-lg w-full mx-4">
           <div class="p-5 border-b">
             <h3 class="text-lg font-semibold text-gray-900">Devolver Recurso</h3>
@@ -1169,7 +1224,7 @@ function returnToPrevious() {
               <button type="button" @click="triggerReturnFileInput" class="inline-flex items-center gap-2 px-3 py-2 rounded border border-gray-300 bg-white text-gray-700 hover:bg-gray-50 text-sm">
                 <icons.Paperclip class="w-4 h-4" /> Selecionar arquivos
               </button>
-              <div class="mt-2 text-xs text-gray-500">Até 10MB por arquivo.</div>
+              <div class="mt-2 text-xs text-gray-500">Até 100MB por arquivo.</div>
               <ul v-if="returnAttachments.length" class="mt-2 space-y-1">
                 <li v-for="(f,i) in returnAttachments" :key="i" class="flex items-center justify-between bg-gray-50 border rounded px-2 py-1 text-xs">
                   <span class="truncate">{{ f.name }}</span>
@@ -1181,6 +1236,33 @@ function returnToPrevious() {
           <div class="p-5 border-t flex justify-end gap-2">
             <button class="px-4 py-2 bg-gray-100 text-gray-700 rounded hover:bg-gray-200" @click="showReturnModal = false">Cancelar</button>
             <button class="px-4 py-2 bg-amber-600 text-white rounded hover:bg-amber-700" @click="returnToPreviousInstance" :disabled="!returnMessage.trim()">Confirmar Devolução</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Mensagem somente leitura para RH após encaminhamento -->
+      <div v-else-if="isRhViewerPostForward" class="bg-white rounded-lg shadow-sm border p-6">
+        <div class="text-center">
+          <icons.Info class="w-10 h-10 text-gray-500 mx-auto mb-3" />
+          <h3 class="text-lg font-semibold text-gray-800 mb-2">Recurso em Análise pela Comissão</h3>
+          <p class="text-sm text-gray-600 max-w-xl mx-auto">Este recurso foi encaminhado para a Comissão. O RH pode acompanhar o histórico abaixo, mas não pode mais alterar o Presidente ou registrar parecer nesta etapa.</p>
+        </div>
+        <div class="mt-6">
+          <h4 class="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
+            <icons.UserCircle2 class="w-4 h-4" /> Presidente Responsável
+          </h4>
+          <div v-if="recourse.responsiblePersons.length" class="flex items-center gap-3 bg-gray-50 border border-gray-200 rounded-lg p-4">
+            <div class="w-12 h-12 bg-gray-600 text-white rounded-full flex items-center justify-center text-lg font-medium">
+              {{ recourse.responsiblePersons[0].name.charAt(0).toUpperCase() }}
+            </div>
+            <div class="flex-1 min-w-0">
+              <p class="text-sm font-semibold text-gray-900 truncate">{{ recourse.responsiblePersons[0].name }}</p>
+              <p class="text-xs text-gray-500">Matrícula: {{ recourse.responsiblePersons[0].registration_number }}</p>
+            </div>
+            <span class="text-xs px-2 py-1 rounded bg-gray-200 text-gray-700 font-medium">Presidente</span>
+          </div>
+          <div v-else class="text-sm text-gray-500 bg-gray-50 border border-dashed border-gray-300 rounded p-4 flex items-center gap-2">
+            <icons.AlertCircle class="w-4 h-4 text-gray-500" /> Nenhum Presidente definido (inconsistência). Defina antes de encaminhar próximos recursos.
           </div>
         </div>
       </div>
@@ -1235,7 +1317,7 @@ function returnToPrevious() {
       </div>
     </div>
 
-    <!-- Modal de Confirmação para Remover Responsável -->
+    <!-- Modal de Confirmação para Remover Presidente -->
     <div v-if="showRemoveModal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
       <div class="bg-white rounded-lg shadow-xl max-w-md w-full mx-4">
         <!-- Header do Modal -->
@@ -1245,7 +1327,7 @@ function returnToPrevious() {
               <icons.AlertTriangle class="w-6 h-6 text-red-600" />
             </div>
             <div>
-              <h3 class="text-lg font-semibold text-gray-900">Confirmar Remoção</h3>
+              <h3 class="text-lg font-semibold text-gray-900">Remover Presidente</h3>
               <p class="text-sm text-gray-500">Esta ação não pode ser desfeita</p>
             </div>
           </div>
@@ -1255,7 +1337,7 @@ function returnToPrevious() {
         <div class="p-6">
           <div class="space-y-4">
             <p class="text-gray-700">
-              Você está prestes a remover o seguinte membro da comissão responsável pela análise deste recurso:
+              Você está prestes a remover o Presidente da Comissão responsável por este recurso:
             </p>
             
             <div class="bg-gray-50 rounded-lg p-4 border">
@@ -1275,7 +1357,7 @@ function returnToPrevious() {
                 <icons.Info class="w-5 h-5 text-blue-600 mt-0.5 flex-shrink-0" />
                 <div class="text-sm text-blue-800">
                   <p class="font-medium mb-1">Importante:</p>
-                  <p>O histórico de ações já realizadas por este membro será preservado. Apenas o acesso futuro para análise do recurso será removido.</p>
+                  <p>O histórico de ações já realizadas será preservado. Apenas o acesso futuro para análise do recurso será removido enquanto não houver novo Presidente.</p>
                 </div>
               </div>
             </div>
@@ -1294,8 +1376,8 @@ function returnToPrevious() {
             @click="confirmRemoveResponsible"
             class="px-4 py-2 bg-red-600 text-white hover:bg-red-700 rounded-lg transition-colors font-medium flex items-center gap-2"
           >
-            <icons.UserMinus class="w-4 h-4" />
-            Remover da Comissão
+            <icons.Trash2 class="w-4 h-4" />
+            Remover Presidente
           </button>
         </div>
       </div>

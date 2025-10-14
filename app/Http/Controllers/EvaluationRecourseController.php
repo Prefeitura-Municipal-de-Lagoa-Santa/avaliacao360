@@ -475,7 +475,8 @@ class EvaluationRecourseController extends Controller
     {
         $request->validate([
             'text' => 'required|string',
-            'attachments.*' => 'file|max:10240',
+            // Increased max single attachment size from 10MB to 100MB (102400 KB)
+            'attachments.*' => 'file|max:102400',
         ]);
 
         $user = Auth::user();
@@ -580,6 +581,12 @@ class EvaluationRecourseController extends Controller
                 'current_instance' => $recourse->current_instance,
                 'stage' => $this->getStage($recourse),
                 'response' => $recourse->response,
+                // Comissão: decisão estruturada (mantemos status global mascarado em 'em_analise')
+                'commission' => [
+                    'decision' => $recourse->commission_decision, // 'deferido' | 'indeferido' | null
+                    'response' => $recourse->commission_response,
+                    'decided_at' => optional($recourse->commission_decided_at)?->format('Y-m-d H:i'),
+                ],
                 'responded_at' => optional($recourse->responded_at)?->format('Y-m-d'),
                 // Extended workflow fields
                 'dgp' => [
@@ -684,7 +691,8 @@ class EvaluationRecourseController extends Controller
         $evaluationToShow = $chefEvaluation ?? $recourse->evaluation->evaluation;
 
         // Busca apenas pessoas com role "Comissão" para poder atribuir responsáveis (apenas RH puro)
-        $canManageAssignees = $isRH && !$isComissao; // Apenas RH puro pode gerenciar
+    // Apenas RH puro pode gerenciar responsáveis e somente enquanto o recurso estiver na instância do RH
+    $canManageAssignees = $isRH && !$isComissao && $recourse->current_instance === 'RH';
         
         $availablePersons = $canManageAssignees 
             ? Person::whereIn('cpf', function ($query) {
@@ -711,6 +719,12 @@ class EvaluationRecourseController extends Controller
                 'stage' => $this->getStage($recourse),
                 'text' => $recourse->text,
                 'response' => $recourse->response,
+                // Comissão: decisão estruturada
+                'commission' => [
+                    'decision' => $recourse->commission_decision,
+                    'response' => $recourse->commission_response,
+                    'decided_at' => optional($recourse->commission_decided_at)?->format('Y-m-d H:i'),
+                ],
                 // Extended workflow fields for UI
                 'dgp' => [
                     'decision' => $recourse->dgp_decision,
@@ -739,7 +753,7 @@ class EvaluationRecourseController extends Controller
                     $forwardReasons = [];
                     if (!$isRH) $forwardReasons[] = 'Apenas RH pode encaminhar.';
                     if ($recourse->current_instance !== 'RH') $forwardReasons[] = 'Recurso não está na instância do RH.';
-                    if (($recourse->responsiblePersons?->count() ?? 0) === 0) $forwardReasons[] = 'Atribua pelo menos um membro da Comissão como responsável.';
+                    if (($recourse->responsiblePersons?->count() ?? 0) === 0) $forwardReasons[] = 'Defina o Presidente da Comissão antes de encaminhar.';
                     if (!user_can('recourses.forwardToCommission')) $forwardReasons[] = 'Usuário sem permissão para encaminhar.';
                     $stage = $this->getStage($recourse);
                     return [
@@ -829,21 +843,20 @@ class EvaluationRecourseController extends Controller
             return redirect()->back()->with('error', 'Recurso não está na instância do RH.');
         }
 
-        // Deve haver pelo menos um responsável atribuído
+        // Deve haver um Presidente definido
         if ($recourse->responsiblePersons()->count() === 0) {
-            return redirect()->back()->with('error', 'Atribua ao menos um membro da Comissão antes de encaminhar.');
+            return redirect()->back()->with('error', 'Defina o Presidente da Comissão antes de encaminhar.');
         }
 
-        // Se o recurso foi devolvido anteriormente ao RH, exigir justificativa para o reenvio
-        $needsJustification = !is_null($recourse->last_returned_at);
-        $justification = null;
-        if ($needsJustification) {
-            $data = $request->validate([
-                'message' => ['required', 'string', 'min:5'],
-                'forward_attachments.*' => ['file', 'max:10240'],
-            ]);
-            $justification = $data['message'];
-        }
+        // Sempre permitir anexar documentos e opcionalmente registrar mensagem.
+        $wasReturnedBefore = !is_null($recourse->last_returned_at);
+        $data = $request->validate([
+            // Mensagem obrigatória somente se foi devolvido anteriormente
+            'message' => [$wasReturnedBefore ? 'required' : 'nullable', 'string', $wasReturnedBefore ? 'min:5' : 'nullable'],
+            // RH -> Comissão (reenvio) attachments up to 100MB
+            'forward_attachments.*' => ['file', 'max:102400'],
+        ]);
+        $justification = $data['message'] ?? null;
 
         $recourse->update([
             'current_instance' => 'Comissao',
@@ -859,8 +872,8 @@ class EvaluationRecourseController extends Controller
             'message' => $logMessage,
         ]);
 
-        // Armazenar anexos do reenvio (se houver)
-        if ($needsJustification && $request->hasFile('forward_attachments')) {
+        // Armazenar anexos (sempre que enviados)
+        if ($request->hasFile('forward_attachments')) {
             foreach ($request->file('forward_attachments') as $file) {
                 $path = $file->store('recourse_transitions', 'public');
                 \App\Models\EvaluationRecourseAttachment::create([
@@ -887,7 +900,7 @@ class EvaluationRecourseController extends Controller
         }
         $data = $request->validate([
             'message' => ['required', 'string', 'min:5'],
-            'return_attachments.*' => ['file', 'max:10240'],
+            'return_attachments.*' => ['file', 'max:102400'],
         ]);
 
         $recourse->update([
@@ -956,22 +969,32 @@ class EvaluationRecourseController extends Controller
             // Mantemos a decisão da comissão apenas para fins de log; status do recurso permanece 'em_analise'
             'status' => ['required', 'in:respondido,indeferido'],
             'response' => ['required', 'string', 'min:5'],
-            'response_attachments.*' => ['file', 'max:10240'], // Máximo 10MB por arquivo
+            'response_attachments' => [function($attribute,$value,$fail) use ($request){
+                if (!$request->hasFile('response_attachments')) {
+                    $fail('Envie pelo menos um documento de apoio ao parecer.');
+                }
+            }],
+            'response_attachments.*' => ['file', 'max:102400'], // Máximo 100MB por arquivo
         ]);
 
         // Não alterar o status global aqui para evitar que apareça como "deferido"; manter em análise até a DGP
         $updates = [
             'response' => $validated['response'],
             'responded_at' => now(),
+            // Persist structured commission decision fields (new workflow columns)
+            'commission_decision' => $validated['status'] === 'respondido' ? 'deferido' : 'indeferido',
+            'commission_response' => $validated['response'],
+            'commission_decided_at' => now(),
         ];
         if ($recourse->status !== 'em_analise') {
             $updates['status'] = 'em_analise';
         }
         $recourse->update($updates);
 
+        // Log genérico sem expor deferimento/indeferimento ao histórico inicial
         $recourse->logs()->create([
-            'status' => $validated['status'],
-            'message' => 'Parecer da Comissão registrado.',
+            'status' => 'analise_concluida',
+            'message' => 'Comissão concluiu a análise e encaminhou para homologação da DGP.',
         ]);
 
         // Salva anexos de resposta se houver
@@ -991,10 +1014,7 @@ class EvaluationRecourseController extends Controller
             'current_instance' => 'RH',
             'workflow_stage' => 'dgp_review',
         ]);
-        $recourse->logs()->create([
-            'status' => 'encaminhado_dgp',
-            'message' => 'Sistema encaminhou automaticamente à DGP após parecer da Comissão.',
-        ]);
+        // Mantido apenas o log genérico acima; evita duplicação de informação
 
         return redirect()
             ->back()
@@ -1055,7 +1075,7 @@ class EvaluationRecourseController extends Controller
                     }
                 }
             ],
-            'dgp_decision_attachments.*' => ['file', 'max:10240'],
+            'dgp_decision_attachments.*' => ['file', 'max:102400'],
         ]);
 
         $recourse->update([
@@ -1139,7 +1159,7 @@ class EvaluationRecourseController extends Controller
 
         $validated = $request->validate([
             'text' => ['required', 'string', 'min:5'],
-            'second_instance_attachments.*' => ['file', 'max:10240'],
+            'second_instance_attachments.*' => ['file', 'max:102400'],
         ]);
 
         $recourse->update([
@@ -1231,7 +1251,7 @@ class EvaluationRecourseController extends Controller
                     }
                 }
             ],
-            'secretary_decision_attachments.*' => ['file', 'max:10240'],
+            'secretary_decision_attachments.*' => ['file', 'max:102400'],
         ]);
 
         // Normaliza para valores canônicos e adapta ao tipo de coluna no banco (ENUM em MySQL pode ter variantes)
@@ -1394,7 +1414,7 @@ class EvaluationRecourseController extends Controller
 
         $validated = $request->validate([
             'message' => ['required', 'string', 'min:5'],
-            'return_attachments.*' => ['file', 'max:10240'],
+            'return_attachments.*' => ['file', 'max:102400'],
         ]);
 
         $user = Auth::user();
@@ -1466,30 +1486,37 @@ class EvaluationRecourseController extends Controller
         $currentUser = Auth::user();
         $assignedBy = Person::where('cpf', $currentUser->cpf)->first();
 
-        // Verifica se a pessoa já é responsável
-        $exists = EvaluationRecourseAssignee::where('recourse_id', $recourse->id)
-                                          ->where('person_id', $validated['person_id'])
-                                          ->exists();
-
-        if ($exists) {
-            return redirect()->back()->with('error', 'Esta pessoa já é responsável por este recurso.');
+        // Nova regra: só pode existir UM presidente (responsável). Se já existir, substitui.
+        $currentAssignee = EvaluationRecourseAssignee::where('recourse_id', $recourse->id)->first();
+        if ($currentAssignee && $currentAssignee->person_id == $validated['person_id']) {
+            return redirect()->back()->with('info', 'Esta pessoa já é o Presidente da Comissão para este recurso.');
         }
 
-        EvaluationRecourseAssignee::create([
-            'recourse_id' => $recourse->id,
-            'person_id' => $validated['person_id'],
-            'assigned_by' => $assignedBy?->id,
-            'assigned_at' => now(),
-        ]);
+        DB::transaction(function () use ($recourse, $validated, $assignedBy, $currentAssignee) {
+            if ($currentAssignee) {
+                $oldPerson = $currentAssignee->person; // eager relation for log
+                $currentAssignee->delete();
+                $recourse->logs()->create([
+                    'status' => 'presidente_removido',
+                    'message' => 'Presidente anterior removido: ' . ($oldPerson?->name ?? '—'),
+                ]);
+            }
 
-        $assignedPerson = Person::find($validated['person_id']);
-        
-        $recourse->logs()->create([
-            'status' => 'responsavel_atribuido',
-            'message' => "Responsável atribuído: {$assignedPerson->name}",
-        ]);
+            EvaluationRecourseAssignee::create([
+                'recourse_id' => $recourse->id,
+                'person_id' => $validated['person_id'],
+                'assigned_by' => $assignedBy?->id,
+                'assigned_at' => now(),
+            ]);
 
-        return redirect()->back()->with('success', 'Responsável atribuído com sucesso!');
+            $newPerson = Person::find($validated['person_id']);
+            $recourse->logs()->create([
+                'status' => 'presidente_atribuido',
+                'message' => 'Presidente da Comissão definido: ' . ($newPerson?->name ?? '—'),
+            ]);
+        });
+
+        return redirect()->back()->with('success', 'Presidente da Comissão definido com sucesso!');
     }
 
     public function removeResponsible(Request $request, EvaluationRecourse $recourse)
@@ -1521,10 +1548,10 @@ class EvaluationRecourseController extends Controller
         $assignee->delete();
 
         $recourse->logs()->create([
-            'status' => 'responsavel_removido',
-            'message' => "Responsável removido: {$removedPerson->name}",
+            'status' => 'presidente_removido',
+            'message' => "Presidente removido: {$removedPerson->name}",
         ]);
 
-        return redirect()->back()->with('success', 'Responsável removido com sucesso!');
+        return redirect()->back()->with('success', 'Presidente removido com sucesso!');
     }
 }
