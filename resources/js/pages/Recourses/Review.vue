@@ -1168,7 +1168,7 @@ function returnToPrevious() {
       </div>
 
       <!-- Bloco: Decisão da DGP (somente leitura para todos quando houver) -->
-      <div v-if="recourse.dgp?.decision" class="bg-white rounded-lg shadow-sm border">
+  <div v-if="userRole !== 'RH' && recourse.dgp?.decision" class="bg-white rounded-lg shadow-sm border">
         <div class="bg-gray-800 text-white p-4 rounded-t-lg">
           <div class="flex items-center justify-between gap-3">
             <h2 class="text-lg font-semibold flex items-center gap-2">
@@ -1203,7 +1203,7 @@ function returnToPrevious() {
       </div>
 
       <!-- Bloco: Decisão do Secretário (somente leitura) -->
-      <div v-if="recourse.secretary?.decision" class="bg-white rounded-lg shadow-sm border">
+  <div v-if="userRole !== 'RH' && recourse.secretary?.decision" class="bg-white rounded-lg shadow-sm border">
         <div class="bg-gray-800 text-white p-4 rounded-t-lg">
           <div class="flex items-center justify-between gap-3">
             <h2 class="text-lg font-semibold flex items-center gap-2">
