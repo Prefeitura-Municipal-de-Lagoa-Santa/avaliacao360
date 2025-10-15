@@ -66,7 +66,7 @@ class EvaluationRecourseController extends Controller
             return true;
         }
         // Comissão só acessa quando a instância é Comissão e a etapa é de análise da Comissão
-        if ($recourse->current_instance === 'Comissao' && $stage === 'commission_analysis') {
+        if ($recourse->current_instance === 'Comissao' && in_array($stage, ['commission_analysis','commission_clarification'], true)) {
             return $this->isResponsibleForRecourse($recourse);
         }
         return false;
@@ -586,6 +586,13 @@ class EvaluationRecourseController extends Controller
                     'decision' => $recourse->commission_decision, // 'deferido' | 'indeferido' | null
                     'response' => $recourse->commission_response,
                     'decided_at' => optional($recourse->commission_decided_at)?->format('Y-m-d H:i'),
+                    'clarification' => [
+                        'response' => $recourse->clarification_response,
+                        'responded_at' => optional($recourse->clarification_responded_at)?->format('Y-m-d H:i'),
+                        'attachments' => $recourse->attachments
+                            ->where('context','clarification_response')
+                            ->map(fn($a)=>['name'=>$a->original_name,'url'=>Storage::url($a->file_path)])->values(),
+                    ],
                 ],
                 'responded_at' => optional($recourse->responded_at)?->format('Y-m-d'),
                 // Extended workflow fields
@@ -612,6 +619,10 @@ class EvaluationRecourseController extends Controller
                     'by' => $recourse->lastReturnedBy->name,
                     'to' => $recourse->last_returned_to_instance,
                     'at' => optional($recourse->last_returned_at)?->format('d/m/Y H:i'),
+                    'message' => $recourse->last_return_message,
+                    'attachments' => $recourse->attachments
+                        ->where('context', 'dgp_return')
+                        ->map(fn($a) => [ 'name' => $a->original_name, 'url' => Storage::url($a->file_path) ])->values(),
                 ] : null,
                 'attachments' => $recourse->attachments->map(fn($a) => [
                     'name' => $a->original_name,
@@ -724,6 +735,13 @@ class EvaluationRecourseController extends Controller
                     'decision' => $recourse->commission_decision,
                     'response' => $recourse->commission_response,
                     'decided_at' => optional($recourse->commission_decided_at)?->format('Y-m-d H:i'),
+                    'clarification' => [
+                        'response' => $recourse->clarification_response,
+                        'responded_at' => optional($recourse->clarification_responded_at)?->format('Y-m-d H:i'),
+                        'attachments' => $recourse->attachments
+                            ->where('context','clarification_response')
+                            ->map(fn($a)=>['name'=>$a->original_name,'url'=>Storage::url($a->file_path)])->values(),
+                    ],
                 ],
                 // Extended workflow fields for UI
                 'dgp' => [
@@ -806,6 +824,10 @@ class EvaluationRecourseController extends Controller
                     'by' => $recourse->lastReturnedBy->name,
                     'to' => $recourse->last_returned_to_instance,
                     'at' => optional($recourse->last_returned_at)?->format('d/m/Y H:i'),
+                    'message' => $recourse->last_return_message,
+                    'attachments' => $recourse->attachments
+                        ->where('context','dgp_return')
+                        ->map(fn($a)=>['name'=>$a->original_name,'url'=>Storage::url($a->file_path)])->values(),
                 ] : null,
             ],
             'availablePersons' => $availablePersons,
@@ -880,6 +902,7 @@ class EvaluationRecourseController extends Controller
                     'recourse_id' => $recourse->id,
                     'file_path' => $path,
                     'original_name' => $file->getClientOriginalName(),
+                    'context' => 'forward',
                 ]);
             }
         }
@@ -905,16 +928,17 @@ class EvaluationRecourseController extends Controller
 
         $recourse->update([
             'current_instance' => 'Comissao',
-            'workflow_stage' => 'commission_analysis',
-            'status' => 'em_analise',
+            'workflow_stage' => 'commission_clarification', // nova etapa específica de esclarecimento
+            'status' => 'em_analise', // permanece mascarado
             'last_returned_by_user_id' => Auth::id(),
             'last_returned_to_instance' => 'Comissao',
             'last_returned_at' => now(),
+            'last_return_message' => $data['message'],
         ]);
 
         $recourse->logs()->create([
             'status' => 'devolvido_dgp',
-            'message' => 'DGP devolveu o recurso para a Comissão. Justificativa: ' . $data['message'],
+            'message' => 'DGP solicitou esclarecimentos adicionais à Comissão. Justificativa: ' . $data['message'],
         ]);
 
         // Armazenar anexos da devolução (se houver)
@@ -925,6 +949,7 @@ class EvaluationRecourseController extends Controller
                     'recourse_id' => $recourse->id,
                     'file_path' => $path,
                     'original_name' => $file->getClientOriginalName(),
+                    'context' => 'dgp_return',
                 ]);
             }
         }
@@ -963,6 +988,16 @@ class EvaluationRecourseController extends Controller
         // Somente Comissão responsável pode responder, e apenas quando a instância atual é Comissão
         if (!$this->isResponsibleForRecourse($recourse) || $recourse->current_instance !== 'Comissao') {
             return redirect()->back()->with('error', 'Apenas a Comissão responsável pode responder este recurso.');
+        }
+
+        // Bloqueia reedição do parecer original: se já existe decisão da comissão e não estamos em etapa de esclarecimento
+        $stage = $this->getStage($recourse);
+        if (!empty($recourse->commission_decision) && $stage !== 'commission_clarification') {
+            return redirect()->back()->with('error', 'Parecer original já registrado. Utilize o campo de esclarecimento (se disponível).');
+        }
+        // Também impede que a etapa de esclarecimento use este endpoint (deve usar respondClarification)
+        if ($stage === 'commission_clarification') {
+            return redirect()->back()->with('error', 'Esta etapa aceita apenas resposta de esclarecimento, não um novo parecer completo.');
         }
 
         $validated = $request->validate([
@@ -1019,6 +1054,58 @@ class EvaluationRecourseController extends Controller
         return redirect()
             ->back()
             ->with('success', 'Parecer salvo com sucesso!');
+    }
+
+    /**
+     * Comissão responde solicitação de esclarecimento da DGP sem alterar a decisão original
+     */
+    public function respondClarification(Request $request, EvaluationRecourse $recourse)
+    {
+        if (!user_can('recourses.respond')) {
+            return redirect()->back()->with('error', 'Você não tem permissão para responder esclarecimentos.');
+        }
+        if (!$this->isResponsibleForRecourse($recourse) || $recourse->current_instance !== 'Comissao') {
+            return redirect()->back()->with('error', 'Apenas a Comissão responsável pode responder.');
+        }
+        $stage = $this->getStage($recourse);
+        if ($stage !== 'commission_clarification') {
+            return redirect()->back()->with('error', 'Este recurso não está na etapa de esclarecimento.');
+        }
+        if (empty($recourse->commission_decision)) {
+            return redirect()->back()->with('error', 'Não é possível responder esclarecimento antes do parecer original.');
+        }
+
+        $data = $request->validate([
+            'clarification_response' => ['required','string','min:3'],
+            'clarification_attachments.*' => ['file','max:102400'],
+        ]);
+
+        $recourse->update([
+            'clarification_response' => $data['clarification_response'],
+            'clarification_responded_at' => now(),
+            // Após esclarecimento volta para análise/homologação da DGP
+            'workflow_stage' => 'dgp_review',
+            'current_instance' => 'RH',
+        ]);
+
+        $recourse->logs()->create([
+            'status' => 'clarificacao_respondida',
+            'message' => 'Comissão respondeu solicitação de esclarecimento da DGP.',
+        ]);
+
+        if ($request->hasFile('clarification_attachments')) {
+            foreach ($request->file('clarification_attachments') as $file) {
+                $path = $file->store('recourse_transitions', 'public');
+                EvaluationRecourseAttachment::create([
+                    'recourse_id' => $recourse->id,
+                    'file_path' => $path,
+                    'original_name' => $file->getClientOriginalName(),
+                    'context' => 'clarification_response',
+                ]);
+            }
+        }
+
+        return redirect()->route('recourses.review', $recourse->id)->with('success', 'Esclarecimento enviado à DGP.');
     }
 
     /**

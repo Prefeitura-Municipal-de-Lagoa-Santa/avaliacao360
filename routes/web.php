@@ -190,6 +190,9 @@ Route::middleware(['auth', 'verified', EnsureCpfIsFilled::class, RedirectIfMustC
 
     Route::post('/recourses/{recourse}/respond', [EvaluationRecourseController::class, 'respond'])
         ->name('recourses.respond');
+    // Resposta de esclarecimento (nova etapa commission_clarification)
+    Route::post('/recourses/{recourse}/respond-clarification', [EvaluationRecourseController::class, 'respondClarification'])
+        ->name('recourses.respondClarification');
 
     Route::post('/recourses/{recourse}/return', [EvaluationRecourseController::class, 'returnToPreviousInstance'])
         ->name('recourses.return');

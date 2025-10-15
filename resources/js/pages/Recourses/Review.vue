@@ -13,11 +13,11 @@ const props = defineProps<{
     current_instance?: 'RH' | 'Comissao';
     stage?: string | null;
     response: string | null;
-    commission?: { decision?: string | null; response?: string | null; decided_at?: string | null };
+  commission?: { decision?: string | null; response?: string | null; decided_at?: string | null; clarification?: { response?: string | null; responded_at?: string | null; attachments?: Array<{name:string;url:string}> } };
     dgp?: { decision?: string | null; decided_at?: string | null; notes?: string | null };
     second_instance?: { enabled: boolean; requested_at?: string | null; text?: string | null };
     secretary?: { decision?: string | null; decided_at?: string | null; notes?: string | null };
-  last_return?: { by: string; to: 'RH' | 'Comissao' | null; at: string | null } | null;
+  last_return?: { by: string; to: 'RH' | 'Comissao' | null; at: string | null; message?: string | null; attachments?: Array<{name:string;url:string}> } | null;
     actions?: {
       canForwardToCommission?: boolean;
       forwardToCommissionDisabledReason?: string | null;
@@ -56,6 +56,7 @@ const props = defineProps<{
 const stageLabels: Record<string, string> = {
   rh_analysis: 'Análise do RH',
   commission_analysis: 'Análise da Comissão',
+  commission_clarification: 'Esclarecimento da Comissão',
   dgp_review: 'Revisão da DGP',
   await_first_ack: 'Aguardando ciência (1ª instância)',
   secretary_review: 'Decisão do Secretário',
@@ -80,6 +81,10 @@ const decision = ref<'respondido' | 'indeferido' | null>(null);
 const dgpNotes = ref('');
 const dgpDecision = ref<'homologado' | 'nao_homologado' | null>(null);
 const responseAttachments = ref<File[]>([]);
+// Clarification state
+const clarificationResponse = ref('');
+const clarificationAttachments = ref<File[]>([]);
+const clarificationFileInput = ref<HTMLInputElement | null>(null);
 const fileInput = ref<HTMLInputElement | null>(null);
 // DGP decisão: anexos
 const dgpDecisionAttachments = ref<File[]>([]);
@@ -176,6 +181,18 @@ function handleFileSelect(event: Event) {
 
 function removeAttachment(index: number) {
   responseAttachments.value.splice(index, 1);
+}
+function triggerClarificationFileInput(){ clarificationFileInput.value?.click(); }
+function handleClarificationFiles(e: Event){
+  const files = (e.target as HTMLInputElement).files; if(files){ clarificationAttachments.value.push(...Array.from(files)); (e.target as HTMLInputElement).value=''; }
+}
+function removeClarificationAttachment(i:number){ clarificationAttachments.value.splice(i,1); }
+function submitClarification(){
+  if(!clarificationResponse.value.trim()) { alert('Informe a resposta de esclarecimento.'); return; }
+  const fd = new FormData();
+  fd.append('clarification_response', clarificationResponse.value.trim());
+  clarificationAttachments.value.forEach((f,i)=> fd.append(`clarification_attachments[${i}]`, f));
+  router.post(route('recourses.respondClarification', props.recourse.id), fd, { forceFormData: true, onSuccess:()=>{ clarificationResponse.value=''; clarificationAttachments.value=[]; }});
 }
 
 function submitAnalysis() {
@@ -779,6 +796,29 @@ function returnToPrevious() {
                       </li>
                     </ul>
                   </div>
+                  <!-- Complemento de esclarecimento da Comissão (não substitui parecer) -->
+                  <div v-if="recourse.commission?.clarification?.response" class="mt-4 pt-4 border-t border-gray-200">
+                    <div class="flex items-center justify-between gap-2 flex-wrap mb-2">
+                      <h4 class="text-xs font-semibold text-gray-700 flex items-center gap-1">
+                        <icons.MessageSquare class="w-4 h-4" /> Esclarecimento Complementar da Comissão
+                      </h4>
+                      <span v-if="recourse.commission.clarification.responded_at" class="text-[10px] text-gray-500 flex items-center gap-1">
+                        <icons.Clock class="w-3 h-3" /> {{ recourse.commission.clarification.responded_at }}
+                      </span>
+                    </div>
+                    <div class="bg-white border rounded p-3 text-xs text-gray-700 whitespace-pre-wrap max-h-40 overflow-y-auto">
+                      {{ recourse.commission.clarification.response }}
+                    </div>
+                    <div v-if="recourse.commission.clarification.attachments && recourse.commission.clarification.attachments.length" class="mt-3">
+                      <h5 class="text-[11px] font-medium text-gray-600 mb-1 flex items-center gap-1"><icons.Paperclip class="w-3 h-3" /> Anexos do Esclarecimento</h5>
+                      <ul class="space-y-1 max-h-32 overflow-y-auto">
+                        <li v-for="(f,i) in recourse.commission.clarification.attachments" :key="i" class="flex items-center justify-between bg-white border rounded px-2 py-1 text-[11px]">
+                          <span class="truncate">{{ f.name }}</span>
+                          <a :href="f.url" target="_blank" class="text-gray-700 hover:underline">abrir</a>
+                        </li>
+                      </ul>
+                    </div>
+                  </div>
                 </div>
               </div>
               <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -994,6 +1034,75 @@ function returnToPrevious() {
         </div>
 
         <div class="p-4">
+          <!-- BLOCO ESCLARECIMENTO SOLICITADO -->
+          <div v-if="recourse.stage === 'commission_clarification'" class="mb-6 space-y-4">
+            <div class="bg-amber-50 border border-amber-200 rounded-lg p-4">
+              <div class="flex items-start gap-2">
+                <icons.HelpCircle class="w-5 h-5 text-amber-600 mt-0.5" />
+                <div class="flex-1">
+                  <h3 class="text-sm font-semibold text-amber-800 mb-1">Esclarecimentos solicitados pela DGP</h3>
+                  <p class="text-sm text-amber-800 whitespace-pre-wrap">{{ recourse.last_return?.message || 'A DGP solicitou esclarecimentos adicionais antes da homologação.' }}</p>
+                  <div v-if="recourse.last_return && recourse.last_return.attachments && recourse.last_return.attachments.length" class="mt-3 bg-white border rounded p-3">
+                    <h4 class="text-xs font-semibold text-gray-700 mb-2 flex items-center gap-1"><icons.Paperclip class="w-3 h-3" /> Anexos da solicitação</h4>
+                    <ul class="space-y-1 max-h-40 overflow-y-auto">
+                      <li v-for="(f,i) in recourse.last_return.attachments" :key="i" class="flex items-center justify-between text-xs bg-gray-50 border rounded px-2 py-1">
+                        <span class="truncate">{{ f.name }}</span>
+                        <a :href="f.url" target="_blank" class="text-amber-700 hover:underline">abrir</a>
+                      </li>
+                    </ul>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <!-- Resposta já enviada -->
+            <div v-if="recourse.commission?.clarification?.response" class="bg-green-50 border border-green-200 rounded-lg p-4">
+              <div class="flex items-start gap-2">
+                <icons.CheckCircle class="w-5 h-5 text-green-600 mt-0.5" />
+                <div class="flex-1">
+                  <h3 class="text-sm font-semibold text-green-700 mb-1">Esclarecimento Respondido</h3>
+                  <p class="text-sm text-green-800 whitespace-pre-wrap">{{ recourse.commission.clarification.response }}</p>
+                  <p v-if="recourse.commission.clarification.responded_at" class="text-xs text-green-700 mt-2">Enviado em {{ recourse.commission.clarification.responded_at }}</p>
+                  <div v-if="recourse.commission.clarification.attachments && recourse.commission.clarification.attachments.length" class="mt-3 bg-white border rounded p-3">
+                    <h4 class="text-xs font-semibold text-gray-700 mb-2 flex items-center gap-1"><icons.Paperclip class="w-3 h-3" /> Anexos do esclarecimento</h4>
+                    <ul class="space-y-1 max-h-40 overflow-y-auto">
+                      <li v-for="(f,i) in recourse.commission.clarification.attachments" :key="i" class="flex items-center justify-between text-xs bg-gray-50 border rounded px-2 py-1">
+                        <span class="truncate">{{ f.name }}</span>
+                        <a :href="f.url" target="_blank" class="text-gray-700 hover:underline">abrir</a>
+                      </li>
+                    </ul>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <!-- Form de resposta (somente se ainda não respondeu e é responsável) -->
+            <div v-else-if="canDecideNow" class="bg-white border border-gray-200 rounded-lg p-4 space-y-4">
+              <h3 class="text-sm font-semibold text-gray-700 flex items-center gap-2"><icons.Reply class="w-4 h-4" /> Responder Esclarecimento</h3>
+              <textarea v-model="clarificationResponse" rows="4" class="w-full border rounded p-3 text-sm" placeholder="Digite a resposta de esclarecimento..." />
+              <div>
+                <label class="block text-xs font-medium text-gray-600 mb-1">Anexos (opcional)</label>
+                <input ref="clarificationFileInput" type="file" multiple class="hidden" @change="handleClarificationFiles" />
+                <button type="button" @click="triggerClarificationFileInput" class="inline-flex items-center gap-2 px-3 py-2 rounded border border-gray-300 bg-gray-50 hover:bg-gray-100 text-xs">
+                  <icons.Paperclip class="w-4 h-4" /> Adicionar arquivos
+                </button>
+                <p class="text-[10px] text-gray-500 mt-1">Até 100MB por arquivo.</p>
+                <ul v-if="clarificationAttachments.length" class="mt-2 space-y-1">
+                  <li v-for="(f,i) in clarificationAttachments" :key="i" class="flex items-center justify-between bg-gray-50 border rounded px-2 py-1 text-xs">
+                    <span class="truncate">{{ f.name }}</span>
+                    <button type="button" class="text-red-600 hover:underline" @click="removeClarificationAttachment(i)">remover</button>
+                  </li>
+                </ul>
+              </div>
+              <div class="pt-2 border-t">
+                <button @click="submitClarification" :disabled="!clarificationResponse.trim()" class="px-6 py-2 bg-gray-700 text-white rounded text-sm disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2">
+                  <icons.Send class="w-4 h-4" /> Enviar Esclarecimento
+                </button>
+              </div>
+            </div>
+            <!-- Caso não seja responsável -->
+            <div v-else class="bg-gray-50 border rounded p-4 text-sm text-gray-600 flex items-center gap-2">
+              <icons.Info class="w-4 h-4" /> Aguardando resposta da Comissão responsável.
+            </div>
+          </div>
           <!-- Ações rápidas por etapa -->
           <div class="mb-4 flex flex-wrap gap-2">
             <!-- Comissão decide -->
@@ -1064,7 +1173,7 @@ function returnToPrevious() {
           </template>
 
           <!-- Formulário de análise: somente Comissão responsável -->
-          <template v-else-if="isAnalyzing && canDecideNow">
+          <template v-else-if="isAnalyzing && canDecideNow && recourse.stage !== 'commission_clarification'">
             <div class="space-y-6">
               <!-- Área de texto para parecer -->
               <div>
@@ -1178,7 +1287,7 @@ function returnToPrevious() {
           </template>
 
           <!-- Botão para iniciar análise: somente Comissão responsável -->
-          <template v-else-if="canDecideNow">
+          <template v-else-if="canDecideNow && recourse.stage !== 'commission_clarification'">
             <div class="text-center py-8">
               <icons.Play class="w-12 h-12 text-gray-500 mx-auto mb-4" />
               <h3 class="text-lg font-semibold text-gray-800 mb-2">Pronto para Análise</h3>
