@@ -106,6 +106,7 @@ const response = ref('');
 const decision = ref<'respondido' | 'indeferido' | null>(null);
 const dgpNotes = ref('');
 const dgpDecision = ref<'homologado' | 'nao_homologado' | null>(null);
+const secretaryDecisionChoice = ref<'homologado' | 'nao_homologado' | null>(null);
 const responseAttachments = ref<File[]>([]);
 // Clarification state
 const clarificationResponse = ref('');
@@ -447,6 +448,18 @@ function submitSecretaryDecision(decision: 'homologado' | 'nao_homologado') {
   if (secretaryNotes.value) fd.append('notes', secretaryNotes.value);
   secretaryDecisionAttachments.value.forEach((f, idx) => fd.append(`secretary_decision_attachments[${idx}]`, f));
   router.post(route('recourses.secretaryDecision', props.recourse.id), fd, { forceFormData: true });
+}
+
+function saveSecretaryDecision() {
+  if (!secretaryDecisionChoice.value) {
+    alert('Selecione uma decisão (Deferir ou Indeferir).');
+    return;
+  }
+  if (secretaryDecisionChoice.value === 'nao_homologado' && !secretaryNotes.value.trim()) {
+    alert('Justificativa obrigatória para indeferir.');
+    return;
+  }
+  submitSecretaryDecision(secretaryDecisionChoice.value);
 }
 
 // Compat: botões do template utilizam rótulos deferido/indeferido
@@ -1189,13 +1202,13 @@ function returnToPrevious() {
         </div>
       </div>
 
-      <!-- Bloco: Decisão do Secretário (2ª instância, somente leitura) -->
+      <!-- Bloco: Decisão do Secretário (somente leitura) -->
       <div v-if="recourse.secretary?.decision" class="bg-white rounded-lg shadow-sm border">
         <div class="bg-gray-800 text-white p-4 rounded-t-lg">
           <div class="flex items-center justify-between gap-3">
             <h2 class="text-lg font-semibold flex items-center gap-2">
               <icons.BadgeCheck class="w-5 h-5" />
-              Decisão do Secretário (2ª instância)
+              Decisão do Secretário
             </h2>
             <span class="inline-flex items-center text-xs font-semibold px-2.5 py-1 rounded-full border"
                   :class="recourse.secretary.decision === 'homologado' ? 'bg-emerald-100 text-emerald-800 border-emerald-300' : 'bg-red-100 text-red-700 border-red-300'">
@@ -1203,7 +1216,7 @@ function returnToPrevious() {
               {{ recourse.secretary.decision === 'homologado' ? 'HOMOLOGADO' : 'NÃO HOMOLOGADO' }}
             </span>
           </div>
-          <p class="text-sm text-gray-300 mt-1">Homologação final em 2ª instância</p>
+          <p class="text-sm text-gray-300 mt-1">Homologação ou não do parecer da Comissão</p>
         </div>
         <div class="p-4 space-y-3">
           <div class="text-xs text-gray-600" v-if="recourse.secretary?.decided_at">
@@ -1423,13 +1436,18 @@ function returnToPrevious() {
           <button class="px-4 py-2 bg-gray-700 text-white rounded hover:bg-gray-800 text-sm" @click="router.post(route('recourses.forwardToSecretary', recourse.id))">Enviar ao Secretário</button>
         </div>
 
-        <!-- Secretário: Registrar decisão -->
-        <div v-if="recourse.actions?.canSecretaryDecide" class="bg-white rounded-lg shadow-sm border p-4">
-          <div class="flex items-center gap-2 mb-3 text-sm text-gray-700">
-            <icons.BadgeCheck class="w-4 h-4" /> Registrar decisão do Secretário (2ª instância)
+        <!-- Secretário: Registrar decisão (mesmo layout da DGP) -->
+        <div v-if="recourse.actions?.canSecretaryDecide" class="bg-white rounded-lg shadow-sm border">
+          <div class="bg-gray-800 text-white p-4 rounded-t-lg">
+            <h2 class="text-lg font-semibold flex items-center gap-2">
+              <icons.BadgeCheck class="w-5 h-5" /> Decisão do Secretário
+            </h2>
+            <p class="text-sm text-gray-300 mt-1">Homologação ou não do parecer da Comissão</p>
           </div>
-          <!-- Contexto para o Secretário: questionamento do servidor e parecer da DGP -->
-          <div class="bg-gray-50 border border-gray-200 rounded p-3 mb-3 space-y-3">
+          <div class="p-5 space-y-6">
+
+            <!-- Contexto: questionamento do servidor e parecer da DGP -->
+            <div class="bg-gray-50 border border-gray-200 rounded p-3 space-y-3">
             <div v-if="recourse.second_instance?.text" class="">
               <div class="flex items-center gap-2 text-sm font-semibold text-gray-800 mb-1">
                 <icons.MessageSquare class="w-4 h-4" /> Questionamento do Servidor (2ª instância)
@@ -1437,52 +1455,75 @@ function returnToPrevious() {
               <p class="text-sm text-gray-700 whitespace-pre-wrap bg-white border rounded p-2">{{ recourse.second_instance.text }}</p>
               <p v-if="recourse.second_instance?.requested_at" class="text-xs text-gray-500 mt-1">Solicitado em: {{ recourse.second_instance.requested_at }}</p>
             </div>
-            <div v-if="recourse.dgp?.decision" class="">
-              <div class="flex items-center gap-2 text-sm font-semibold text-gray-800 mb-1">
-                <icons.Stamp class="w-4 h-4" /> Parecer da DGP
-              </div>
-              <div class="text-sm text-gray-700">
-                <span class="font-medium">Decisão:</span>
-                <span class="uppercase">{{ recourse.dgp.decision }}</span>
-                <span v-if="recourse.dgp?.decided_at" class="text-gray-500 ml-2">({{ recourse.dgp.decided_at }})</span>
-              </div>
-              <div v-if="recourse.dgp?.notes" class="mt-1 bg-white border rounded p-2 text-sm text-gray-700 whitespace-pre-wrap">
-                {{ recourse.dgp.notes }}
+
+            </div>
+
+            <!-- Decisão (radio cards) -->
+            <div>
+              <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <label class="flex items-center justify-center gap-3 p-4 border-2 rounded-lg cursor-pointer transition-colors"
+                       :class="[secretaryDecisionChoice === 'homologado' ? 'border-gray-500 bg-gray-50 text-gray-700' : 'border-gray-300 hover:border-gray-400']">
+                  <input type="radio" v-model="secretaryDecisionChoice" value="homologado" class="text-gray-600" />
+                  <icons.CheckCircle class="w-5 h-5" />
+                  <span class="font-medium">DEFERIR</span>
+                </label>
+                <label class="flex items-center justify-center gap-3 p-4 border-2 rounded-lg cursor-pointer transition-colors"
+                       :class="[secretaryDecisionChoice === 'nao_homologado' ? 'border-gray-500 bg-gray-50 text-gray-700' : 'border-gray-300 hover:border-gray-400']">
+                  <input type="radio" v-model="secretaryDecisionChoice" value="nao_homologado" class="text-gray-600" />
+                  <icons.XCircle class="w-5 h-5" />
+                  <span class="font-medium">INDEFERIR</span>
+                </label>
               </div>
             </div>
-          </div>
-          <!-- Notas e anexos para decisão do Secretário -->
-          <div class="mt-2">
-            <label class="block text-sm text-gray-700 mb-1">Justificativa (obrigatória para indeferir)</label>
-            <textarea v-model="secretaryNotes" rows="3" class="w-full border rounded p-2" placeholder="Descreva a justificativa caso vá indeferir..."></textarea>
-          </div>
-          <div class="mt-3">
-            <label class="block text-sm font-medium text-gray-700 mb-1">Anexos (opcional)</label>
-            <input ref="secretaryDecisionFileInput" type="file" multiple @change="handleSecretaryDecisionFiles" class="hidden" />
-            <button type="button" @click="triggerSecretaryDecisionFileInput" class="inline-flex items-center gap-2 px-3 py-2 rounded border border-gray-300 bg-white text-gray-700 hover:bg-gray-50 text-sm">
-              <icons.Paperclip class="w-4 h-4" /> Selecionar arquivos
-            </button>
-            <div class="mt-2 text-xs text-gray-500">Até 100MB por arquivo.</div>
-            <ul v-if="secretaryDecisionAttachments.length" class="mt-2 space-y-1">
-              <li v-for="(f,i) in secretaryDecisionAttachments" :key="i" class="flex items-center justify-between bg-gray-50 border rounded px-2 py-1 text-xs">
-                <span class="truncate">{{ f.name }}</span>
-                <button type="button" class="ml-2 text-red-600 hover:underline" @click="removeSecretaryDecisionAttachment(i)">remover</button>
-              </li>
-            </ul>
-            <!-- Anexos já vinculados à decisão do Secretário (após salvar) -->
-            <div v-if="recourse.secretary?.attachments?.length" class="mt-3 pt-3 border-t">
-              <h4 class="text-xs font-medium text-gray-700 mb-1 flex items-center gap-1"><icons.Paperclip class="w-3 h-3" /> Anexos da decisão já registrados</h4>
-              <ul class="space-y-1 max-h-40 overflow-y-auto">
-                <li v-for="(f,i) in recourse.secretary.attachments" :key="i" class="flex items-center justify-between bg-white border rounded px-2 py-1 text-xs">
+
+            <!-- Justificativa -->
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-2">Justificativa <span class="text-red-600" v-if="secretaryDecisionChoice === 'nao_homologado'">(obrigatória)</span></label>
+              <textarea v-model="secretaryNotes" rows="4" class="w-full border border-gray-300 rounded-lg p-3 text-sm focus:ring-2 focus:ring-gray-500 focus:border-transparent" placeholder="Descreva a justificativa para a decisão..."></textarea>
+              <p v-if="secretaryDecisionChoice === 'nao_homologado' && !secretaryNotes.trim()" class="text-xs text-red-600 mt-1">Informe a justificativa para indeferir.</p>
+            </div>
+
+            <!-- Anexos -->
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-2">Anexos (opcional)</label>
+              <input ref="secretaryDecisionFileInput" type="file" multiple @change="handleSecretaryDecisionFiles" class="hidden" />
+              <button
+                type="button"
+                @click="triggerSecretaryDecisionFileInput"
+                class="w-full px-4 py-3 border-2 border-dashed border-gray-300 bg-gray-50 text-gray-600 rounded-lg hover:bg-gray-100 transition-colors flex items-center justify-center gap-2 text-sm"
+              >
+                <icons.Paperclip class="w-5 h-5" /> Adicionar Anexos
+              </button>
+              <ul v-if="secretaryDecisionAttachments.length" class="mt-3 space-y-2">
+                <li v-for="(f,i) in secretaryDecisionAttachments" :key="i" class="flex items-center justify-between bg-gray-50 p-2 rounded border text-xs">
                   <span class="truncate">{{ f.name }}</span>
-                  <a :href="f.url" target="_blank" class="text-gray-700 hover:underline">abrir</a>
+                  <button type="button" class="text-red-600 hover:underline" @click="removeSecretaryDecisionAttachment(i)">remover</button>
                 </li>
               </ul>
+              <p class="text-xs text-gray-500 mt-2">Até 100MB por arquivo.</p>
+              <!-- Anexos já vinculados à decisão do Secretário (após salvar) -->
+              <div v-if="recourse.secretary?.attachments?.length" class="mt-3 pt-3 border-t">
+                <h4 class="text-xs font-medium text-gray-700 mb-1 flex items-center gap-1"><icons.Paperclip class="w-3 h-3" /> Anexos da decisão já registrados</h4>
+                <ul class="space-y-1 max-h-40 overflow-y-auto">
+                  <li v-for="(f,i) in recourse.secretary.attachments" :key="i" class="flex items-center justify-between bg-white border rounded px-2 py-1 text-xs">
+                    <span class="truncate">{{ f.name }}</span>
+                    <a :href="f.url" target="_blank" class="text-gray-700 hover:underline">abrir</a>
+                  </li>
+                </ul>
+              </div>
             </div>
-          </div>
-          <div class="flex flex-wrap gap-2 mt-3">
-            <button class="px-4 py-2 bg-green-600 text-white rounded text-sm" @click="submitSecretaryDecision('homologado')">Deferir</button>
-            <button class="px-4 py-2 bg-red-600 text-white rounded text-sm" :disabled="!secretaryNotes.trim()" @click="submitSecretaryDecision('nao_homologado')">Indeferir</button>
+
+            <!-- Botão Salvar -->
+            <div class="pt-4 border-t">
+              <button
+                @click="saveSecretaryDecision"
+                class="px-8 py-3 bg-gray-700 text-white rounded-lg hover:bg-gray-800 transition-colors text-sm font-medium flex items-center gap-2"
+                :disabled="!secretaryDecisionChoice || (secretaryDecisionChoice === 'nao_homologado' && !secretaryNotes.trim())"
+                :class="{'opacity-50 cursor-not-allowed': !secretaryDecisionChoice || (secretaryDecisionChoice === 'nao_homologado' && !secretaryNotes.trim())}"
+              >
+                <icons.Save class="w-4 h-4" /> Registrar Decisão do Secretário
+              </button>
+            </div>
           </div>
         </div>
 
