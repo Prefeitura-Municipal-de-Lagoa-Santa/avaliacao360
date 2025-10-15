@@ -34,6 +34,7 @@ class EvaluationRecourse extends Model
         'dgp_decided_at',
         'dgp_notes',
         'first_ack_at',
+        'first_ack_signature_base64',
         'is_second_instance',
         'second_instance_requested_at',
         'second_instance_text',
@@ -41,6 +42,7 @@ class EvaluationRecourse extends Model
         'secretary_decided_at',
         'secretary_notes',
         'second_ack_at',
+        'second_ack_signature_base64',
     ];
 
     protected $casts = [

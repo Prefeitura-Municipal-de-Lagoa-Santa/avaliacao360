@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import { Head, router } from '@inertiajs/vue3';
-import { ref } from 'vue';
+import { ref, nextTick } from 'vue';
 import DashboardLayout from '@/layouts/DashboardLayout.vue';
 import * as icons from 'lucide-vue-next';
+import SignaturePad from 'signature_pad';
 
 const props = defineProps<{
   recourse: {
@@ -18,11 +19,15 @@ const props = defineProps<{
     secretary?: { decision?: string | null; decided_at?: string | null; notes?: string | null };
     attachments: Array<{ name: string; url: string }>;
     responseAttachments?: Array<{ name: string; url: string }>;
+    first_ack_at?: string | null;
+    first_ack_signature_base64?: string | null;
     evaluation: {
       id: number;
       year: string;
     };
     person: { name: string };
+    second_ack_at?: string | null;
+    second_ack_signature_base64?: string | null;
     logs: Array<{ status: string; message: string; created_at: string }>;
     actions?: {
       canAcknowledgeFirst: boolean;
@@ -37,6 +42,54 @@ const secondInstanceText = ref('');
 const showSecondModal = ref(false);
 const secondFiles = ref<File[]>([]);
 const secondFileInput = ref<HTMLInputElement | null>(null);
+
+// Assinatura para ciência (1ª e 2ª instância)
+const showAckModal = ref(false);
+const ackType = ref<'first' | 'second' | null>(null);
+const canvas = ref<HTMLCanvasElement | null>(null);
+let signaturePad: SignaturePad | null = null;
+
+function openAckModal(type: 'first' | 'second') {
+  ackType.value = type;
+  showAckModal.value = true;
+  nextTick(() => initSignature());
+}
+function closeAckModal() {
+  showAckModal.value = false;
+  signaturePad?.clear();
+  ackType.value = null;
+}
+function initSignature() {
+  if (!canvas.value) return;
+  // Ajustar resolução para telas de alta densidade
+  const ratio = Math.max(window.devicePixelRatio || 1, 1);
+  const c = canvas.value;
+  c.width = c.offsetWidth * ratio;
+  c.height = c.offsetHeight * ratio;
+  const ctx = c.getContext('2d');
+  if (ctx) ctx.scale(ratio, ratio);
+  signaturePad = new SignaturePad(c, { backgroundColor: '#fff' });
+}
+function clearSignature() {
+  signaturePad?.clear();
+}
+function confirmAckSignature() {
+  if (!signaturePad || signaturePad.isEmpty() || !ackType.value) {
+    alert('Por favor, assine antes de confirmar.');
+    return;
+  }
+  const assinatura_base64 = signaturePad.toDataURL();
+  const routeName = ackType.value === 'first' ? 'recourses.acknowledgeFirst' : 'recourses.acknowledgeSecond';
+  router.post(route(routeName, props.recourse.id), {
+    signature_base64: assinatura_base64,
+  }, {
+    onSuccess: () => {
+      closeAckModal();
+      // Recarrega apenas os dados do recurso para refletir assinatura e datas
+      router.reload({ only: ['recourse'] });
+    },
+  });
+}
 
 function triggerSecondFileInput() {
   secondFileInput.value?.click();
@@ -252,7 +305,7 @@ function goBack() {
         <div v-if="recourse.actions?.canAcknowledgeFirst" class="flex justify-end">
           <button
             class="px-4 py-2 bg-gray-700 text-white rounded hover:bg-gray-800 text-sm flex items-center gap-2"
-            @click="router.post(route('recourses.acknowledgeFirst', recourse.id))"
+            @click="openAckModal('first')"
           >
             <icons.CheckCircleIcon class="w-4 h-4" /> Registrar ciência (1ª instância)
           </button>
@@ -268,10 +321,28 @@ function goBack() {
         <div v-if="recourse.actions?.canAcknowledgeSecond" class="flex justify-end">
           <button
             class="px-4 py-2 bg-gray-700 text-white rounded hover:bg-gray-800 text-sm flex items-center gap-2"
-            @click="router.post(route('recourses.acknowledgeSecond', recourse.id))"
+            @click="openAckModal('second')"
           >
             <icons.CheckCircleIcon class="w-4 h-4" /> Registrar ciência (2ª instância)
           </button>
+        </div>
+      </div>
+
+      <!-- Assinaturas registradas -->
+      <div class="mt-4 space-y-4">
+        <div v-if="recourse.first_ack_signature_base64" class="bg-gray-50 border rounded p-3">
+          <div class="text-sm text-gray-700 font-medium mb-2 flex items-center gap-2">
+            <icons.PenLineIcon class="w-4 h-4" /> Ciência registrada (1ª instância)
+          </div>
+          <img :src="recourse.first_ack_signature_base64" alt="Assinatura 1ª instância" class="w-48 border rounded" />
+          <p v-if="recourse.first_ack_at" class="text-xs text-gray-500 mt-1">Assinado em: {{ recourse.first_ack_at }}</p>
+        </div>
+        <div v-if="recourse.second_ack_signature_base64" class="bg-gray-50 border rounded p-3">
+          <div class="text-sm text-gray-700 font-medium mb-2 flex items-center gap-2">
+            <icons.PenLineIcon class="w-4 h-4" /> Ciência registrada (2ª instância)
+          </div>
+          <img :src="recourse.second_ack_signature_base64" alt="Assinatura 2ª instância" class="w-48 border rounded" />
+          <p v-if="recourse.second_ack_at" class="text-xs text-gray-500 mt-1">Assinado em: {{ recourse.second_ack_at }}</p>
         </div>
       </div>
 
@@ -339,6 +410,29 @@ function goBack() {
       <!-- Aviso se ainda não respondeu -->
       <div v-if="!recourse.response" class="mt-8 text-sm text-gray-500">
         Você será notificado nesta tela e por e-mail assim que a comissão responder seu recurso.
+      </div>
+    </div>
+
+    <!-- Modal: Assinar Ciência (1ª ou 2ª instância) -->
+    <div v-if="showAckModal" class="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+      <div class="bg-white rounded-lg shadow-xl w-full max-w-lg p-6">
+        <h3 class="text-lg font-semibold text-gray-900 flex items-center gap-2">
+          <icons.PenLineIcon class="w-5 h-5" /> Assinar Ciência
+          <span class="text-sm text-gray-500 ml-2" v-if="ackType === 'first'">1ª instância</span>
+          <span class="text-sm text-gray-500 ml-2" v-else-if="ackType === 'second'">2ª instância</span>
+        </h3>
+        <p class="text-sm text-gray-600 mt-2">Assine abaixo para registrar sua ciência.</p>
+        <div class="mt-4 border rounded bg-white">
+          <canvas ref="canvas" class="w-full h-40"></canvas>
+        </div>
+        <div class="mt-2 text-xs text-gray-500">Use o mouse (ou toque) para assinar. Limpe se necessário.</div>
+        <div class="mt-4 flex justify-between">
+          <button class="px-3 py-2 bg-gray-100 text-gray-700 rounded hover:bg-gray-200 text-sm" @click="clearSignature">Limpar</button>
+          <div class="flex gap-2">
+            <button class="px-4 py-2 bg-gray-100 text-gray-700 rounded hover:bg-gray-200" @click="closeAckModal">Cancelar</button>
+            <button class="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700" @click="confirmAckSignature">Confirmar</button>
+          </div>
+        </div>
       </div>
     </div>
   </DashboardLayout>

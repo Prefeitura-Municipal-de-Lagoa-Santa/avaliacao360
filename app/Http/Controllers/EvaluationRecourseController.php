@@ -609,12 +609,14 @@ class EvaluationRecourseController extends Controller
                 // Nota final após decisão (DGP ou Secretário)
                 'final_score' => ($recourse->dgp_decision || $recourse->secretary_decision) ? $finalScore : null,
                 'first_ack_at' => optional($recourse->first_ack_at)?->format('Y-m-d H:i'),
+                'first_ack_signature_base64' => $recourse->first_ack_signature_base64,
                 'second_instance' => [
                     'enabled' => (bool) $recourse->is_second_instance,
                     'requested_at' => optional($recourse->second_instance_requested_at)?->format('Y-m-d H:i'),
                     'text' => $recourse->second_instance_text,
                 ],
                 'second_ack_at' => optional($recourse->second_ack_at)?->format('Y-m-d H:i'),
+                'second_ack_signature_base64' => $recourse->second_ack_signature_base64,
                 'last_return' => $recourse->lastReturnedBy ? [
                     'by' => $recourse->lastReturnedBy->name,
                     'to' => $recourse->last_returned_to_instance,
@@ -1204,7 +1206,7 @@ class EvaluationRecourseController extends Controller
     /**
      * Servidor registra ciência da decisão de 1ª instância
      */
-    public function acknowledgeFirst(EvaluationRecourse $recourse)
+    public function acknowledgeFirst(Request $request, EvaluationRecourse $recourse)
     {
         // Apenas o próprio servidor do recurso pode assinar
         $user = Auth::user();
@@ -1216,8 +1218,13 @@ class EvaluationRecourseController extends Controller
             return redirect()->back()->with('error', 'Este recurso não está aguardando ciência de 1ª instância.');
         }
 
+        $data = $request->validate([
+            'signature_base64' => ['required','string','min:50'], // data URL
+        ]);
+
         $recourse->update([
             'first_ack_at' => now(),
+            'first_ack_signature_base64' => $data['signature_base64'],
             'workflow_stage' => 'first_ack_done',
         ]);
 
@@ -1461,7 +1468,7 @@ class EvaluationRecourseController extends Controller
     /**
      * Servidor registra ciência da decisão de 2ª instância
      */
-    public function acknowledgeSecond(EvaluationRecourse $recourse)
+    public function acknowledgeSecond(Request $request, EvaluationRecourse $recourse)
     {
         $user = Auth::user();
         $person = Person::where('cpf', $user->cpf)->first();
@@ -1472,8 +1479,13 @@ class EvaluationRecourseController extends Controller
             return redirect()->back()->with('error', 'Este recurso não está aguardando ciência de 2ª instância.');
         }
 
+        $data = $request->validate([
+            'signature_base64' => ['required','string','min:50'],
+        ]);
+
         $recourse->update([
             'second_ack_at' => now(),
+            'second_ack_signature_base64' => $data['signature_base64'],
             'workflow_stage' => 'completed',
         ]);
 
