@@ -366,6 +366,8 @@ class EvaluationRecourseController extends Controller
                     'status' => $recourse->status,
                     'stage' => $this->getStage($recourse),
                     'text' => $recourse->text,
+                    // Para RH: considerar concluído logo após decisão da DGP
+                    'concluded_for_rh' => !empty($recourse->dgp_decision),
                     'person' => [
                         'name' => $recourse->person->name ?? '—',
                     ],
@@ -654,7 +656,8 @@ class EvaluationRecourseController extends Controller
                     $stage = $this->getStage($recourse);
                     return [
                         'canAcknowledgeFirst' => $isOwner && $stage === 'await_first_ack' && is_null($recourse->first_ack_at) && user_can('recourses.acknowledgeFirst'),
-                        'canRequestSecondInstance' => $isOwner && $stage === 'first_ack_done' && !$recourse->is_second_instance && user_can('recourses.requestSecondInstance'),
+                        // 2ª instância somente quando a DGP NÃO homologou
+                        'canRequestSecondInstance' => $isOwner && $stage === 'first_ack_done' && !$recourse->is_second_instance && ($recourse->dgp_decision === 'nao_homologado') && user_can('recourses.requestSecondInstance'),
                         'canAcknowledgeSecond' => $isOwner && $stage === 'await_second_ack' && is_null($recourse->second_ack_at) && user_can('recourses.acknowledgeSecond'),
                     ];
                 })(),
@@ -704,8 +707,8 @@ class EvaluationRecourseController extends Controller
         $evaluationToShow = $chefEvaluation ?? $recourse->evaluation->evaluation;
 
         // Busca apenas pessoas com role "Comissão" para poder atribuir responsáveis (apenas RH puro)
-    // Apenas RH puro pode gerenciar responsáveis e somente enquanto o recurso estiver na instância do RH
-    $canManageAssignees = $isRH && !$isComissao && $recourse->current_instance === 'RH';
+    // Apenas RH puro pode gerenciar responsáveis e somente enquanto o recurso estiver na instância do RH e na etapa de análise do RH
+    $canManageAssignees = $isRH && !$isComissao && $recourse->current_instance === 'RH' && $this->getStage($recourse) === 'rh_analysis';
         
         $availablePersons = $canManageAssignees 
             ? Person::whereIn('cpf', function ($query) {
@@ -773,11 +776,12 @@ class EvaluationRecourseController extends Controller
                     $forwardReasons = [];
                     if (!$isRH) $forwardReasons[] = 'Apenas RH pode encaminhar.';
                     if ($recourse->current_instance !== 'RH') $forwardReasons[] = 'Recurso não está na instância do RH.';
+                    if ($this->getStage($recourse) !== 'rh_analysis') $forwardReasons[] = 'Ação permitida apenas na análise do RH.';
                     if (($recourse->responsiblePersons?->count() ?? 0) === 0) $forwardReasons[] = 'Defina o Presidente da Comissão antes de encaminhar.';
                     if (!user_can('recourses.forwardToCommission')) $forwardReasons[] = 'Usuário sem permissão para encaminhar.';
                     $stage = $this->getStage($recourse);
                     return [
-                        'canForwardToCommission' => $isRH && $recourse->current_instance === 'RH' && ($recourse->responsiblePersons?->count() ?? 0) > 0 && user_can('recourses.forwardToCommission'),
+                        'canForwardToCommission' => $isRH && $this->getStage($recourse) === 'rh_analysis' && $recourse->current_instance === 'RH' && ($recourse->responsiblePersons?->count() ?? 0) > 0 && user_can('recourses.forwardToCommission'),
                         'forwardToCommissionDisabledReason' => empty($forwardReasons) ? null : implode(' ', $forwardReasons),
                         'canForwardToDgp' => $isRH && $recourse->current_instance === 'Comissao' && in_array($recourse->status, ['respondido', 'indeferido']),
                         'canDgpDecide' => ($stage === 'dgp_review') && (user_can('recourses.dgpDecision') || $this->hasRole('Diretor RH') || $this->hasRole('DGP')),
@@ -1171,6 +1175,8 @@ class EvaluationRecourseController extends Controller
             'dgp_decision' => $this->adaptDecisionForDatabase('dgp_decision', $validated['decision']),
             'dgp_decided_at' => now(),
             'dgp_notes' => $validated['notes'] ?? null,
+            // Atualiza o status global para categorizar nas telas (Deferidos/Indeferidos)
+            'status' => $validated['decision'] === 'homologado' ? 'respondido' : 'indeferido',
             // Após decisão da DGP, pular a etapa manual de "Finalizar RH (1ª)" e ir direto para ciência do servidor
             'workflow_stage' => 'await_first_ack',
         ]);
@@ -1249,6 +1255,10 @@ class EvaluationRecourseController extends Controller
 
         if (!$recourse->first_ack_at || $recourse->is_second_instance) {
             return redirect()->back()->with('error', 'Fluxo inválido para 2ª instância.');
+        }
+        // Bloqueia 2ª instância em caso de homologação da DGP
+        if ($recourse->dgp_decision === 'homologado') {
+            return redirect()->back()->with('error', 'Não é possível recorrer à 2ª instância quando a DGP homologou a decisão.');
         }
 
         $validated = $request->validate([

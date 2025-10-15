@@ -9,6 +9,7 @@ const props = defineProps<{
       id: number;
       status: string;
       stage?: string | null;
+      concluded_for_rh?: boolean;
       text: string;
       person: { name: string };
       evaluation: { year: string; id: number };
@@ -139,7 +140,7 @@ function scrollToAwaiting() {
             <td class="px-4 py-2">{{ r.person.name }}</td>
             <td class="px-4 py-2">{{ r.evaluation.year }}</td>
             <td class="px-4 py-2 capitalize">
-              <span v-if="r.stage === 'completed'" class="text-green-700">Concluído</span>
+              <span v-if="r.stage === 'completed' || r.concluded_for_rh" class="text-green-700">Concluído</span>
               <span v-else>{{ r.status.replace('_', ' ') }}</span>
             </td>
             <td v-if="r.last_return" class="px-4 py-2 text-xs text-amber-700">
