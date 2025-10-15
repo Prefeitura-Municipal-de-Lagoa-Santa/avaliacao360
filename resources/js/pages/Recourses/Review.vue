@@ -468,7 +468,11 @@ function returnToPrevious() {
               </span>
               <span class="flex items-center gap-1">
                 <icons.Building2 class="w-4 h-4" />
-                <strong>Instância Atual:</strong> {{ formatInstance(recourse.current_instance) }}
+                <strong>Instância Atual:</strong>
+                <span class="ml-2 text-xs px-2 py-0.5 rounded-full border"
+                  :class="recourse.second_instance?.enabled ? 'bg-indigo-50 text-indigo-700 border-indigo-200' : 'bg-green-50 text-green-700 border-green-200'">
+                  {{ recourse.second_instance?.enabled ? '2ª instância' : '1ª instância' }}
+                </span>
               </span>
               <span v-if="recourse.stage" class="flex items-center gap-1">
                 <icons.Flag class="w-4 h-4" />
@@ -826,13 +830,13 @@ function returnToPrevious() {
                        :class="[dgpDecision === 'homologado' ? 'border-gray-500 bg-gray-50 text-gray-700' : 'border-gray-300 hover:border-gray-400']">
                   <input type="radio" v-model="dgpDecision" value="homologado" class="text-gray-600" />
                   <icons.CheckCircle class="w-5 h-5" />
-                  <span class="font-medium">DEFERIR (Homologar)</span>
+                  <span class="font-medium">DEFERIR</span>
                 </label>
                 <label class="flex items-center justify-center gap-3 p-4 border-2 rounded-lg cursor-pointer transition-colors"
                        :class="[dgpDecision === 'nao_homologado' ? 'border-gray-500 bg-gray-50 text-gray-700' : 'border-gray-300 hover:border-gray-400']">
                   <input type="radio" v-model="dgpDecision" value="nao_homologado" class="text-gray-600" />
                   <icons.XCircle class="w-5 h-5" />
-                  <span class="font-medium">INDEFERIR (Não homologar)</span>
+                  <span class="font-medium">INDEFERIR</span>
                 </label>
               </div>
             </div>
