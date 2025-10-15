@@ -20,13 +20,21 @@ class EvaluationRecourse extends Model
         'last_returned_by_user_id',
         'last_returned_to_instance',
         'last_returned_at',
+    'last_return_message',
         'response',
         'responded_at',
+    // Comissão (decisão mascarada no status global)
+    'commission_decision',
+    'commission_response',
+    'commission_decided_at',
+    'clarification_response',
+    'clarification_responded_at',
         // Extended workflow fields
         'dgp_decision',
         'dgp_decided_at',
         'dgp_notes',
         'first_ack_at',
+        'first_ack_signature_base64',
         'is_second_instance',
         'second_instance_requested_at',
         'second_instance_text',
@@ -34,11 +42,14 @@ class EvaluationRecourse extends Model
         'secretary_decided_at',
         'secretary_notes',
         'second_ack_at',
+        'second_ack_signature_base64',
     ];
 
     protected $casts = [
         'responded_at' => 'datetime',
         'last_returned_at' => 'datetime',
+    'commission_decided_at' => 'datetime',
+    'clarification_responded_at' => 'datetime',
         'dgp_decided_at' => 'datetime',
         'first_ack_at' => 'datetime',
         'is_second_instance' => 'boolean',

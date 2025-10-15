@@ -633,7 +633,7 @@ class EvaluationRecourseController extends Controller
         $validated = $request->validate([
             'status' => ['required', 'in:respondido,indeferido'],
             'response' => ['required', 'string', 'min:5'],
-            'response_attachments.*' => ['file', 'max:10240'], // Máximo 10MB por arquivo
+            'response_attachments.*' => ['file', 'max:102400'], // Máximo 100MB por arquivo
         ]);
 
         $recourse->update([

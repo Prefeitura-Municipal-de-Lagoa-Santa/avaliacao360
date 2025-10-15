@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import { Head, router } from '@inertiajs/vue3';
-import { ref } from 'vue';
+import { ref, nextTick } from 'vue';
 import DashboardLayout from '@/layouts/DashboardLayout.vue';
 import * as icons from 'lucide-vue-next';
+import SignaturePad from 'signature_pad';
 
 const props = defineProps<{
   recourse: {
@@ -18,11 +19,15 @@ const props = defineProps<{
     secretary?: { decision?: string | null; decided_at?: string | null; notes?: string | null };
     attachments: Array<{ name: string; url: string }>;
     responseAttachments?: Array<{ name: string; url: string }>;
+    first_ack_at?: string | null;
+    first_ack_signature_base64?: string | null;
     evaluation: {
       id: number;
       year: string;
     };
     person: { name: string };
+    second_ack_at?: string | null;
+    second_ack_signature_base64?: string | null;
     logs: Array<{ status: string; message: string; created_at: string }>;
     actions?: {
       canAcknowledgeFirst: boolean;
@@ -33,10 +38,75 @@ const props = defineProps<{
   permissions?: { isRH: boolean; isComissao: boolean; isRequerente: boolean };
 }>();
 
+// Labels amigáveis para etapas (mesmo padrão da tela de revisão)
+const stageLabels: Record<string, string> = {
+  rh_analysis: 'Análise do RH',
+  commission_analysis: 'Análise da Comissão',
+  commission_clarification: 'Esclarecimento da Comissão',
+  dgp_review: 'Revisão da DGP',
+  await_first_ack: 'Aguardando ciência (1ª instância)',
+  secretary_review: 'Decisão do Secretário',
+  rh_finalize_second: 'Finalização do RH (2ª instância)',
+  await_second_ack: 'Aguardando ciência (2ª instância)',
+  completed: 'Concluído',
+};
+function formatStageLabel(stage?: string | null): string {
+  if (!stage) return '—';
+  return stageLabels[stage] ?? stage.replaceAll('_', ' ').toUpperCase();
+}
+
 const secondInstanceText = ref('');
 const showSecondModal = ref(false);
 const secondFiles = ref<File[]>([]);
 const secondFileInput = ref<HTMLInputElement | null>(null);
+
+// Assinatura para ciência (1ª e 2ª instância)
+const showAckModal = ref(false);
+const ackType = ref<'first' | 'second' | null>(null);
+const canvas = ref<HTMLCanvasElement | null>(null);
+let signaturePad: SignaturePad | null = null;
+
+function openAckModal(type: 'first' | 'second') {
+  ackType.value = type;
+  showAckModal.value = true;
+  nextTick(() => initSignature());
+}
+function closeAckModal() {
+  showAckModal.value = false;
+  signaturePad?.clear();
+  ackType.value = null;
+}
+function initSignature() {
+  if (!canvas.value) return;
+  // Ajustar resolução para telas de alta densidade
+  const ratio = Math.max(window.devicePixelRatio || 1, 1);
+  const c = canvas.value;
+  c.width = c.offsetWidth * ratio;
+  c.height = c.offsetHeight * ratio;
+  const ctx = c.getContext('2d');
+  if (ctx) ctx.scale(ratio, ratio);
+  signaturePad = new SignaturePad(c, { backgroundColor: '#fff' });
+}
+function clearSignature() {
+  signaturePad?.clear();
+}
+function confirmAckSignature() {
+  if (!signaturePad || signaturePad.isEmpty() || !ackType.value) {
+    alert('Por favor, assine antes de confirmar.');
+    return;
+  }
+  const assinatura_base64 = signaturePad.toDataURL();
+  const routeName = ackType.value === 'first' ? 'recourses.acknowledgeFirst' : 'recourses.acknowledgeSecond';
+  router.post(route(routeName, props.recourse.id), {
+    signature_base64: assinatura_base64,
+  }, {
+    onSuccess: () => {
+      closeAckModal();
+      // Recarrega apenas os dados do recurso para refletir assinatura e datas
+      router.reload({ only: ['recourse'] });
+    },
+  });
+}
 
 function triggerSecondFileInput() {
   secondFileInput.value?.click();
@@ -53,6 +123,11 @@ function removeSecondFile(i: number) {
   secondFiles.value.splice(i, 1);
 }
 function submitSecondInstance() {
+  // Defesa extra no cliente: se DGP homologou, não permitir abrir 2ª instância
+  if (props.recourse?.dgp?.decision === 'homologado') {
+    alert('Não é possível abrir a 2ª instância após deferimento/homologação da DGP.');
+    return;
+  }
   if (!secondInstanceText.value.trim()) return;
   const fd = new FormData();
   fd.append('text', secondInstanceText.value);
@@ -88,176 +163,191 @@ function goBack() {
 <template>
   <Head :title="`Recurso de ${recourse.person.name}`" />
   <DashboardLayout :page-title="`Recurso de ${recourse.person.name}`">
-    <div class="max-w-3xl mx-auto bg-white p-6 rounded shadow space-y-6">
+    <div class="max-w-3xl mx-auto space-y-6">
       <!-- Cabeçalho -->
-      <div class="detail-page-header flex justify-between items-center">
-        <h2 class="text-2xl font-bold text-gray-800">
-          Recurso da Avaliação de {{ recourse.person.name }} - {{ recourse.evaluation.year }}
-        </h2>
-        <button @click="goBack" class="back-btn">
-          <icons.ArrowLeftIcon class="size-4 mr-2" />
-          Voltar
-        </button>
+      <div class="bg-white p-6 rounded shadow border">
+        <div class="flex justify-between items-center">
+          <h2 class="text-2xl font-bold text-gray-900">Recurso de {{ recourse.person.name }} - {{ recourse.evaluation.year }}</h2>
+          <button @click="goBack" class="back-btn inline-flex items-center whitespace-nowrap">
+            <icons.ArrowLeftIcon class="size-4 mr-2" /> Voltar
+          </button>
+        </div>
+        <div class="mt-3 flex flex-wrap items-center gap-2 text-sm">
+          <span class="px-2.5 py-1 rounded-full border bg-gray-50 text-gray-700">Etapa: {{ formatStageLabel(recourse.stage) }}</span>
+          <span class="px-2.5 py-1 rounded-full border bg-gray-50 text-gray-700">Status: {{ recourse.status?.toUpperCase() || '—' }}</span>
+          <span class="px-2.5 py-1 rounded-full border" :class="recourse.second_instance?.enabled ? 'bg-indigo-50 text-indigo-700 border-indigo-200' : 'bg-green-50 text-green-700 border-green-200'">
+            {{ recourse.second_instance?.enabled ? '2ª instância' : '1ª instância' }}
+          </span>
+        </div>
       </div>
 
-      <!-- Status/Etapa -->
-      <div class="space-y-2">
-        <div class="flex gap-2 items-center">
-          <span class="text-xs px-3 py-1 rounded-full bg-gray-100 text-gray-700 border">
-            Etapa: {{ recourse.stage?.toUpperCase() || '—' }}
-          </span>
-          <span class="text-xs px-3 py-1 rounded-full bg-gray-100 text-gray-700 border">
-            Status: {{ recourse.status?.toUpperCase() || '—' }}
-          </span>
+      <!-- Situação Atual -->
+      <div class="bg-white rounded shadow border">
+        <div class="bg-gray-800 text-white p-4 rounded-t">
+          <h3 class="text-lg font-semibold flex items-center gap-2"><icons.Info class="w-5 h-5" /> Situação Atual</h3>
+          <p class="text-sm text-gray-300 mt-1">Acompanhamento do andamento e próximas ações</p>
         </div>
-        <p class="text-sm text-gray-700 font-medium">Status do Recurso:</p>
-
-        <!-- Prioridade: decisão da DGP (1ª instância) -->
-        <div v-if="recourse.dgp && recourse.dgp.decision && !(recourse.secretary && recourse.secretary.decision)" class="text-indigo-700 bg-indigo-50 px-4 py-2 rounded flex items-center gap-2">
-          <icons.Stamp class="w-5 h-5" />
-          <span>
-            Decisão da DGP registrada
-            <span v-if="recourse.dgp && recourse.dgp.decision">: <strong>{{ recourse.dgp.decision.toUpperCase() }}</strong></span>
-            <span v-if="recourse.actions && recourse.actions.canAcknowledgeFirst"> — Aguardando sua ciência (1ª instância).</span>
-            <span v-else> — Aguardando trâmites do RH.</span>
-          </span>
-        </div>
-
-        <div v-else-if="recourse.status === 'aberto'" class="text-yellow-700 bg-yellow-50 px-4 py-2 rounded flex items-center gap-2">
-          <icons.AlertCircleIcon class="w-5 h-5" />
-          <span>Aguardando análise da comissão.</span>
-        </div>
-
-        <div v-else-if="recourse.status === 'em_analise'" class="text-blue-700 bg-blue-50 px-4 py-2 rounded flex items-center gap-2">
-          <icons.LoaderIcon class="w-5 h-5 animate-spin" />
-          <span>Recurso em análise. Em breve você receberá uma resposta oficial.</span>
-        </div>
-
-        <div v-else-if="recourse.secretary && recourse.secretary.decision" class="text-purple-700 bg-purple-50 px-4 py-2 rounded flex items-center gap-2">
-          <icons.Stamp class="w-5 h-5" />
-          <span>
-            Decisão do Secretário registrada
-            <span v-if="recourse.secretary && recourse.secretary.decision">: <strong>{{ recourse.secretary.decision.toUpperCase() }}</strong></span>
-            <span v-if="recourse.actions && recourse.actions.canAcknowledgeSecond"> — Aguardando sua ciência (2ª instância).</span>
-          </span>
-        </div>
-
-        <div v-else-if="recourse.status === 'respondido'" class="text-green-700 bg-green-50 px-4 py-2 rounded flex items-center gap-2">
-          <icons.CheckCircleIcon class="w-5 h-5" />
-          <span>Recurso respondido. Veja abaixo o parecer da comissão.</span>
-        </div>
-
-        <div v-else-if="recourse.status === 'indeferido'" class="text-red-700 bg-red-50 px-4 py-2 rounded flex items-center gap-2">
-          <icons.XCircleIcon class="w-5 h-5" />
-          <span>Recurso indeferido. Veja a justificativa abaixo.</span>
+        <div class="p-4 space-y-2 text-sm">
+          <div v-if="recourse.dgp?.decision && !recourse.secretary?.decision" class="text-indigo-800 bg-indigo-50 border border-indigo-200 px-3 py-2 rounded flex items-center gap-2">
+            <icons.Stamp class="w-4 h-4" />
+            <span>
+              Decisão da DGP registrada: <strong>{{ recourse.dgp.decision.toUpperCase() }}</strong>
+              <span v-if="recourse.actions?.canAcknowledgeFirst"> — Aguardando sua ciência (1ª instância).</span>
+              <span v-else> — Aguardando trâmites do RH.</span>
+            </span>
+          </div>
+          <div v-else-if="recourse.status === 'aberto'" class="text-amber-800 bg-amber-50 border border-amber-200 px-3 py-2 rounded flex items-center gap-2">
+            <icons.AlertCircle class="w-4 h-4" /> Aguardando análise da Comissão.
+          </div>
+          <div v-else-if="recourse.status === 'em_analise'" class="text-blue-800 bg-blue-50 border border-blue-200 px-3 py-2 rounded flex items-center gap-2">
+            <icons.Loader2 class="w-4 h-4 animate-spin" /> Recurso em análise. Em breve você receberá uma resposta oficial.
+          </div>
+          <div v-else-if="recourse.secretary?.decision" class="text-purple-800 bg-purple-50 border border-purple-200 px-3 py-2 rounded flex items-center gap-2">
+            <icons.Stamp class="w-4 h-4" /> Decisão do Secretário registrada: <strong>{{ recourse.secretary.decision.toUpperCase() }}</strong>
+            <span v-if="recourse.actions?.canAcknowledgeSecond"> — Aguardando sua ciência (2ª instância).</span>
+          </div>
+          <div v-else-if="recourse.status === 'respondido'" class="text-green-800 bg-green-50 border border-green-200 px-3 py-2 rounded flex items-center gap-2">
+            <icons.CheckCircle class="w-4 h-4" /> Recurso deferido pela Comissão. Veja o parecer abaixo.
+          </div>
+          <div v-else-if="recourse.status === 'indeferido'" class="text-red-800 bg-red-50 border border-red-200 px-3 py-2 rounded flex items-center gap-2">
+            <icons.XCircle class="w-4 h-4" /> Recurso indeferido pela Comissão. Veja a justificativa abaixo.
+          </div>
         </div>
       </div>
 
       <!-- Nota final após decisão (Secretário tem precedência) -->
-      <div v-if="recourse.final_score !== null && recourse.final_score !== undefined" class="mt-4">
-        <div class="flex items-center gap-2 text-sm text-gray-700 font-medium mb-1">
-          <icons.BadgeCheck class="w-4 h-4 text-gray-700" />
-          <span>
-            {{ recourse.secretary?.decision ? 'Nota Final após decisão do Secretário' : (recourse.dgp?.decision ? 'Nota Final após decisão da DGP' : 'Nota Final') }}
-          </span>
+      <div v-if="recourse.final_score !== null && recourse.final_score !== undefined" class="bg-white rounded shadow border">
+        <div class="bg-gray-700 text-white p-4 rounded-t">
+          <h3 class="text-lg font-semibold flex items-center gap-2"><icons.BadgeCheck class="w-5 h-5" /> Nota Final</h3>
+          <p class="text-sm text-gray-300 mt-1">{{ recourse.secretary?.decision ? 'Após decisão do Secretário' : (recourse.dgp?.decision ? 'Após decisão da DGP' : 'Calculada') }}</p>
         </div>
-        <div class="flex items-center gap-2 bg-gray-50 border rounded px-4 py-3 inline-flex">
-          <span class="text-2xl font-bold text-blue-700">{{ recourse.final_score?.toFixed(1) }}</span>
-          <span class="text-sm text-gray-500">pts</span>
+        <div class="p-4">
+          <div class="inline-flex items-center gap-2 bg-gray-50 border rounded px-4 py-3">
+            <span class="text-2xl font-bold text-blue-700">{{ recourse.final_score?.toFixed(1) }}</span>
+            <span class="text-sm text-gray-500">pts</span>
+          </div>
         </div>
       </div>
 
-      <!-- Detalhes da decisão final -->
-      <div v-if="recourse.secretary?.decision" class="mt-3">
-        <div class="text-sm text-gray-700 font-medium mb-1 flex items-center gap-2">
-          <icons.Stamp class="w-4 h-4" /> Decisão do Secretário
-        </div>
-        <div class="bg-gray-50 border rounded p-3">
-          <div class="text-sm text-gray-800">
-            <span class="font-semibold">{{ recourse.secretary.decision.toUpperCase() }}</span>
-            <span v-if="recourse.secretary.decided_at" class="text-gray-500 ml-2">({{ recourse.secretary.decided_at }})</span>
+      <!-- Decisão da DGP (1ª instância) -->
+      <div v-if="recourse.dgp?.decision" class="bg-white rounded shadow border">
+        <div class="bg-gray-800 text-white p-4 rounded-t">
+          <div class="flex items-center justify-between gap-3">
+            <h3 class="text-lg font-semibold flex items-center gap-2"><icons.Stamp class="w-5 h-5" /> Decisão da DGP</h3>
+            <span class="inline-flex items-center text-xs font-semibold px-2.5 py-1 rounded-full border"
+                  :class="recourse.dgp.decision === 'homologado' ? 'bg-emerald-100 text-emerald-800 border-emerald-300' : 'bg-red-100 text-red-700 border-red-300'">
+              {{ recourse.dgp.decision === 'homologado' ? 'HOMOLOGADO' : 'NÃO HOMOLOGADO' }}
+            </span>
           </div>
-          <div v-if="recourse.secretary?.notes" class="text-sm text-gray-700 whitespace-pre-wrap mt-2 bg-white border rounded p-2">{{ recourse.secretary.notes }}</div>
+          <p class="text-sm text-gray-300 mt-1">Homologação ou não do parecer da Comissão</p>
+        </div>
+        <div class="p-4 space-y-2">
+          <div class="text-xs text-gray-600" v-if="recourse.dgp?.decided_at">
+            <icons.Clock class="w-3 h-3 inline mr-1" /> Decidido em {{ recourse.dgp.decided_at }}
+          </div>
+          <div class="text-sm text-gray-700 whitespace-pre-wrap" v-if="recourse.dgp?.notes">
+            {{ recourse.dgp.notes }}
+          </div>
+        </div>
+      </div>
+
+      <!-- Decisão do Secretário (2ª instância) -->
+      <div v-if="recourse.secretary?.decision" class="bg-white rounded shadow border">
+        <div class="bg-gray-800 text-white p-4 rounded-t">
+          <div class="flex items-center justify-between gap-3">
+            <h3 class="text-lg font-semibold flex items-center gap-2"><icons.BadgeCheck class="w-5 h-5" /> Decisão do Secretário</h3>
+            <span class="inline-flex items-center text-xs font-semibold px-2.5 py-1 rounded-full border"
+                  :class="recourse.secretary.decision === 'homologado' ? 'bg-emerald-100 text-emerald-800 border-emerald-300' : 'bg-red-100 text-red-700 border-red-300'">
+              {{ recourse.secretary.decision === 'homologado' ? 'HOMOLOGADO' : 'NÃO HOMOLOGADO' }}
+            </span>
+          </div>
+          <p class="text-sm text-gray-300 mt-1">Homologação ou não do parecer da Comissão</p>
+        </div>
+        <div class="p-4 space-y-2">
+          <div class="text-xs text-gray-600" v-if="recourse.secretary?.decided_at">
+            <icons.Clock class="w-3 h-3 inline mr-1" /> Decidido em {{ recourse.secretary.decided_at }}
+          </div>
+          <div class="text-sm text-gray-700 whitespace-pre-wrap" v-if="recourse.secretary?.notes">
+            {{ recourse.secretary.notes }}
+          </div>
         </div>
       </div>
 
       <!-- Exibe questionamento enviado para 2ª instância -->
-      <div v-if="recourse.second_instance?.enabled && recourse.second_instance?.text" class="mt-6">
-        <h3 class="font-semibold text-sm text-gray-700 flex items-center gap-2">
-          <icons.MessageSquareIcon class="w-4 h-4" /> Questionamento enviado ao Secretário (2ª instância)
-        </h3>
-        <p class="text-gray-800 whitespace-pre-wrap mt-1 bg-indigo-50 border border-indigo-200 p-3 rounded">
-          {{ recourse.second_instance.text }}
-        </p>
-        <p v-if="recourse.second_instance?.requested_at" class="text-xs text-gray-500 mt-1">
-          Enviado em: {{ recourse.second_instance.requested_at }}
-        </p>
+      <div v-if="recourse.second_instance?.enabled && recourse.second_instance?.text" class="bg-white rounded shadow border">
+        <div class="bg-gray-700 text-white p-4 rounded-t">
+          <h3 class="text-lg font-semibold flex items-center gap-2"><icons.MessageSquare class="w-5 h-5" /> Questionamento ao Secretário (2ª instância)</h3>
+          <p class="text-sm text-gray-300 mt-1">Texto enviado por você</p>
+        </div>
+        <div class="p-4">
+          <p class="text-gray-800 whitespace-pre-wrap bg-indigo-50 border border-indigo-200 p-3 rounded">{{ recourse.second_instance.text }}</p>
+          <p v-if="recourse.second_instance?.requested_at" class="text-xs text-gray-500 mt-2">Enviado em: {{ recourse.second_instance.requested_at }}</p>
+        </div>
       </div>
 
-      <!-- Texto enviado -->
-      <div class="mt-6">
-        <h3 class="font-semibold text-sm text-gray-700">Texto enviado por você:</h3>
-        <p class="text-gray-800 whitespace-pre-wrap mt-1 bg-gray-50 border p-3 rounded">
-          {{ recourse.text }}
-        </p>
+      <!-- Recurso Apresentado -->
+      <div class="bg-white rounded shadow border">
+        <div class="bg-gray-700 text-white p-4 rounded-t">
+          <h3 class="text-lg font-semibold flex items-center gap-2"><icons.MessageSquare class="w-5 h-5" /> Recurso Apresentado</h3>
+          <p class="text-sm text-gray-300 mt-1">Texto e anexos enviados por você</p>
+        </div>
+        <div class="p-4 space-y-4">
+          <div>
+            <h4 class="text-sm font-semibold text-gray-800 mb-1 flex items-center gap-2"><icons.FileText class="w-4 h-4" /> Justificativa do Recurso</h4>
+            <p class="text-gray-800 whitespace-pre-wrap bg-gray-50 border p-3 rounded">{{ recourse.text }}</p>
+          </div>
+          <div v-if="recourse.attachments.length">
+            <h4 class="text-sm font-semibold text-gray-800 mb-2 flex items-center gap-2"><icons.Paperclip class="w-4 h-4" /> Anexos enviados</h4>
+            <ul class="space-y-1">
+              <li v-for="(file, index) in recourse.attachments" :key="index" class="flex items-center gap-2 p-2 bg-white border rounded hover:bg-gray-50 cursor-pointer" @click="openFile(file)">
+                <icons.File class="w-4 h-4 text-gray-500" />
+                <span class="text-sm text-gray-700 hover:underline">{{ file.name }}</span>
+              </li>
+            </ul>
+          </div>
+        </div>
       </div>
 
-      <!-- Anexos -->
-      <div v-if="recourse.attachments.length" class="mt-6">
-        <h3 class="font-semibold text-sm text-gray-700 mb-1">Anexos enviados:</h3>
-        <ul class="list-disc list-inside space-y-1">
-          <li v-for="(file, index) in recourse.attachments" :key="index">
-            <a
-              href="#"
-              @click.prevent="openFile(file)"
-              class="text-blue-600 hover:underline flex items-center gap-1"
-            >
-              <icons.PaperclipIcon class="w-4 h-4" />
-              {{ file.name }}
-            </a>
-          </li>
-        </ul>
-      </div>
-
-      <!-- Resposta -->
-      <div v-if="recourse.response" class="mt-6">
-        <h3 class="font-semibold text-sm text-gray-700">Resposta da Comissão:</h3>
-        <p class="text-gray-800 whitespace-pre-wrap mt-1 bg-green-50 border border-green-200 p-3 rounded">
-          {{ recourse.response }}
-        </p>
-        <p class="text-xs text-gray-500 mt-1">
-          Respondido em: {{ recourse.responded_at }}
-        </p>
-        
-        <!-- Anexos da resposta -->
-        <div v-if="recourse.responseAttachments && recourse.responseAttachments.length" class="mt-4">
-          <h4 class="font-semibold text-sm text-gray-700 mb-1">Anexos da Resposta:</h4>
-          <ul class="list-disc list-inside space-y-1">
-            <li v-for="(file, index) in recourse.responseAttachments" :key="index">
-              <a
-                href="#"
-                @click.prevent="openFile(file)"
-                class="text-blue-600 hover:underline flex items-center gap-1"
-              >
-                <icons.PaperclipIcon class="w-4 h-4" />
-                {{ file.name }}
-              </a>
-            </li>
-          </ul>
+      <!-- Parecer da Comissão -->
+      <div v-if="recourse.response" class="bg-white rounded shadow border">
+        <div class="bg-gray-800 text-white p-4 rounded-t">
+          <div class="flex items-center justify-between gap-3">
+            <h3 class="text-lg font-semibold flex items-center gap-2"><icons.Scale class="w-5 h-5" /> Parecer da Comissão</h3>
+            <span class="text-[10px] tracking-wide font-semibold px-2 py-1 rounded-full border"
+                  :class="recourse.status === 'respondido' ? 'bg-green-100 text-green-700 border-green-300' : (recourse.status === 'indeferido' ? 'bg-red-100 text-red-700 border-red-300' : 'bg-gray-100 text-gray-700 border-gray-300')">
+              {{ recourse.status === 'respondido' ? 'DEFERIDO' : (recourse.status === 'indeferido' ? 'INDEFERIDO' : 'ANÁLISE CONCLUÍDA') }}
+            </span>
+          </div>
+          <p class="text-sm text-gray-300 mt-1">Texto fundamentado registrado pela Comissão</p>
+        </div>
+        <div class="p-4 space-y-3">
+          <div class="bg-white border rounded p-3 text-sm text-gray-800 whitespace-pre-wrap">{{ recourse.response }}</div>
+          <div class="text-xs text-gray-600" v-if="recourse.responded_at">
+            <icons.Clock class="w-3 h-3 inline mr-1" /> Respondido em {{ recourse.responded_at }}
+          </div>
+          <div v-if="recourse.responseAttachments?.length" class="pt-2 border-t">
+            <h4 class="text-xs font-medium text-gray-700 mb-1 flex items-center gap-1"><icons.Paperclip class="w-3 h-3" /> Anexos do Parecer</h4>
+            <ul class="space-y-1 max-h-40 overflow-y-auto">
+              <li v-for="(file, index) in recourse.responseAttachments" :key="index" class="flex items-center justify-between bg-white border rounded px-2 py-1 text-xs">
+                <span class="truncate">{{ file.name }}</span>
+                <a :href="file.url" target="_blank" class="text-gray-700 hover:underline">abrir</a>
+              </li>
+            </ul>
+          </div>
         </div>
       </div>
 
       <!-- Ações do Servidor -->
-      <div class="mt-6 space-y-3">
+      <div class="bg-white rounded shadow border p-4 space-y-3">
         <div v-if="recourse.actions?.canAcknowledgeFirst" class="flex justify-end">
           <button
             class="px-4 py-2 bg-gray-700 text-white rounded hover:bg-gray-800 text-sm flex items-center gap-2"
-            @click="router.post(route('recourses.acknowledgeFirst', recourse.id))"
+            @click="openAckModal('first')"
           >
             <icons.CheckCircleIcon class="w-4 h-4" /> Registrar ciência (1ª instância)
           </button>
         </div>
-        <div v-if="recourse.actions?.canRequestSecondInstance" class="flex justify-end">
+        <div v-if="recourse.actions?.canRequestSecondInstance && recourse.dgp?.decision !== 'homologado'" class="flex justify-end">
           <button
             class="px-4 py-2 bg-amber-600 text-white rounded hover:bg-amber-700 text-sm flex items-center gap-2"
             @click="showSecondModal = true"
@@ -268,10 +358,28 @@ function goBack() {
         <div v-if="recourse.actions?.canAcknowledgeSecond" class="flex justify-end">
           <button
             class="px-4 py-2 bg-gray-700 text-white rounded hover:bg-gray-800 text-sm flex items-center gap-2"
-            @click="router.post(route('recourses.acknowledgeSecond', recourse.id))"
+            @click="openAckModal('second')"
           >
             <icons.CheckCircleIcon class="w-4 h-4" /> Registrar ciência (2ª instância)
           </button>
+        </div>
+      </div>
+
+      <!-- Assinaturas registradas -->
+      <div class="bg-white rounded shadow border p-4 space-y-4">
+        <div v-if="recourse.first_ack_signature_base64" class="bg-gray-50 border rounded p-3">
+          <div class="text-sm text-gray-700 font-medium mb-2 flex items-center gap-2">
+            <icons.PenLineIcon class="w-4 h-4" /> Ciência registrada (1ª instância)
+          </div>
+          <img :src="recourse.first_ack_signature_base64" alt="Assinatura 1ª instância" class="w-48 border rounded" />
+          <p v-if="recourse.first_ack_at" class="text-xs text-gray-500 mt-1">Assinado em: {{ recourse.first_ack_at }}</p>
+        </div>
+        <div v-if="recourse.second_ack_signature_base64" class="bg-gray-50 border rounded p-3">
+          <div class="text-sm text-gray-700 font-medium mb-2 flex items-center gap-2">
+            <icons.PenLineIcon class="w-4 h-4" /> Ciência registrada (2ª instância)
+          </div>
+          <img :src="recourse.second_ack_signature_base64" alt="Assinatura 2ª instância" class="w-48 border rounded" />
+          <p v-if="recourse.second_ack_at" class="text-xs text-gray-500 mt-1">Assinado em: {{ recourse.second_ack_at }}</p>
         </div>
       </div>
 
@@ -289,7 +397,7 @@ function goBack() {
             <button type="button" @click="triggerSecondFileInput" class="inline-flex items-center gap-2 px-3 py-2 rounded border border-gray-300 bg-white text-gray-700 hover:bg-gray-50 text-sm">
               <icons.PaperclipIcon class="w-4 h-4" /> Selecionar arquivos
             </button>
-            <div class="mt-2 text-xs text-gray-500">Até 10MB por arquivo.</div>
+            <div class="mt-2 text-xs text-gray-500">Até 100MB por arquivo.</div>
             <ul v-if="secondFiles.length" class="mt-2 space-y-1">
               <li v-for="(f,i) in secondFiles" :key="i" class="flex items-center justify-between bg-gray-50 border rounded px-2 py-1 text-xs">
                 <span class="truncate">{{ f.name }}</span>
@@ -305,8 +413,8 @@ function goBack() {
       </div>
 
       <!-- Linha do tempo -->
-      <div v-if="recourse.logs?.length" class="mt-10">
-        <h3 class="font-semibold text-sm text-gray-700 mb-4">Linha do Tempo do Recurso:</h3>
+      <div v-if="recourse.logs?.length" class="bg-white rounded shadow border p-4">
+        <h3 class="font-semibold text-sm text-gray-800 mb-4 flex items-center gap-2"><icons.Clock class="w-4 h-4" /> Linha do Tempo do Recurso</h3>
         <ol class="relative border-l border-gray-300 ml-2">
           <li
             v-for="(log, index) in recourse.logs"
@@ -339,6 +447,29 @@ function goBack() {
       <!-- Aviso se ainda não respondeu -->
       <div v-if="!recourse.response" class="mt-8 text-sm text-gray-500">
         Você será notificado nesta tela e por e-mail assim que a comissão responder seu recurso.
+      </div>
+    </div>
+
+    <!-- Modal: Assinar Ciência (1ª ou 2ª instância) -->
+    <div v-if="showAckModal" class="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+      <div class="bg-white rounded-lg shadow-xl w-full max-w-lg p-6">
+        <h3 class="text-lg font-semibold text-gray-900 flex items-center gap-2">
+          <icons.PenLineIcon class="w-5 h-5" /> Assinar Ciência
+          <span class="text-sm text-gray-500 ml-2" v-if="ackType === 'first'">1ª instância</span>
+          <span class="text-sm text-gray-500 ml-2" v-else-if="ackType === 'second'">2ª instância</span>
+        </h3>
+        <p class="text-sm text-gray-600 mt-2">Assine abaixo para registrar sua ciência.</p>
+        <div class="mt-4 border rounded bg-white">
+          <canvas ref="canvas" class="w-full h-40"></canvas>
+        </div>
+        <div class="mt-2 text-xs text-gray-500">Use o mouse (ou toque) para assinar. Limpe se necessário.</div>
+        <div class="mt-4 flex justify-between">
+          <button class="px-3 py-2 bg-gray-100 text-gray-700 rounded hover:bg-gray-200 text-sm" @click="clearSignature">Limpar</button>
+          <div class="flex gap-2">
+            <button class="px-4 py-2 bg-gray-100 text-gray-700 rounded hover:bg-gray-200" @click="closeAckModal">Cancelar</button>
+            <button class="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700" @click="confirmAckSignature">Confirmar</button>
+          </div>
+        </div>
       </div>
     </div>
   </DashboardLayout>
