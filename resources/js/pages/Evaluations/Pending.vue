@@ -79,6 +79,58 @@ function goBack() {
     router.get(route('dashboard'))
   }
 }
+
+// Normaliza e formata datas em dd/mm/YYYY mesmo que a string venha em outro formato
+function formatDatePt(dateStr: string) {
+  if (!dateStr) return '';
+  // Remove timezone e parte de tempo se houver
+  const raw = dateStr.split('T')[0].split(' ')[0];
+
+  // ISO direto
+  const isoMatch = /^\d{4}-\d{2}-\d{2}$/.test(raw);
+  let d: Date | null = null;
+  if (isoMatch) {
+    d = new Date(raw + 'T00:00:00');
+  } else {
+    const sep = raw.includes('-') ? '-' : (raw.includes('/') ? '/' : null);
+    if (sep) {
+      const parts = raw.split(sep);
+      if (parts.length === 3) {
+        // Estratégia:
+        // 1) Se primeiro bloco tem 4 dígitos -> YYYY-MM-DD
+        // 2) Se terceiro bloco tem 4 dígitos e primeiro > 12 -> dd/mm/YYYY
+        // 3) Se terceiro bloco tem 4 dígitos e segundo > 12 -> mm/dd/YYYY (convertendo assumindo que na verdade queríamos dd/mm mas invertido)
+        // 4) Se ambos primeiros <= 12 (ambíguo) => forçar dd/mm/YYYY por padrão brasileiro
+        let [p1,p2,p3] = parts;
+        if (p1.length === 4) { // YYYY-MM-DD
+          d = new Date(parseInt(p1), parseInt(p2)-1, parseInt(p3));
+        } else if (p3.length === 4) {
+          const a = parseInt(p1); const b = parseInt(p2); const year = parseInt(p3);
+            if (a > 12) { // dd/mm/YYYY
+              d = new Date(year, b-1, a);
+            } else if (b > 12) { // mm/dd/YYYY mas vamos interpretar como dd/mm invertido?
+              // Aqui interpretamos p1 como mês e p2 como dia se realmente for esse o caso, mas preferência brasileira:
+              d = new Date(year, b-1, a); // trata como dd/mm/YYYY preferindo cultura local
+            } else {
+              // Ambos <=12 -> ambíguo; assume dd/mm/YYYY
+              d = new Date(year, b-1, a);
+            }
+        }
+      }
+    }
+  }
+
+  // Fallback: tentar Date nativa
+  if (!d || isNaN(d.getTime())) {
+    const tryNative = new Date(dateStr);
+    if (!isNaN(tryNative.getTime())) d = tryNative; else return dateStr;
+  }
+
+  const dia = String(d.getDate()).padStart(2,'0');
+  const mes = String(d.getMonth()+1).padStart(2,'0');
+  const ano = d.getFullYear();
+  return `${dia}/${mes}/${ano}`;
+}
 </script>
 
 <template>
@@ -295,7 +347,7 @@ function goBack() {
             </td>
             <td class="table-cell">
               <div class="text-gray-500 text-sm">
-                {{ new Date(req.created_at).toLocaleDateString('pt-BR') }}
+                {{ formatDatePt(req.created_at) }}
               </div>
             </td>
           </tr>
@@ -325,7 +377,7 @@ function goBack() {
             </div>
             <div class="flex items-center text-sm text-gray-500">
               <icons.CalendarIcon class="size-4 mr-2 text-gray-400" />
-              {{ new Date(req.created_at).toLocaleDateString('pt-BR') }}
+              {{ formatDatePt(req.created_at) }}
             </div>
           </div>
         </div>

@@ -415,7 +415,7 @@ function formatDate(dateString: string | null): string {
                   Liberado
                 </button>
 
-                <!-- Botão Preencher quando pode interagir (sem datas de exceção) -->
+                <!-- Botão Visualizar quando pode interagir (sem datas de exceção) -->
                 <button 
                   v-else-if="pdi.can_interact && pdi.status === 'pending_manager_fill'"
                   @click="viewPdi(pdi.id)"
@@ -423,7 +423,7 @@ function formatDate(dateString: string | null): string {
                   title="Preencher PDI"
                 >
                   <icons.PenIcon class="size-3 mr-1" /> 
-                  Preencher
+                  Visualizar
                 </button>
 
                 <!-- Botão Assinar quando pode interagir -->

@@ -8,7 +8,7 @@ use Illuminate\Database\Eloquent\Model;
 class EvaluationRecourseAttachment extends Model
 {
     use LogsActivity;
-    protected $fillable = ['recourse_id', 'file_path', 'original_name'];
+    protected $fillable = ['recourse_id', 'file_path', 'original_name', 'context'];
 
     public function recourse()
     {

@@ -39,7 +39,7 @@ const submitManual = () => {
 };
 
 // 4. Voltar
-const goBack = () => router.get(route('people.index'));
+const goBack = () => router.get(route('configs'));
 </script>
 
 <template>

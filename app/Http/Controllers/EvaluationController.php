@@ -914,6 +914,8 @@ class EvaluationController extends Controller
 
             // Determinar se é gestor baseado na função organizacional da pessoa
             $isGestor = $person->jobFunction && $person->jobFunction->is_manager;
+            // Evita variável indefinida quando não for gestor
+            $deveTeravaliacaoEquipe = false;
 
             // Definição padrão: se deveria haver avaliação de equipe neste ano (mesmo pendente)
             $deveTeravaliacaoEquipe = $todasEquipes->count() > 0;
@@ -950,7 +952,14 @@ class EvaluationController extends Controller
             $configAno = Config::where('year', $ano)->first();
             $isInAwarePeriod = false;
 
-            if ($configAno && $configAno->gradesPeriod) {
+            // Período de ciência: inicia na própria data de divulgação e dura awarePeriod dias (inclusive)
+            if ($configAno && $configAno->gradesPeriod && isset($configAno->awarePeriod)) {
+                $awareStart = \Carbon\Carbon::parse($configAno->gradesPeriod)->startOfDay();
+                $awareEnd = $awareStart->copy()->addDays(max(0, ($configAno->awarePeriod - 1)))->endOfDay();
+                $hoje = \Carbon\Carbon::now();
+                $isInAwarePeriod = $hoje->between($awareStart, $awareEnd);
+            } elseif ($configAno && $configAno->gradesPeriod) {
+                // Fallback: se não há awarePeriod, considerar a partir da divulgação sem limite definido
                 $startDate = \Carbon\Carbon::parse($configAno->gradesPeriod)->startOfDay();
                 $hoje = \Carbon\Carbon::now()->startOfDay();
                 $isInAwarePeriod = $hoje->greaterThanOrEqualTo($startDate);
@@ -974,27 +983,41 @@ class EvaluationController extends Controller
 
             $recourse = $existingRecourses->get($id);
 
-            // Verificar se o recurso foi DEFERIDO e calcular nova nota
+            // Verificar aprovação do recurso considerando precedência (Secretário > DGP > Comissão)
             $finalScoreAfterRecourse = null;
             $calcFinalAfterRecourse = null;
             $isRecourseApproved = false;
 
-            if ($recourse && $recourse->status === 'respondido') {
-                $isRecourseApproved = true;
+            if ($recourse) {
+                $higherDecision = null; // 'homologado' | 'nao_homologado' | null
+                if (!empty($recourse->secretary_decision)) {
+                    $higherDecision = $recourse->secretary_decision;
+                } elseif (!empty($recourse->dgp_decision)) {
+                    $higherDecision = $recourse->dgp_decision;
+                }
 
-                // Calcular nova nota SEM a nota do chefe (deferido)
-                if ($isGestor && $notaEquipe !== null && $equipes->count() > 0) {
-                    // Com equipe: 75% auto + 25% equipe
-                    $finalScoreAfterRecourse = round(($notaAuto * 0.75) + ($notaEquipe * 0.25), 2);
-                    $calcFinalAfterRecourse = "Recurso DEFERIDO (com equipe): ($notaAuto x 75%) + ($notaEquipe x 25%) = $finalScoreAfterRecourse";
-                } else if ($notaAuto > 0) {
-                    // Sem equipe: 100% auto
-                    $finalScoreAfterRecourse = $notaAuto;
-                    $calcFinalAfterRecourse = "Recurso DEFERIDO (sem equipe): ($notaAuto x 100%) = $finalScoreAfterRecourse";
+                if ($higherDecision !== null) {
+                    $isRecourseApproved = $higherDecision === 'homologado';
                 } else {
-                    // Fallback se não há autoavaliação
-                    $finalScoreAfterRecourse = 0;
-                    $calcFinalAfterRecourse = "Recurso DEFERIDO: Sem dados de autoavaliação disponíveis";
+                    // Fallback: decisão da Comissão (status antigo)
+                    $isRecourseApproved = $recourse->status === 'respondido';
+                }
+
+                if ($isRecourseApproved) {
+                    // Calcular nova nota SEM a nota do chefe (deferido)
+                    if ($isGestor && $notaEquipe !== null && $equipes->count() > 0) {
+                        // Com equipe: 75% auto + 25% equipe
+                        $finalScoreAfterRecourse = round((($notaAuto ?? 0) * 0.75) + ($notaEquipe * 0.25), 2);
+                        $calcFinalAfterRecourse = "Recurso DEFERIDO (com equipe): ($notaAuto x 75%) + ($notaEquipe x 25%) = $finalScoreAfterRecourse";
+                    } elseif ($notaAuto !== null) {
+                        // Sem equipe: 100% auto
+                        $finalScoreAfterRecourse = $notaAuto;
+                        $calcFinalAfterRecourse = "Recurso DEFERIDO (sem equipe): ($notaAuto x 100%) = $finalScoreAfterRecourse";
+                    } else {
+                        // Fallback se não há autoavaliação
+                        $finalScoreAfterRecourse = 0;
+                        $calcFinalAfterRecourse = "Recurso DEFERIDO: Sem dados de autoavaliação disponíveis";
+                    }
                 }
             }
 
@@ -1008,24 +1031,31 @@ class EvaluationController extends Controller
                 ];
             }
 
+            // Determinar se notas já foram divulgadas (gradesPeriod definido e hoje >= gradesPeriod)
+            $gradesReleased = false;
+            if ($configAno && $configAno->gradesPeriod) {
+                $gradesReleased = \Carbon\Carbon::now()->greaterThanOrEqualTo(\Carbon\Carbon::parse($configAno->gradesPeriod)->startOfDay());
+            }
+
             $evaluations[] = [
                 'year' => $ano,
                 'user' => $person->name,
-                'final_score' => $notaFinal,
-                'calc_final' => $calcFinal,
-                'calc_auto' => $calcAuto,
-                'calc_chefia' => $calcChefia,
-                'calc_equipe' => $calcEquipe,
-                'team_info' => $teamInfo,
+                'final_score' => $gradesReleased ? $notaFinal : null,
+                'calc_final' => $gradesReleased ? $calcFinal : null,
+                'calc_auto' => $gradesReleased ? $calcAuto : null,
+                'calc_chefia' => $gradesReleased ? $calcChefia : null,
+                'calc_equipe' => $gradesReleased ? $calcEquipe : null,
+                'team_info' => $gradesReleased ? $teamInfo : null,
                 'id' => $id,
+                'is_grades_released' => $gradesReleased,
                 'is_in_aware_period' => $isInAwarePeriod,
                 'is_in_recourse_period' => $isInRecoursePeriod,
                 'has_recourse' => $recourse !== null,
                 'recourse_id' => $recourse?->id,
                 'recourse_status' => $recourse?->status,
                 'is_recourse_approved' => $isRecourseApproved,
-                'final_score_after_recourse' => $finalScoreAfterRecourse,
-                'calc_final_after_recourse' => $calcFinalAfterRecourse,
+                'final_score_after_recourse' => $gradesReleased ? $finalScoreAfterRecourse : null,
+                'calc_final_after_recourse' => $gradesReleased ? $calcFinalAfterRecourse : null,
             ];
         }
 
@@ -1077,6 +1107,7 @@ class EvaluationController extends Controller
         $evaluatedPersonId = $evaluation->evaluated_person_id;
         $evaluatedPerson = Person::with('jobFunction')->find($evaluatedPersonId);
         
+        // Buscar todas as requisições (completed e pending) para exibir no detalhe
         $requestsAno = EvaluationRequest::with([
             'evaluation.form.groupQuestions.questions',
             'requested',
@@ -1088,7 +1119,6 @@ class EvaluationController extends Controller
                           $formQuery->where('year', $year);
                       });
             })
-            ->where('status', 'completed')
             ->get();
 
         // Busca TODAS as requisições (incluindo pending) para verificar se deveria ter avaliação de equipe
@@ -1169,6 +1199,7 @@ class EvaluationController extends Controller
                 'answers' => $byQuestion,
                 'evidencias' => $r->evidencias ?? null,
                 'evaluator_name' => $evaluatorName,
+                'status' => $r->status,
             ];
         }
 
@@ -1319,6 +1350,23 @@ class EvaluationController extends Controller
 
         if (!$person) {
             return back()->withErrors(['user' => 'Pessoa vinculada não encontrada.']);
+        }
+
+        // Verifica se está dentro do período de ciência para o ano
+        $configAno = Config::where('year', $year)->first();
+        if ($configAno && $configAno->gradesPeriod && isset($configAno->awarePeriod)) {
+            $awareStart = \Carbon\Carbon::parse($configAno->gradesPeriod)->startOfDay();
+            $awareEnd = $awareStart->copy()->addDays(max(0, ($configAno->awarePeriod - 1)))->endOfDay();
+            $now = \Carbon\Carbon::now();
+            if (!$now->between($awareStart, $awareEnd)) {
+                return redirect()->route('evaluations')->with('error', 'Fora do período de ciência da nota.');
+            }
+        } elseif ($configAno && $configAno->gradesPeriod && !isset($configAno->awarePeriod)) {
+            // Caso sem awarePeriod definido, permitir a partir da data de divulgação
+            $startDate = \Carbon\Carbon::parse($configAno->gradesPeriod)->startOfDay();
+            if (\Carbon\Carbon::now()->lt($startDate)) {
+                return redirect()->route('evaluations')->with('error', 'Período de ciência ainda não iniciado.');
+            }
         }
 
         // Verifica se já existe assinatura para o ano

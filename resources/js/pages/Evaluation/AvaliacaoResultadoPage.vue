@@ -37,9 +37,9 @@ const grandTotal = computed(() => {
   let somaPesos = 0;
   let hasRespostas = false;
 
-  props.form.group_questions.forEach(group => {
-    group.questions.forEach(question => {
-      const answer = props.evaluation.answers.find(ans => ans.question_id === question.id);
+  props.form.group_questions.forEach((group: any) => {
+    group.questions.forEach((question: any) => {
+      const answer = props.evaluation.answers.find((ans: any) => ans.question_id === question.id);
       const nota = Number(answer?.score);
       const peso = Number(question.weight);
 
@@ -62,10 +62,16 @@ const grandTotal = computed(() => {
     return 0;
   }
 
-  const resultado = Math.round(somaNotas / somaPesos);
-  console.log('[RESULTADO] somaNotas:', somaNotas, '| somaPesos:', somaPesos, '| Média final:', resultado);
+  const bruto = somaNotas / somaPesos;
+  const resultado = Math.round(bruto * 100) / 100; // duas casas
+  console.log('[RESULTADO] somaNotas:', somaNotas, '| somaPesos:', somaPesos, '| Média final (2 casas):', resultado, 'bruto:', bruto);
 
   return resultado;
+});
+
+// Formatação com duas casas decimais (string) mantendo separador padrão brasileiro se desejar no futuro
+const grandTotalFormatted = computed(() => {
+  return (Math.round(grandTotal.value * 100) / 100).toFixed(2).replace('.', ',');
 });
 
 
@@ -129,8 +135,8 @@ const cargoOuFuncao = computed(() => {
             <tr v-for="question in group.questions" :key="question.id" class="border-t">
               <td class="px-4 py-3 align-top">{{ question.text_content }}</td>
               <td class="px-4 py-3 text-center">
-                <span class="inline-flex justify-center items-center bg-blue-100 text-blue-800 font-bold rounded-full text-lg w-14 h-10">
-                  {{ props.evaluation.answers?.find(ans => ans.question_id === question.id)?.score ?? '-' }}
+                <span class="inline-flex justify-center items-center bg-blue-100 text-blue-800 font-bold rounded-full text-lg w-20 h-10">
+                  {{ (() => { const s = props.evaluation.answers?.find((ans: any) => ans.question_id === question.id)?.score; return (s === undefined || s === null) ? '-' : s; })() }}
                 </span>
               </td>
             </tr>
@@ -164,7 +170,7 @@ const cargoOuFuncao = computed(() => {
     <div class="form-section bg-blue-50 p-6 rounded-lg text-right mt-8">
       <div class="font-bold text-2xl text-gray-800">
         Pontuação Total:
-        <span class="text-blue-600">{{ grandTotal }}</span>
+  <span class="text-blue-600">{{ grandTotalFormatted }}</span>
       </div>
     </div>
   </DashboardLayout>

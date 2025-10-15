@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref } from 'vue';
+import { ref, computed } from 'vue';
 import { Head, router } from '@inertiajs/vue3';
 import DashboardLayout from '@/layouts/DashboardLayout.vue';
 import { route } from 'ziggy-js';
@@ -23,6 +23,11 @@ props.users.forEach((user) => {
   const customRole = user.roles.find(r => r.name.toLowerCase() !== 'servidor');
   selectedRoles.value[user.id] = customRole ? customRole.name : '';
 });
+
+// Computed list excluding any user with role 'admin'
+const filteredUsers = computed(() =>
+  props.users.filter(user => !user.roles.some(r => r.name.toLowerCase() === 'admin'))
+);
 
 function assignRole(userId: number) {
   const role = selectedRoles.value[userId];
@@ -54,7 +59,7 @@ function goBack() {
     <div class="overflow-x-auto bg-white shadow rounded p-4">
         <div class="detail-page-header flex justify-between items-center">
         <h2 class="text-2xl font-bold text-gray-800">
-          Editar Pápeis
+          Editar Papéis
         </h2>
         <button @click="goBack" class="back-btn">
           <ArrowLeftIcon class="size-4 mr-2" />
@@ -72,7 +77,7 @@ function goBack() {
         </thead>
         <tbody>
           <tr
-            v-for="user in props.users"
+            v-for="user in filteredUsers"
             :key="user.id"
             class="border-b hover:bg-gray-50"
           >
@@ -87,7 +92,10 @@ function goBack() {
             <td class="px-4 py-2 flex items-center gap-2">
               <select v-model="selectedRoles[user.id]" class="border rounded px-2 py-1 text-sm">
                 <option value="">Remover papel</option>
-                <option v-for="role in props.availableRoles" :key="role" :value="role">{{ role }}</option>
+                <option value="RH">RH</option>
+                <option value="Comissão">Comissão</option>
+                <option value="Diretor RH">Diretor RH</option>
+                <option value="Secretario Gestão">Secretario Gestão</option>
               </select>
               <button
                 class="bg-blue-600 text-white px-3 py-1 rounded hover:bg-blue-700"

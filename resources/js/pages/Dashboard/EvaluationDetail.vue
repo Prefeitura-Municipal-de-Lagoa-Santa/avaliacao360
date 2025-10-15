@@ -117,6 +117,18 @@ const allEvaluations = computed(() => {
 const completedEvaluations = computed(() => 
   allEvaluations.value.filter(e => e.nota !== null)
 );
+
+// Formata apenas a nota final. As notas individuais agora serão exibidas sem forçar duas casas.
+function formatNotaFinal(value: number | null): string {
+  if (value === null || value === undefined) return '—';
+  return (Math.round(value * 100) / 100).toFixed(2).replace('.', ',');
+}
+
+// Agora também vamos formatar a nota total de cada bloco (avaliação individual)
+function formatNota(value: number | null): string {
+  if (value === null || value === undefined) return '—';
+  return (Math.round(value * 100) / 100).toFixed(2).replace('.', ',');
+}
 </script>
 
 <template>
@@ -145,9 +157,9 @@ const completedEvaluations = computed(() =>
               </span>
             </div>
           </div>
-          <button 
-            @click="goBack" 
-            class="inline-flex items-center px-4 py-2 text-sm text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded-lg transition-colors"
+          <button
+            @click="goBack"
+            class="inline-flex items-center px-4 py-2 border text-sm font-medium rounded-md shadow-sm text-white bg-purple-600 border-purple-600 hover:bg-purple-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-purple-500 transition-colors"
           >
             <icons.ArrowLeft class="w-4 h-4 mr-2" />
             Voltar
@@ -208,7 +220,7 @@ const completedEvaluations = computed(() =>
               </div>
               <div class="text-right">
                 <div class="text-2xl font-bold">
-                  {{ evaluation.nota !== null ? evaluation.nota : '—' }}
+                  {{ evaluation.nota !== null ? formatNota(evaluation.nota) : '—' }}
                 </div>
                 <div class="text-xs opacity-75">
                   {{ evaluation.answers.filter(a => a.score !== null).length }}/{{ evaluation.answers.length }} questões
@@ -296,10 +308,10 @@ const completedEvaluations = computed(() =>
                       :class="getScoreColor(answer.score)"
                     />
                     <span 
-                      class="text-lg font-bold min-w-[24px] text-center"
+                      class="text-lg font-bold min-w-[40px] text-center"
                       :class="getScoreColor(answer.score)"
                     >
-                      {{ answer.score ?? '—' }}
+                      {{ answer.score !== null ? answer.score : '—' }}
                     </span>
                   </div>
                 </div>
@@ -307,21 +319,15 @@ const completedEvaluations = computed(() =>
 
               <!-- Estatísticas da avaliação -->
               <div v-if="evaluation.nota !== null" class="mt-4 pt-4 border-t border-gray-200">
-                <div class="grid grid-cols-3 gap-4 text-sm">
+                <div class="grid grid-cols-2 gap-4 text-sm">
                   <div class="text-center">
                     <div 
                       class="text-xl font-bold"
                       :class="getScoreColor(evaluation.nota)"
                     >
-                      {{ evaluation.nota }}
+                      {{ formatNota(evaluation.nota) }}
                     </div>
-                    <div class="text-gray-600">Média</div>
-                  </div>
-                  <div class="text-center">
-                    <div class="text-xl font-bold text-blue-600">
-                      {{ evaluation.answers.filter(a => a.score !== null).reduce((sum, a) => sum + (a.score || 0), 0) }}
-                    </div>
-                    <div class="text-gray-600">Total</div>
+                    <div class="text-gray-600">Nota Total</div>
                   </div>
                   <div class="text-center">
                     <div class="text-xl font-bold text-gray-800">
@@ -359,7 +365,7 @@ const completedEvaluations = computed(() =>
           </div>
           <div class="text-right">
             <div class="text-4xl font-bold text-blue-600">
-              {{ final_score }}
+              {{ formatNotaFinal(final_score) }}
             </div>
             <div class="text-sm text-gray-500">Nota Final</div>
           </div>

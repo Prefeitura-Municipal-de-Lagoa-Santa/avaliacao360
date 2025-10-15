@@ -17,6 +17,17 @@ use Illuminate\Support\Facades\Storage;
 
 class EvaluationRecourseController extends Controller
 {
+    // Helper to consistently read stage with workflow_stage fallback
+    private function getStage(EvaluationRecourse $recourse): ?string
+    {
+        return $recourse->workflow_stage ?? $recourse->stage ?? null;
+    }
+    private function hasRole(string $roleName): bool
+    {
+        $user = Auth::user();
+        return $user && $user->roles->pluck('name')->contains($roleName);
+    }
+
     /**
      * Verifica se o usuário atual é do RH (tem permissão total)
      */
@@ -41,7 +52,24 @@ class EvaluationRecourseController extends Controller
      */
     private function canAccessRecourse(EvaluationRecourse $recourse): bool
     {
-        return $this->isRH() || $this->isResponsibleForRecourse($recourse);
+        // RH pode visualizar em qualquer etapa; decisões são validadas em cada ação específica
+        if ($this->isRH()) {
+            return true;
+        }
+        // DGP pode acessar quando estiver na etapa da DGP
+        $stage = $this->getStage($recourse);
+        if ($stage === 'dgp_review' && (user_can('recourses.dgpDecision') || $this->hasRole('DGP') || $this->hasRole('Diretor RH'))) {
+            return true;
+        }
+        // Secretário pode acessar quando estiver na etapa do Secretário
+        if ($stage === 'secretary_review' && (user_can('recourses.secretaryDecision') || $this->hasRole('Secretário') || $this->hasRole('Secretaria') || $this->hasRole('Secretario Gestão'))) {
+            return true;
+        }
+        // Comissão só acessa quando a instância é Comissão e a etapa é de análise da Comissão
+        if ($recourse->current_instance === 'Comissao' && in_array($stage, ['commission_analysis','commission_clarification'], true)) {
+            return $this->isResponsibleForRecourse($recourse);
+        }
+        return false;
     }
 
     /**
@@ -272,10 +300,15 @@ class EvaluationRecourseController extends Controller
         $user = Auth::user();
         $person = Person::where('cpf', $user->cpf)->first();
         
-        $isRH = user_can('recourse');
+    $isRH = user_can('recourse');
         
+            if (!user_can('recourses.index')) {
+                abort(403);
+            }
         // PRIORIDADE: Se tem role "Comissão", trata como Comissão mesmo que tenha permissão RH
-        $isComissao = $user && $user->roles->pluck('name')->contains('Comissão');
+    $isComissao = $user && $user->roles->pluck('name')->contains('Comissão');
+    $isDgp = user_can('recourses.dgpDecision') || $this->hasRole('DGP') || $this->hasRole('Diretor RH');
+    $isSecretary = user_can('recourses.secretaryDecision') || $this->hasRole('Secretário') || $this->hasRole('Secretaria') || $this->hasRole('Secretario Gestão');
         
         // Para RH (que não é Comissão), status padrão é 'aberto'. Para Comissão, sem filtro padrão (todos os status)
         $status = $request->get('status');
@@ -288,27 +321,53 @@ class EvaluationRecourseController extends Controller
             'responsiblePersons',
         ]);
 
-        // Se é Comissão OU se não é RH, filtra apenas pelos recursos que a pessoa é responsável
-        if ($isComissao || !$isRH) {
+        // Sempre filtrar por instância atual do usuário
+        if ($isRH && !$isComissao && !$isDgp && !$isSecretary) {
+            // RH pode visualizar recursos independentemente da instância atual
+        } else {
             if (!$person) {
                 return redirect()->route('dashboard')->with('error', 'Dados de pessoa não encontrados.');
             }
             
-            // Filtra apenas recursos onde a pessoa é responsável
-            $query->whereHas('responsiblePersons', function($q) use ($person) {
-                $q->where('person_id', $person->id);
-            });
+            if ($isComissao) {
+                // Comissão: recursos atribuídos a mim e na instância Comissão
+                $query->whereHas('responsiblePersons', function($q) use ($person) {
+                    $q->where('person_id', $person->id);
+                })->where('current_instance', 'Comissao');
+            } elseif ($isDgp) {
+                // DGP: itens na etapa dgp_review
+                $query->where(function($q){
+                    $q->where('workflow_stage', 'dgp_review')
+                      ->orWhere(function($q2){ $q2->whereNull('workflow_stage')->where('stage', 'dgp_review'); });
+                });
+            } elseif ($isSecretary) {
+                // Secretário: itens na etapa secretary_review
+                $query->where(function($q){
+                    $q->where('workflow_stage', 'secretary_review')
+                      ->orWhere(function($q2){ $q2->whereNull('workflow_stage')->where('stage', 'secretary_review'); });
+                });
+            }
         }
 
+        // Para visões baseadas em etapa (DGP e Secretário), ignoramos filtros de 'status'
+        $isStageOnlyView = $isDgp || $isSecretary;
+
+        // Lista principal (mantida para RH e contexto geral)
         $recourses = $query
-            ->when($status, fn($q) => $q->where('status', $status))
+            ->when(!$isStageOnlyView && $status === 'devolvidos', function($q) {
+                $q->whereNotNull('last_returned_at')->where('current_instance', 'RH');
+            })
+            ->when(!$isStageOnlyView && $status && $status !== 'devolvidos', fn($q) => $q->where('status', $status))
             ->latest()
             ->paginate(10)
             ->through(function ($recourse) {
                 return [
                     'id' => $recourse->id,
                     'status' => $recourse->status,
+                    'stage' => $this->getStage($recourse),
                     'text' => $recourse->text,
+                    // Para RH: considerar concluído logo após decisão da DGP
+                    'concluded_for_rh' => !empty($recourse->dgp_decision),
                     'person' => [
                         'name' => $recourse->person->name ?? '—',
                     ],
@@ -316,6 +375,11 @@ class EvaluationRecourseController extends Controller
                         'id' => $recourse->evaluation->id ?? null,
                         'year' => '—', // Temporariamente removido o relacionamento aninhado
                     ],
+                    'last_return' => $recourse->lastReturnedBy ? [
+                        'by' => $recourse->lastReturnedBy->name,
+                        'to' => $recourse->last_returned_to_instance,
+                        'at' => optional($recourse->last_returned_at)?->format('d/m/Y H:i'),
+                    ] : null,
                     'responsiblePersons' => $recourse->responsiblePersons->map(fn($p) => [
                         'name' => $p->name,
                         'registration_number' => $p->registration_number,
@@ -324,11 +388,75 @@ class EvaluationRecourseController extends Controller
             })
             ->withQueryString();
 
+        // Conjunto "Aguardando minha decisão" de acordo com o papel
+        $awaiting = collect();
+        if ($isComissao && $person) {
+            $awaiting = EvaluationRecourse::with(['person'])
+                ->whereHas('responsiblePersons', function($q) use ($person) {
+                    $q->where('person_id', $person->id);
+                })
+                ->where('current_instance', 'Comissao')
+                ->where(function($q){
+                    $q->where('workflow_stage', 'commission_analysis')
+                      ->orWhere(function($q2){ $q2->whereNull('workflow_stage')->where('stage', 'commission_analysis'); });
+                })
+                ->whereNotIn('status', ['respondido', 'indeferido'])
+                ->latest()
+                ->take(10)
+                ->get()
+                ->map(function($recourse){
+                    return [
+                        'id' => $recourse->id,
+                        'status' => $recourse->status,
+                        'text' => $recourse->text,
+                        'person' => [ 'name' => $recourse->person->name ?? '—' ],
+                        'evaluation' => [ 'id' => $recourse->evaluation->id ?? null, 'year' => '—' ],
+                    ];
+                });
+        } elseif ($isDgp) {
+            $awaiting = EvaluationRecourse::with(['person'])
+                ->where(function($q){
+                    $q->where('workflow_stage', 'dgp_review')
+                      ->orWhere(function($q2){ $q2->whereNull('workflow_stage')->where('stage', 'dgp_review'); });
+                })
+                ->latest()
+                ->take(10)
+                ->get()
+                ->map(function($recourse){
+                    return [
+                        'id' => $recourse->id,
+                        'status' => $recourse->status,
+                        'text' => $recourse->text,
+                        'person' => [ 'name' => $recourse->person->name ?? '—' ],
+                        'evaluation' => [ 'id' => $recourse->evaluation->id ?? null, 'year' => '—' ],
+                    ];
+                });
+        } elseif ($isSecretary) {
+            $awaiting = EvaluationRecourse::with(['person'])
+                ->where(function($q){
+                    $q->where('workflow_stage', 'secretary_review')
+                      ->orWhere(function($q2){ $q2->whereNull('workflow_stage')->where('stage', 'secretary_review'); });
+                })
+                ->latest()
+                ->take(10)
+                ->get()
+                ->map(function($recourse){
+                    return [
+                        'id' => $recourse->id,
+                        'status' => $recourse->status,
+                        'text' => $recourse->text,
+                        'person' => [ 'name' => $recourse->person->name ?? '—' ],
+                        'evaluation' => [ 'id' => $recourse->evaluation->id ?? null, 'year' => '—' ],
+                    ];
+                });
+        }
+
         return inertia('Recourses/Index', [
             'recourses' => $recourses,
+            'awaiting' => $awaiting,
             'status' => $status ?? 'todos', // Para mostrar no título
             'canManageAssignees' => $isRH && !$isComissao, // Apenas RH puro pode gerenciar responsáveis
-            'userRole' => $isComissao ? 'Comissão' : ($isRH ? 'RH' : 'Sem permissão'), // Para debug/informação
+            'userRole' => $isComissao ? 'Comissão' : ($isSecretary ? 'Secretário' : ($isDgp ? 'DGP' : ($isRH ? 'RH' : 'Sem permissão'))),
         ]);
     }
 
@@ -349,7 +477,8 @@ class EvaluationRecourseController extends Controller
     {
         $request->validate([
             'text' => 'required|string',
-            'attachments.*' => 'file|max:10240',
+            // Increased max single attachment size from 10MB to 100MB (102400 KB)
+            'attachments.*' => 'file|max:102400',
         ]);
 
         $user = Auth::user();
@@ -360,7 +489,8 @@ class EvaluationRecourseController extends Controller
             'person_id' => $person->id,
             'text' => $request->text,
             'status' => 'aberto',
-            'stage' => 'comissao',
+            'current_instance' => 'RH',
+            'workflow_stage' => 'rh_analysis',
         ]);
 
         $recourse->logs()->create([
@@ -396,17 +526,108 @@ class EvaluationRecourseController extends Controller
             'responseAttachments',
             'person',
             'user',
+            'lastReturnedBy',
             'logs' => fn($q) => $q->orderBy('created_at'),
         ]);
+
+        // Calcular nota final com base nas avaliações do ano do formulário
+        // Somente exibida ao usuário após decisão da DGP (homologado ou não)
+        $finalScore = null;
+        try {
+            $evaluatedPersonId = $recourse->evaluation->evaluation->evaluated_person_id ?? null;
+            $formYear = optional($recourse->evaluation->evaluation->form)->year;
+            if ($evaluatedPersonId && $formYear) {
+                $allEvaluations = Evaluation::where('evaluated_person_id', $evaluatedPersonId)
+                    ->whereHas('form', function($query) use ($formYear) {
+                        $query->where('year', $formYear);
+                    })
+                    ->with([
+                        'answers' => function($query) {
+                            $query->with('question');
+                        },
+                        'form.groupQuestions.questions',
+                        'evaluatedPerson'
+                    ])
+                    ->get();
+
+                $evaluationIds = $allEvaluations->pluck('id');
+                $evaluationRequests = EvaluationRequest::whereIn('evaluation_id', $evaluationIds)
+                    ->with(['requester', 'requested'])
+                    ->get()
+                    ->groupBy('evaluation_id');
+
+                // Determina o status efetivo para cálculo conforme decisão DGP/Secretário
+                // homologado/homologar => tratar como 'respondido' (deferido) para anular chefe; nao_homologado/nao_homologar => 'indeferido'
+                $statusForScore = $recourse->status; // padrão: decisão da comissão
+                    if (!empty($recourse->secretary_decision)) {
+                        $approved = ['homologado','homologar','deferido','deferir','aprovado','aprovar','sim'];
+                        $statusForScore = in_array($recourse->secretary_decision, $approved, true) ? 'respondido' : 'indeferido';
+                } elseif (!empty($recourse->dgp_decision)) {
+                        $approved = ['homologado','homologar','deferido','deferir','aprovado','aprovar','sim'];
+                        $statusForScore = in_array($recourse->dgp_decision, $approved, true) ? 'respondido' : 'indeferido';
+                }
+
+                // Usa a mesma regra de cálculo aplicada na análise completa
+                $finalScore = $this->calculateMediaGeral($allEvaluations, $evaluationRequests, $statusForScore);
+            }
+        } catch (\Throwable $e) {
+            // Evita quebrar a tela em caso de dados inconsistentes
+            $finalScore = null;
+        }
 
         return inertia('Recourses/Show', [
             'recourse' => [
                 'id' => $recourse->id,
                 'text' => $recourse->text,
                 'status' => $recourse->status,
-                'stage' => $recourse->stage,
+                'current_instance' => $recourse->current_instance,
+                'stage' => $this->getStage($recourse),
                 'response' => $recourse->response,
+                // Comissão: decisão estruturada (mantemos status global mascarado em 'em_analise')
+                'commission' => [
+                    'decision' => $recourse->commission_decision, // 'deferido' | 'indeferido' | null
+                    'response' => $recourse->commission_response,
+                    'decided_at' => optional($recourse->commission_decided_at)?->format('Y-m-d H:i'),
+                    'clarification' => [
+                        'response' => $recourse->clarification_response,
+                        'responded_at' => optional($recourse->clarification_responded_at)?->format('Y-m-d H:i'),
+                        'attachments' => $recourse->attachments
+                            ->where('context','clarification_response')
+                            ->map(fn($a)=>['name'=>$a->original_name,'url'=>Storage::url($a->file_path)])->values(),
+                    ],
+                ],
                 'responded_at' => optional($recourse->responded_at)?->format('Y-m-d'),
+                // Extended workflow fields
+                'dgp' => [
+                    'decision' => $recourse->dgp_decision,
+                    'decided_at' => optional($recourse->dgp_decided_at)?->format('Y-m-d H:i'),
+                    'notes' => $recourse->dgp_notes,
+                ],
+                'secretary' => [
+                    'decision' => $recourse->secretary_decision,
+                    'decided_at' => optional($recourse->secretary_decided_at)?->format('Y-m-d H:i'),
+                    'notes' => $recourse->secretary_notes,
+                ],
+                // Nota final após decisão (DGP ou Secretário)
+                'final_score' => ($recourse->dgp_decision || $recourse->secretary_decision) ? $finalScore : null,
+                'first_ack_at' => optional($recourse->first_ack_at)?->format('Y-m-d H:i'),
+                'first_ack_signature_base64' => $recourse->first_ack_signature_base64,
+                'second_instance' => [
+                    'enabled' => (bool) $recourse->is_second_instance,
+                    'requested_at' => optional($recourse->second_instance_requested_at)?->format('Y-m-d H:i'),
+                    'text' => $recourse->second_instance_text,
+                ],
+                'second_ack_at' => optional($recourse->second_ack_at)?->format('Y-m-d H:i'),
+                'second_ack_signature_base64' => $recourse->second_ack_signature_base64,
+                'last_return' => $recourse->lastReturnedBy ? [
+                    'by' => $recourse->lastReturnedBy->name,
+                    'to' => $recourse->last_returned_to_instance,
+                    'at' => optional($recourse->last_returned_at)?->format('d/m/Y H:i'),
+                    'message' => $recourse->last_return_message,
+                    'attachments' => $recourse->attachments
+                        ->where('context', 'dgp_return')
+                        ->map(fn($a) => [ 'name' => $a->original_name, 'url' => Storage::url($a->file_path) ])->values(),
+                ] : null,
                 'attachments' => $recourse->attachments->map(fn($a) => [
                     'name' => $a->original_name,
                     'url' => Storage::url($a->file_path),
@@ -427,26 +648,19 @@ class EvaluationRecourseController extends Controller
                     'message' => $log->message,
                     'created_at' => $log->created_at->format('d/m/Y H:i'),
                 ]),
-                'commission' => [
-                    'decision' => $recourse->commission_decision,
-                    'response' => $recourse->commission_response,
-                    'decided_at' => optional($recourse->commission_decided_at)?->format('Y-m-d H:i'),
-                ],
-                'director' => [
-                    'decision' => $recourse->director_decision,
-                    'response' => $recourse->director_response,
-                    'decided_at' => optional($recourse->director_decided_at)?->format('Y-m-d H:i'),
-                ],
-                'secretary' => [
-                    'decision' => $recourse->secretary_decision,
-                    'response' => $recourse->secretary_response,
-                    'decided_at' => optional($recourse->secretary_decided_at)?->format('Y-m-d H:i'),
-                ],
-            ],
-            'permissions' => [
-                'isRH' => $isRH,
-                'isComissao' => $isComissao,
-                'isRequerente' => $isRequerente,
+                // Actions allowed for current user on Show page (typically servidor)
+                'actions' => (function () use ($recourse) {
+                    $user = Auth::user();
+                    $person = $user ? Person::where('cpf', $user->cpf)->first() : null;
+                    $isOwner = $person && $person->id === $recourse->person_id;
+                    $stage = $this->getStage($recourse);
+                    return [
+                        'canAcknowledgeFirst' => $isOwner && $stage === 'await_first_ack' && is_null($recourse->first_ack_at) && user_can('recourses.acknowledgeFirst'),
+                        // 2ª instância somente quando a DGP NÃO homologou
+                        'canRequestSecondInstance' => $isOwner && $stage === 'first_ack_done' && !$recourse->is_second_instance && ($recourse->dgp_decision === 'nao_homologado') && user_can('recourses.requestSecondInstance'),
+                        'canAcknowledgeSecond' => $isOwner && $stage === 'await_second_ack' && is_null($recourse->second_ack_at) && user_can('recourses.acknowledgeSecond'),
+                    ];
+                })(),
             ],
         ]);
     }
@@ -454,6 +668,9 @@ class EvaluationRecourseController extends Controller
     public function review(EvaluationRecourse $recourse)
     {
         // Verifica se a pessoa tem permissão (RH ou é responsável pelo recurso)
+        if (!user_can('recourses.review')) {
+            return redirect()->route('dashboard')->with('error', 'Você não tem permissão para revisar recursos.');
+        }
         if (!$this->canAccessRecourse($recourse)) {
             return redirect()->route('dashboard')->with('error', 'Você não tem permissão para acessar este recurso.');
         }
@@ -490,7 +707,8 @@ class EvaluationRecourseController extends Controller
         $evaluationToShow = $chefEvaluation ?? $recourse->evaluation->evaluation;
 
         // Busca apenas pessoas com role "Comissão" para poder atribuir responsáveis (apenas RH puro)
-        $canManageAssignees = $isRH && !$isComissao; // Apenas RH puro pode gerenciar
+    // Apenas RH puro pode gerenciar responsáveis e somente enquanto o recurso estiver na instância do RH e na etapa de análise do RH
+    $canManageAssignees = $isRH && !$isComissao && $recourse->current_instance === 'RH' && $this->getStage($recourse) === 'rh_analysis';
         
         $availablePersons = $canManageAssignees 
             ? Person::whereIn('cpf', function ($query) {
@@ -513,9 +731,67 @@ class EvaluationRecourseController extends Controller
             'recourse' => [
                 'id' => $recourse->id,
                 'status' => $recourse->status,
-                'stage' => $recourse->stage,
+                'current_instance' => $recourse->current_instance,
+                'stage' => $this->getStage($recourse),
                 'text' => $recourse->text,
                 'response' => $recourse->response,
+                // Comissão: decisão estruturada
+                'commission' => [
+                    'decision' => $recourse->commission_decision,
+                    'response' => $recourse->commission_response,
+                    'decided_at' => optional($recourse->commission_decided_at)?->format('Y-m-d H:i'),
+                    'clarification' => [
+                        'response' => $recourse->clarification_response,
+                        'responded_at' => optional($recourse->clarification_responded_at)?->format('Y-m-d H:i'),
+                        'attachments' => $recourse->attachments
+                            ->where('context','clarification_response')
+                            ->map(fn($a)=>['name'=>$a->original_name,'url'=>Storage::url($a->file_path)])->values(),
+                    ],
+                ],
+                // Extended workflow fields for UI
+                'dgp' => [
+                    'decision' => $recourse->dgp_decision,
+                    'decided_at' => optional($recourse->dgp_decided_at)?->format('Y-m-d H:i'),
+                    'notes' => $recourse->dgp_notes,
+                ],
+                'first_ack_at' => optional($recourse->first_ack_at)?->format('Y-m-d H:i'),
+                'second_instance' => [
+                    'enabled' => (bool) $recourse->is_second_instance,
+                    'requested_at' => optional($recourse->second_instance_requested_at)?->format('Y-m-d H:i'),
+                    'text' => $recourse->second_instance_text,
+                ],
+                'secretary' => [
+                    'decision' => $recourse->secretary_decision,
+                    'decided_at' => optional($recourse->secretary_decided_at)?->format('Y-m-d H:i'),
+                    'notes' => $recourse->secretary_notes,
+                ],
+                'second_ack_at' => optional($recourse->second_ack_at)?->format('Y-m-d H:i'),
+                // Actions for UI controls on Review page
+                'actions' => (function () use ($recourse) {
+                    $user = Auth::user();
+                    $isComissao = $user && $user->roles->pluck('name')->contains('Comissão');
+                    $isDgp = user_can('recourses.dgpDecision') || $this->hasRole('Diretor RH') || $this->hasRole('DGP');
+                    $isSecretary = user_can('recourses.secretaryDecision') || $this->hasRole('Secretario Gestão') || $this->hasRole('Secretário') || $this->hasRole('Secretaria');
+                    $isRH = $this->isRH() && !$isComissao && !$isDgp && !$isSecretary; // RH puro
+                    $forwardReasons = [];
+                    if (!$isRH) $forwardReasons[] = 'Apenas RH pode encaminhar.';
+                    if ($recourse->current_instance !== 'RH') $forwardReasons[] = 'Recurso não está na instância do RH.';
+                    if ($this->getStage($recourse) !== 'rh_analysis') $forwardReasons[] = 'Ação permitida apenas na análise do RH.';
+                    if (($recourse->responsiblePersons?->count() ?? 0) === 0) $forwardReasons[] = 'Defina o Presidente da Comissão antes de encaminhar.';
+                    if (!user_can('recourses.forwardToCommission')) $forwardReasons[] = 'Usuário sem permissão para encaminhar.';
+                    $stage = $this->getStage($recourse);
+                    return [
+                        'canForwardToCommission' => $isRH && $this->getStage($recourse) === 'rh_analysis' && $recourse->current_instance === 'RH' && ($recourse->responsiblePersons?->count() ?? 0) > 0 && user_can('recourses.forwardToCommission'),
+                        'forwardToCommissionDisabledReason' => empty($forwardReasons) ? null : implode(' ', $forwardReasons),
+                        'canForwardToDgp' => $isRH && $recourse->current_instance === 'Comissao' && in_array($recourse->status, ['respondido', 'indeferido']),
+                        'canDgpDecide' => ($stage === 'dgp_review') && (user_can('recourses.dgpDecision') || $this->hasRole('Diretor RH') || $this->hasRole('DGP')),
+                        'canDgpReturnToCommission' => ($stage === 'dgp_review') && (user_can('recourses.dgpReturnToCommission') || $this->hasRole('Diretor RH') || $this->hasRole('DGP')),
+                        'canRhFinalizeFirst' => false,
+                        'canForwardToSecretary' => $isRH && $stage === 'rh_forward_secretary' && (bool)$recourse->is_second_instance,
+                        'canSecretaryDecide' => ($stage === 'secretary_review') && (user_can('recourses.secretaryDecision') || $this->hasRole('Secretario Gestão') || $this->hasRole('Secretário') || $this->hasRole('Secretaria')),
+                        'canRhFinalizeSecond' => $isRH && $stage === 'rh_finalize_second' && !empty($recourse->secretary_decision),
+                    ];
+                })(),
                 'attachments' => $recourse->attachments->map(fn($a) => [
                     'name' => $a->original_name,
                     'url' => Storage::url($a->file_path),
@@ -550,38 +826,151 @@ class EvaluationRecourseController extends Controller
                     'message' => $log->message,
                     'created_at' => $log->created_at->format('d/m/Y H:i'),
                 ]),
-                'commission' => [
-                    'decision' => $recourse->commission_decision,
-                    'response' => $recourse->commission_response,
-                    'decided_at' => optional($recourse->commission_decided_at)?->format('Y-m-d H:i'),
-                ],
-                'director' => [
-                    'decision' => $recourse->director_decision,
-                    'response' => $recourse->director_response,
-                    'decided_at' => optional($recourse->director_decided_at)?->format('Y-m-d H:i'),
-                ],
-                'secretary' => [
-                    'decision' => $recourse->secretary_decision,
-                    'response' => $recourse->secretary_response,
-                    'decided_at' => optional($recourse->secretary_decided_at)?->format('Y-m-d H:i'),
-                ],
+                'last_return' => $recourse->lastReturnedBy ? [
+                    'by' => $recourse->lastReturnedBy->name,
+                    'to' => $recourse->last_returned_to_instance,
+                    'at' => optional($recourse->last_returned_at)?->format('d/m/Y H:i'),
+                    'message' => $recourse->last_return_message,
+                    'attachments' => $recourse->attachments
+                        ->where('context','dgp_return')
+                        ->map(fn($a)=>['name'=>$a->original_name,'url'=>Storage::url($a->file_path)])->values(),
+                ] : null,
             ],
             'availablePersons' => $availablePersons,
-            'canManageAssignees' => $canManageAssignees, // Apenas RH puro pode gerenciar responsáveis
-            'userRole' => $isComissao ? 'Comissão' : ($isRH ? 'RH' : 'Sem permissão'), // Para debug/informação
-            'permissions' => [
-                'isRH' => $isRH,
-                'isComissao' => $isComissao,
-                'isRequerente' => $isRequerente,
-            ],
+            // DGP/Secretário não podem gerenciar responsáveis
+            'canManageAssignees' => $canManageAssignees && !(user_can('recourses.dgpDecision') || $this->hasRole('Diretor RH') || $this->hasRole('DGP') || user_can('recourses.secretaryDecision') || $this->hasRole('Secretario Gestão') || $this->hasRole('Secretário') || $this->hasRole('Secretaria')),
+            'userRole' => $isComissao ? 'Comissão' : ((user_can('recourses.dgpDecision') || $this->hasRole('Diretor RH') || $this->hasRole('DGP')) ? 'DGP' : ((user_can('recourses.secretaryDecision') || $this->hasRole('Secretario Gestão') || $this->hasRole('Secretário') || $this->hasRole('Secretaria')) ? 'Secretário' : ($isRH ? 'RH' : 'Sem permissão'))),
+            // Somente Comissão responsável pode decidir quando a instância atual é Comissão
+            'canDecideNow' => (
+                $recourse->current_instance === 'Comissao' && $this->isResponsibleForRecourse($recourse)
+            ),
         ]);
+    }
+
+    /**
+     * RH encaminha o recurso para a Comissão responsável iniciar a análise (etapa 1 -> 2)
+     */
+    public function forwardToCommission(Request $request, EvaluationRecourse $recourse)
+    {
+        // Permissão: apenas RH puro pode encaminhar para comissão
+        if (!user_can('recourses.forwardToCommission')) {
+            return redirect()->back()->with('error', 'Você não tem permissão para encaminhar recursos.');
+        }
+
+        $user = Auth::user();
+        $isComissao = $user && $user->roles->pluck('name')->contains('Comissão');
+        // Bloqueia DGP e Secretário de encaminhar
+        $isDgp = user_can('recourses.dgpDecision') || $this->hasRole('Diretor RH') || $this->hasRole('DGP');
+        $isSecretary = user_can('recourses.secretaryDecision') || $this->hasRole('Secretario Gestão') || $this->hasRole('Secretário') || $this->hasRole('Secretaria');
+        if ($isComissao || $isDgp || $isSecretary) {
+            return redirect()->back()->with('error', 'Apenas o RH pode encaminhar recursos para a Comissão.');
+        }
+
+        // Regras: só pode encaminhar quando está no RH e ainda não está com a Comissão
+        if ($recourse->current_instance !== 'RH') {
+            return redirect()->back()->with('error', 'Recurso não está na instância do RH.');
+        }
+
+        // Deve haver um Presidente definido
+        if ($recourse->responsiblePersons()->count() === 0) {
+            return redirect()->back()->with('error', 'Defina o Presidente da Comissão antes de encaminhar.');
+        }
+
+        // Sempre permitir anexar documentos e opcionalmente registrar mensagem.
+        $wasReturnedBefore = !is_null($recourse->last_returned_at);
+        $data = $request->validate([
+            // Mensagem obrigatória somente se foi devolvido anteriormente
+            'message' => [$wasReturnedBefore ? 'required' : 'nullable', 'string', $wasReturnedBefore ? 'min:5' : 'nullable'],
+            // RH -> Comissão (reenvio) attachments up to 100MB
+            'forward_attachments.*' => ['file', 'max:102400'],
+        ]);
+        $justification = $data['message'] ?? null;
+
+        $recourse->update([
+            'current_instance' => 'Comissao',
+            'workflow_stage' => 'commission_analysis',
+        ]);
+
+        $logMessage = 'RH encaminhou o recurso para a Comissão responsável iniciar a análise.';
+        if ($justification) {
+            $logMessage .= ' Justificativa do reenvio: ' . $justification;
+        }
+        $recourse->logs()->create([
+            'status' => 'encaminhado_comissao',
+            'message' => $logMessage,
+        ]);
+
+        // Armazenar anexos (sempre que enviados)
+        if ($request->hasFile('forward_attachments')) {
+            foreach ($request->file('forward_attachments') as $file) {
+                $path = $file->store('recourse_transitions', 'public');
+                \App\Models\EvaluationRecourseAttachment::create([
+                    'recourse_id' => $recourse->id,
+                    'file_path' => $path,
+                    'original_name' => $file->getClientOriginalName(),
+                    'context' => 'forward',
+                ]);
+            }
+        }
+
+        return redirect()->route('recourses.review', $recourse->id)->with('success', 'Recurso encaminhado para a Comissão.');
+    }
+
+    /**
+     * DGP devolve para a Comissão com justificativa
+     */
+    public function dgpReturnToCommission(Request $request, EvaluationRecourse $recourse)
+    {
+        if (!(user_can('recourses.dgpReturnToCommission') || user_can('recourses.dgpDecision') || $this->hasRole('Diretor RH') || $this->hasRole('DGP'))) {
+            return redirect()->back()->with('error', 'Você não tem permissão para devolver para a Comissão.');
+        }
+        if ($this->getStage($recourse) !== 'dgp_review') {
+            return redirect()->back()->with('error', 'O recurso não está na etapa da DGP.');
+        }
+        $data = $request->validate([
+            'message' => ['required', 'string', 'min:5'],
+            'return_attachments.*' => ['file', 'max:102400'],
+        ]);
+
+        $recourse->update([
+            'current_instance' => 'Comissao',
+            'workflow_stage' => 'commission_clarification', // nova etapa específica de esclarecimento
+            'status' => 'em_analise', // permanece mascarado
+            'last_returned_by_user_id' => Auth::id(),
+            'last_returned_to_instance' => 'Comissao',
+            'last_returned_at' => now(),
+            'last_return_message' => $data['message'],
+        ]);
+
+        $recourse->logs()->create([
+            'status' => 'devolvido_dgp',
+            'message' => 'DGP solicitou esclarecimentos adicionais à Comissão. Justificativa: ' . $data['message'],
+        ]);
+
+        // Armazenar anexos da devolução (se houver)
+        if ($request->hasFile('return_attachments')) {
+            foreach ($request->file('return_attachments') as $file) {
+                $path = $file->store('recourse_transitions', 'public');
+                \App\Models\EvaluationRecourseAttachment::create([
+                    'recourse_id' => $recourse->id,
+                    'file_path' => $path,
+                    'original_name' => $file->getClientOriginalName(),
+                    'context' => 'dgp_return',
+                ]);
+            }
+        }
+
+        return redirect()->route('recourses.review', $recourse->id)->with('success', 'Recurso devolvido para a Comissão.');
     }
 
     public function markAnalyzing(EvaluationRecourse $recourse)
     {
-        // Verifica se o usuário pode marcar como analisando (RH ou responsável pelo recurso)
-        if (!$this->canAccessRecourse($recourse)) {
-            return redirect()->back()->with('error', 'Você não tem permissão para marcar este recurso como em análise.');
+        if (!user_can('recourses.markAnalyzing')) {
+            return redirect()->back()->with('error', 'Você não tem permissão para iniciar a análise.');
+        }
+        // Somente Comissão responsável pode iniciar análise
+        if (!$this->isResponsibleForRecourse($recourse) || $recourse->current_instance !== 'Comissao') {
+            return redirect()->back()->with('error', 'Apenas a Comissão responsável pode iniciar a análise.');
         }
 
         if ($recourse->status !== 'em_analise') {
@@ -599,31 +988,54 @@ class EvaluationRecourseController extends Controller
 
     public function respond(Request $request, EvaluationRecourse $recourse)
     {
-        // Verifica se o usuário pode responder (RH ou responsável pelo recurso)
-        if (!$this->canAccessRecourse($recourse)) {
-            return redirect()->back()->with('error', 'Você não tem permissão para responder este recurso.');
+        if (!user_can('recourses.respond')) {
+            return redirect()->back()->with('error', 'Você não tem permissão para responder recursos.');
+        }
+        // Somente Comissão responsável pode responder, e apenas quando a instância atual é Comissão
+        if (!$this->isResponsibleForRecourse($recourse) || $recourse->current_instance !== 'Comissao') {
+            return redirect()->back()->with('error', 'Apenas a Comissão responsável pode responder este recurso.');
+        }
+
+        // Bloqueia reedição do parecer original: se já existe decisão da comissão e não estamos em etapa de esclarecimento
+        $stage = $this->getStage($recourse);
+        if (!empty($recourse->commission_decision) && $stage !== 'commission_clarification') {
+            return redirect()->back()->with('error', 'Parecer original já registrado. Utilize o campo de esclarecimento (se disponível).');
+        }
+        // Também impede que a etapa de esclarecimento use este endpoint (deve usar respondClarification)
+        if ($stage === 'commission_clarification') {
+            return redirect()->back()->with('error', 'Esta etapa aceita apenas resposta de esclarecimento, não um novo parecer completo.');
         }
 
         $validated = $request->validate([
+            // Mantemos a decisão da comissão apenas para fins de log; status do recurso permanece 'em_analise'
             'status' => ['required', 'in:respondido,indeferido'],
             'response' => ['required', 'string', 'min:5'],
-            'response_attachments.*' => ['file', 'max:10240'], // Máximo 10MB por arquivo
+            'response_attachments' => [function($attribute,$value,$fail) use ($request){
+                if (!$request->hasFile('response_attachments')) {
+                    $fail('Envie pelo menos um documento de apoio ao parecer.');
+                }
+            }],
+            'response_attachments.*' => ['file', 'max:102400'], // Máximo 100MB por arquivo
         ]);
 
-        // Comissão decide
-        $recourse->update([
-            'status' => $validated['status'],
+        // Não alterar o status global aqui para evitar que apareça como "deferido"; manter em análise até a DGP
+        $updates = [
             'response' => $validated['response'],
             'responded_at' => now(),
+            // Persist structured commission decision fields (new workflow columns)
             'commission_decision' => $validated['status'] === 'respondido' ? 'deferido' : 'indeferido',
             'commission_response' => $validated['response'],
             'commission_decided_at' => now(),
-            'stage' => 'diretoria_rh',
-        ]);
+        ];
+        if ($recourse->status !== 'em_analise') {
+            $updates['status'] = 'em_analise';
+        }
+        $recourse->update($updates);
 
+        // Log genérico sem expor deferimento/indeferimento ao histórico inicial
         $recourse->logs()->create([
-            'status' => $validated['status'],
-            'message' => 'Parecer da Comissão registrado.',
+            'status' => 'analise_concluida',
+            'message' => 'Comissão concluiu a análise e encaminhou para homologação da DGP.',
         ]);
 
         // Salva anexos de resposta se houver
@@ -638,180 +1050,517 @@ class EvaluationRecourseController extends Controller
             }
         }
 
+        // Encaminhamento automático para DGP (Diretoria/Diretor do RH) após parecer da Comissão
+        $recourse->update([
+            'current_instance' => 'RH',
+            'workflow_stage' => 'dgp_review',
+        ]);
+        // Mantido apenas o log genérico acima; evita duplicação de informação
+
         return redirect()
             ->back()
             ->with('success', 'Parecer salvo com sucesso!');
     }
 
     /**
-     * Diretoria do RH homologa (deferir/indeferir) decisão da comissão
+     * Comissão responde solicitação de esclarecimento da DGP sem alterar a decisão original
      */
-    public function directorDecision(Request $request, EvaluationRecourse $recourse)
+    public function respondClarification(Request $request, EvaluationRecourse $recourse)
     {
-        if (!$this->isRH()) {
-            return redirect()->back()->with('error', 'Apenas a Diretoria do RH pode registrar esta decisão.');
+        if (!user_can('recourses.respond')) {
+            return redirect()->back()->with('error', 'Você não tem permissão para responder esclarecimentos.');
+        }
+        if (!$this->isResponsibleForRecourse($recourse) || $recourse->current_instance !== 'Comissao') {
+            return redirect()->back()->with('error', 'Apenas a Comissão responsável pode responder.');
+        }
+        $stage = $this->getStage($recourse);
+        if ($stage !== 'commission_clarification') {
+            return redirect()->back()->with('error', 'Este recurso não está na etapa de esclarecimento.');
+        }
+        if (empty($recourse->commission_decision)) {
+            return redirect()->back()->with('error', 'Não é possível responder esclarecimento antes do parecer original.');
         }
 
-        if ($recourse->stage !== 'diretoria_rh') {
-            return redirect()->back()->with('error', 'Etapa inválida para decisão da Diretoria.');
-        }
-
-        $validated = $request->validate([
-            'decision' => ['required', 'in:deferido,indeferido'],
-            'response' => ['required', 'string', 'min:5'],
+        $data = $request->validate([
+            'clarification_response' => ['required','string','min:3'],
+            'clarification_attachments.*' => ['file','max:102400'],
         ]);
 
         $recourse->update([
-            'director_decision' => $validated['decision'],
-            'director_response' => $validated['response'],
-            'director_decided_at' => now(),
-            'stage' => 'requerente',
+            'clarification_response' => $data['clarification_response'],
+            'clarification_responded_at' => now(),
+            // Após esclarecimento volta para análise/homologação da DGP
+            'workflow_stage' => 'dgp_review',
+            'current_instance' => 'RH',
         ]);
 
         $recourse->logs()->create([
-            'status' => 'diretoria_decidiu',
-            'message' => 'Decisão da Diretoria do RH registrada: ' . strtoupper($validated['decision']),
+            'status' => 'clarificacao_respondida',
+            'message' => 'Comissão respondeu solicitação de esclarecimento da DGP.',
         ]);
 
-        return back()->with('success', 'Decisão da Diretoria registrada. Aguarda ciência do requerente.');
+        if ($request->hasFile('clarification_attachments')) {
+            foreach ($request->file('clarification_attachments') as $file) {
+                $path = $file->store('recourse_transitions', 'public');
+                EvaluationRecourseAttachment::create([
+                    'recourse_id' => $recourse->id,
+                    'file_path' => $path,
+                    'original_name' => $file->getClientOriginalName(),
+                    'context' => 'clarification_response',
+                ]);
+            }
+        }
+
+        return redirect()->route('recourses.review', $recourse->id)->with('success', 'Esclarecimento enviado à DGP.');
     }
 
     /**
-     * Requerente toma ciência (1ª instância ou decisão final)
+     * RH remete o processo à DGP após parecer da Comissão (etapa Comissão -> DGP)
      */
-    public function acknowledge(Request $request, EvaluationRecourse $recourse)
+    public function forwardToDgp(EvaluationRecourse $recourse)
+    {
+        // Só RH puro pode encaminhar
+        $user = Auth::user();
+        $isComissao = $user && $user->roles->pluck('name')->contains('Comissão');
+        if ($isComissao || !$this->isRH()) {
+            return redirect()->back()->with('error', 'Apenas o RH pode encaminhar à DGP.');
+        }
+
+        if ($recourse->current_instance !== 'Comissao' || !in_array($recourse->status, ['respondido', 'indeferido'])) {
+            return redirect()->back()->with('error', 'O recurso precisa estar com a Comissão e já ter parecer.');
+        }
+
+        $recourse->update([
+            'current_instance' => 'RH',
+            'workflow_stage' => 'dgp_review',
+        ]);
+
+        $recourse->logs()->create([
+            'status' => 'encaminhado_dgp',
+            'message' => 'RH remeteu o processo à DGP para análise/homologação.',
+        ]);
+
+        return redirect()->route('recourses.review', $recourse->id)->with('success', 'Encaminhado à DGP.');
+    }
+
+    /**
+     * DGP analisa e homologa decisão da Subcomissão
+     */
+    public function dgpDecision(Request $request, EvaluationRecourse $recourse)
+    {
+        if (!(user_can('recourses.dgpDecision') || $this->hasRole('DGP') || $this->hasRole('Diretor RH'))) {
+            return redirect()->back()->with('error', 'Você não tem permissão para registrar decisão da DGP.');
+        }
+
+        // Deve estar na etapa de DGP
+        if ($this->getStage($recourse) !== 'dgp_review') {
+            return redirect()->back()->with('error', 'O recurso não está na etapa da DGP.');
+        }
+
+        $validated = $request->validate([
+            'decision' => ['required', 'in:homologado,nao_homologado'],
+            'notes' => [
+                function ($attribute, $value, $fail) use ($request) {
+                    if ($request->get('decision') === 'nao_homologado') {
+                        if (!is_string($value) || strlen(trim($value)) < 5) {
+                            $fail('Justificativa obrigatória para indeferir (mínimo 5 caracteres).');
+                        }
+                    }
+                }
+            ],
+            'dgp_decision_attachments.*' => ['file', 'max:102400'],
+        ]);
+
+        $recourse->update([
+            'dgp_decision' => $this->adaptDecisionForDatabase('dgp_decision', $validated['decision']),
+            'dgp_decided_at' => now(),
+            'dgp_notes' => $validated['notes'] ?? null,
+            // Atualiza o status global para categorizar nas telas (Deferidos/Indeferidos)
+            'status' => $validated['decision'] === 'homologado' ? 'respondido' : 'indeferido',
+            // Após decisão da DGP, pular a etapa manual de "Finalizar RH (1ª)" e ir direto para ciência do servidor
+            'workflow_stage' => 'await_first_ack',
+        ]);
+
+        $recourse->logs()->create([
+            'status' => 'dgp_decidiu',
+            'message' => 'DGP registrou decisão: ' . $validated['decision'],
+        ]);
+
+        // Armazenar anexos da decisão da DGP (se houver)
+        if ($request->hasFile('dgp_decision_attachments')) {
+            foreach ($request->file('dgp_decision_attachments') as $file) {
+                $path = $file->store('recourse_transitions', 'public');
+                \App\Models\EvaluationRecourseAttachment::create([
+                    'recourse_id' => $recourse->id,
+                    'file_path' => $path,
+                    'original_name' => $file->getClientOriginalName(),
+                ]);
+            }
+        }
+
+        // Log adicional informando encaminhamento automático para ciência do servidor
+        $recourse->logs()->create([
+            'status' => 'rh_finalizou_primeira',
+            'message' => 'Sistema encaminhou automaticamente para ciência do servidor (1ª instância) após decisão da DGP.',
+        ]);
+
+        return redirect()->route('recourses.review', $recourse->id)->with('success', 'Decisão da DGP registrada.');
+    }
+
+    // Etapa RH finalizar primeira instância foi automatizada após decisão da DGP.
+
+    /**
+     * Servidor registra ciência da decisão de 1ª instância
+     */
+    public function acknowledgeFirst(Request $request, EvaluationRecourse $recourse)
+    {
+        // Apenas o próprio servidor do recurso pode assinar
+        $user = Auth::user();
+        $person = Person::where('cpf', $user->cpf)->first();
+        if (!$person || $person->id !== $recourse->person_id) {
+            return redirect()->back()->with('error', 'Somente o servidor autor do recurso pode registrar ciência.');
+        }
+        if ($this->getStage($recourse) !== 'await_first_ack' || $recourse->first_ack_at) {
+            return redirect()->back()->with('error', 'Este recurso não está aguardando ciência de 1ª instância.');
+        }
+
+        $data = $request->validate([
+            'signature_base64' => ['required','string','min:50'], // data URL
+        ]);
+
+        $recourse->update([
+            'first_ack_at' => now(),
+            'first_ack_signature_base64' => $data['signature_base64'],
+            'workflow_stage' => 'first_ack_done',
+        ]);
+
+        $recourse->logs()->create([
+            'status' => 'ciencia_primeira',
+            'message' => 'Servidor registrou ciência da decisão (1ª instância).',
+        ]);
+
+        return redirect()->route('recourses.show', $recourse->id)->with('success', 'Ciência registrada.');
+    }
+
+    /**
+     * Servidor interpõe recurso em 2ª instância
+     */
+    public function requestSecondInstance(Request $request, EvaluationRecourse $recourse)
     {
         $user = Auth::user();
         $person = Person::where('cpf', $user->cpf)->first();
-
-        if (!$person || $recourse->person_id !== $person->id) {
-            return redirect()->back()->with('error', 'Apenas o requerente pode registrar ciência.');
+        if (!$person || $person->id !== $recourse->person_id) {
+            return redirect()->back()->with('error', 'Somente o servidor autor do recurso pode solicitar 2ª instância.');
         }
 
-        if ($recourse->stage === 'requerente') {
-            $recourse->update(['ack_first_at' => now()]);
-            $recourse->logs()->create([
-                'status' => 'ciencia_requerente_primeira',
-                'message' => 'Requerente registrou ciência da decisão da 1ª instância.',
-            ]);
-
-            return back()->with('success', 'Ciência registrada. Você pode interpor recurso em 2ª instância se desejar.');
+        if (!$recourse->first_ack_at || $recourse->is_second_instance) {
+            return redirect()->back()->with('error', 'Fluxo inválido para 2ª instância.');
         }
-
-        if ($recourse->stage === 'finalizado') {
-            $recourse->update(['ack_final_at' => now()]);
-            $recourse->logs()->create([
-                'status' => 'ciencia_requerente_final',
-                'message' => 'Requerente registrou ciência da decisão final.',
-            ]);
-
-            return back()->with('success', 'Ciência final registrada. Processo concluído.');
-        }
-
-        return back()->with('error', 'Etapa atual não permite ciência.');
-    }
-
-    /**
-     * RH encaminha 2ª instância ao Secretário após o requerente interpor novo recurso
-     */
-    public function escalateToSecretary(EvaluationRecourse $recourse)
-    {
-        if (!$this->isRH()) {
-            return back()->with('error', 'Apenas o RH pode encaminhar à 2ª instância.');
-        }
-        if ($recourse->stage !== 'requerente') {
-            return back()->with('error', 'Etapa inválida para encaminhar à 2ª instância.');
-        }
-
-        $recourse->update(['stage' => 'secretario']);
-        $recourse->logs()->create([
-            'status' => 'encaminhado_secretario',
-            'message' => 'RH encaminhou o processo ao Secretário para análise de 2ª instância.',
-        ]);
-
-        return back()->with('success', 'Processo encaminhado ao Secretário.');
-    }
-
-    /**
-     * Secretário decide a 2ª instância
-     */
-    public function secretaryDecision(Request $request, EvaluationRecourse $recourse)
-    {
-        // Reutilizamos a permissão de RH para o Secretário; em instalações reais, usar role específica
-        if (!$this->isRH()) {
-            return back()->with('error', 'Apenas o Secretário pode registrar esta decisão.');
-        }
-        if ($recourse->stage !== 'secretario') {
-            return back()->with('error', 'Etapa inválida para decisão do Secretário.');
+        // Bloqueia 2ª instância em caso de homologação da DGP
+        if ($recourse->dgp_decision === 'homologado') {
+            return redirect()->back()->with('error', 'Não é possível recorrer à 2ª instância quando a DGP homologou a decisão.');
         }
 
         $validated = $request->validate([
-            'decision' => ['required', 'in:deferido,indeferido'],
-            'response' => ['required', 'string', 'min:5'],
+            'text' => ['required', 'string', 'min:5'],
+            'second_instance_attachments.*' => ['file', 'max:102400'],
         ]);
 
         $recourse->update([
-            'secretary_decision' => $validated['decision'],
-            'secretary_response' => $validated['response'],
-            'secretary_decided_at' => now(),
-            'stage' => 'finalizado',
+            'is_second_instance' => true,
+            'second_instance_requested_at' => now(),
+            'second_instance_text' => $validated['text'],
+            // Encaminhamento automático ao Secretário após solicitação do servidor
+            'workflow_stage' => 'secretary_review',
+            'current_instance' => 'Comissao', // instância externa reaproveitada
         ]);
 
+        // Registra que a 2ª instância foi solicitada e encaminhada automaticamente
         $recourse->logs()->create([
-            'status' => 'secretario_decidiu',
-            'message' => 'Decisão do Secretário registrada: ' . strtoupper($validated['decision']),
+            'status' => 'segunda_instancia_solicitada',
+            'message' => 'Servidor solicitou recurso em 2ª instância.',
+        ]);
+        $recourse->logs()->create([
+            'status' => 'encaminhado_secretario',
+            'message' => 'Sistema encaminhou automaticamente ao Secretário para análise/homologação (2ª instância).',
         ]);
 
-        return back()->with('success', 'Decisão final registrada. Aguarda ciência do requerente.');
+        // Anexos enviados com o questionamento ao Secretário (se houver)
+        if ($request->hasFile('second_instance_attachments')) {
+            foreach ($request->file('second_instance_attachments') as $file) {
+                $path = $file->store('recourse_transitions', 'public');
+                \App\Models\EvaluationRecourseAttachment::create([
+                    'recourse_id' => $recourse->id,
+                    'file_path' => $path,
+                    'original_name' => $file->getClientOriginalName(),
+                ]);
+            }
+        }
+
+    return redirect()->route('recourses.show', $recourse->id)->with('success', '2ª instância solicitada e encaminhada ao Secretário.');
     }
 
     /**
-     * Devolver o processo à instância anterior
+     * RH encaminha o processo ao Secretário
      */
-    public function returnToPrevious(Request $request, EvaluationRecourse $recourse)
+    public function forwardToSecretary(EvaluationRecourse $recourse)
     {
-        $validated = $request->validate([
-            'reason' => ['nullable', 'string', 'max:2000'],
+        $user = Auth::user();
+        $isComissao = $user && $user->roles->pluck('name')->contains('Comissão');
+        if ($isComissao || !$this->isRH()) {
+            return redirect()->back()->with('error', 'Apenas RH pode encaminhar ao Secretário.');
+        }
+
+        if ($this->getStage($recourse) !== 'rh_forward_secretary' || !$recourse->is_second_instance) {
+            return redirect()->back()->with('error', 'Este recurso não está pronto para ser encaminhado ao Secretário.');
+        }
+
+        $recourse->update([
+            'current_instance' => 'Comissao', // reutilizando campo; instância externa
+            'workflow_stage' => 'secretary_review',
         ]);
 
-        $from = $recourse->stage;
-        $to = null;
-        switch ($from) {
-            case 'comissao':
-                $to = 'rh';
-                break;
-            case 'diretoria_rh':
-                $to = 'comissao';
-                break;
-            case 'requerente':
-                $to = 'diretoria_rh';
-                break;
-            case 'secretario':
-                $to = 'requerente';
-                break;
-            case 'finalizado':
-                return back()->with('error', 'Processo finalizado não pode ser devolvido.');
-            case 'rh':
-                return back()->with('error', 'Já está na primeira instância do fluxo.');
+        $recourse->logs()->create([
+            'status' => 'encaminhado_secretario',
+            'message' => 'RH encaminhou o processo ao Secretário para análise/homologação.',
+        ]);
+
+        return redirect()->route('recourses.review', $recourse->id)->with('success', 'Encaminhado ao Secretário.');
+    }
+
+    /**
+     * Secretário analisa e homologa a decisão de 1ª instância
+     */
+    public function secretaryDecision(Request $request, EvaluationRecourse $recourse)
+    {
+        if (!(user_can('recourses.secretaryDecision') || $this->hasRole('Secretário') || $this->hasRole('Secretaria') || $this->hasRole('Secretario Gestão'))) {
+            return redirect()->back()->with('error', 'Você não tem permissão para registrar decisão do Secretário.');
         }
 
-        if (!$to) {
-            return back()->with('error', 'Não foi possível determinar a instância anterior.');
+        if ($this->getStage($recourse) !== 'secretary_review' || !$recourse->is_second_instance) {
+            return redirect()->back()->with('error', 'O recurso não está na etapa do Secretário.');
         }
 
-        // Permissões: quem está na instância atual pode devolver
-        // Para simplificar, exigimos permissão de RH ou ser responsável (comissão)
-        if (!$this->isRH() && !$this->isResponsibleForRecourse($recourse)) {
-            return back()->with('error', 'Você não tem permissão para devolver este processo.');
+        $validated = $request->validate([
+            'decision' => ['required', 'in:homologado,nao_homologado,homologar,nao_homologar'],
+            'notes' => [
+                'nullable',
+                'string',
+                function ($attribute, $value, $fail) use ($request) {
+                    $d = $request->get('decision');
+                    if ($d === 'nao_homologado' || $d === 'nao_homologar') {
+                        if (!is_string($value) || strlen(trim($value)) < 5) {
+                            $fail('Justificativa obrigatória para não homologar (mínimo 5 caracteres).');
+                        }
+                    }
+                }
+            ],
+            'secretary_decision_attachments.*' => ['file', 'max:102400'],
+        ]);
+
+        // Normaliza para valores canônicos e adapta ao tipo de coluna no banco (ENUM em MySQL pode ter variantes)
+        $inputDecision = $validated['decision'];
+        $canonicalDecision = in_array($inputDecision, ['homologar', 'homologado'])
+            ? 'homologado'
+            : (in_array($inputDecision, ['nao_homologar', 'nao_homologado']) ? 'nao_homologado' : $inputDecision);
+        $normalizedDecision = $this->adaptDecisionForDatabase('secretary_decision', $canonicalDecision);
+
+        // Em ambiente SQLite, contornar CHECK antigo com PRAGMA durante a escrita
+        $usingSqlite = DB::connection()->getDriverName() === 'sqlite';
+        if ($usingSqlite) {
+            try { DB::statement('PRAGMA ignore_check_constraints = ON'); } catch (\Throwable $e) { /* ignore */ }
+        }
+        try {
+            $recourse->update([
+                'secretary_decision' => $normalizedDecision,
+                'secretary_decided_at' => now(),
+                'secretary_notes' => $validated['notes'] ?? null,
+                'workflow_stage' => 'rh_finalize_second',
+                'current_instance' => 'RH',
+            ]);
+        } finally {
+            if ($usingSqlite) {
+                try { DB::statement('PRAGMA ignore_check_constraints = OFF'); } catch (\Throwable $e) { /* ignore */ }
+            }
         }
 
-        $recourse->update(['stage' => $to]);
+        $recourse->logs()->create([
+            'status' => 'secretario_decidiu',
+            'message' => 'Secretário registrou decisão: ' . $normalizedDecision,
+        ]);
+
+        // Armazenar anexos da decisão do Secretário (se houver)
+        if ($request->hasFile('secretary_decision_attachments')) {
+            foreach ($request->file('secretary_decision_attachments') as $file) {
+                $path = $file->store('recourse_transitions', 'public');
+                \App\Models\EvaluationRecourseAttachment::create([
+                    'recourse_id' => $recourse->id,
+                    'file_path' => $path,
+                    'original_name' => $file->getClientOriginalName(),
+                ]);
+            }
+        }
+
+        return redirect()->route('recourses.review', $recourse->id)->with('success', 'Decisão do Secretário registrada.');
+    }
+
+    /**
+     * Ajusta a decisão ('homologado'/'nao_homologado') para o valor aceito pela coluna no banco,
+     * especialmente quando a coluna é ENUM em MySQL com valores como 'homologar'/'nao_homologar' ou 'deferido'/'indeferido'.
+     */
+    private function adaptDecisionForDatabase(string $column, string $canonical): string
+    {
+        // Apenas tenta adaptar para MySQL; outros drivers guardam o canônico.
+        try {
+            if (DB::getDriverName() !== 'mysql') {
+                return $canonical;
+            }
+            $row = collect(DB::select("SHOW COLUMNS FROM `evaluation_recourses` WHERE Field = ?", [$column]))->first();
+            $colType = $row->Type ?? null; // MySQL returns 'Type' like enum('a','b')
+            if (!$colType || stripos($colType, 'enum(') === false) {
+                return $canonical;
+            }
+            if (!preg_match_all("/'([^']+)'/", $colType, $m)) {
+                return $canonical;
+            }
+            $allowedOriginal = $m[1] ?? [];
+            if (empty($allowedOriginal)) {
+                return $canonical;
+            }
+            // Build lowercase map to preserve original tokens when returning
+            $allowedLowerMap = [];
+            foreach ($allowedOriginal as $tok) {
+                $allowedLowerMap[mb_strtolower($tok)] = $tok;
+            }
+            $isApprove = ($canonical === 'homologado');
+            $preferredApprove = ['homologado','homologar','deferido','deferir','aprovado','aprovar','sim'];
+            $preferredDeny    = ['nao_homologado','nao_homologar','indeferido','indeferir','rejeitado','reprovar','nao'];
+            $prefs = $isApprove ? $preferredApprove : $preferredDeny;
+            foreach ($prefs as $opt) {
+                $key = mb_strtolower($opt);
+                if (array_key_exists($key, $allowedLowerMap)) {
+                    return $allowedLowerMap[$key]; // Return with original case/diacritics as defined in enum
+                }
+            }
+            return $canonical;
+        } catch (\Throwable $e) {
+            return $canonical;
+        }
+    }
+
+    /**
+     * RH realiza trâmites finais da 2ª instância e comunica o servidor
+     */
+    public function rhFinalizeSecond(EvaluationRecourse $recourse)
+    {
+        $user = Auth::user();
+        $isComissao = $user && $user->roles->pluck('name')->contains('Comissão');
+        if ($isComissao || !$this->isRH()) {
+            return redirect()->back()->with('error', 'Apenas RH pode finalizar.');
+        }
+
+        if ($this->getStage($recourse) !== 'rh_finalize_second' || !$recourse->secretary_decision) {
+            return redirect()->back()->with('error', 'O recurso não está pronto para finalização (2ª instância).');
+        }
+
+        $recourse->update([
+            'workflow_stage' => 'await_second_ack',
+        ]);
+
+        $recourse->logs()->create([
+            'status' => 'rh_finalizou_segunda',
+            'message' => 'RH finalizou a 2ª instância e comunicou o servidor para ciência.',
+        ]);
+
+        return redirect()->route('recourses.review', $recourse->id)->with('success', 'Finalização registrada. Aguardando ciência do servidor.');
+    }
+
+    /**
+     * Servidor registra ciência da decisão de 2ª instância
+     */
+    public function acknowledgeSecond(Request $request, EvaluationRecourse $recourse)
+    {
+        $user = Auth::user();
+        $person = Person::where('cpf', $user->cpf)->first();
+        if (!$person || $person->id !== $recourse->person_id) {
+            return redirect()->back()->with('error', 'Somente o servidor autor do recurso pode registrar ciência.');
+        }
+        if ($this->getStage($recourse) !== 'await_second_ack' || $recourse->second_ack_at) {
+            return redirect()->back()->with('error', 'Este recurso não está aguardando ciência de 2ª instância.');
+        }
+
+        $data = $request->validate([
+            'signature_base64' => ['required','string','min:50'],
+        ]);
+
+        $recourse->update([
+            'second_ack_at' => now(),
+            'second_ack_signature_base64' => $data['signature_base64'],
+            'workflow_stage' => 'completed',
+        ]);
+
+        $recourse->logs()->create([
+            'status' => 'ciencia_segunda',
+            'message' => 'Servidor registrou ciência da decisão (2ª instância).',
+        ]);
+
+        return redirect()->route('recourses.show', $recourse->id)->with('success', 'Ciência registrada. Processo concluído.');
+    }
+
+    /**
+     * Devolver o processo para a instância anterior, registrando quem devolveu e para quem foi devolvido.
+     * Regra: RH pode devolver para Comissão quando estiver com RH; Comissão pode devolver para RH quando estiver com Comissão.
+     */
+    public function returnToPreviousInstance(Request $request, EvaluationRecourse $recourse)
+    {
+        if (!user_can('recourses.return')) {
+            return redirect()->back()->with('error', 'Você não tem permissão para devolver recursos.');
+        }
+        // Apenas Comissão responsável pode devolver para o RH, quando a instância atual é Comissão
+        if (!$this->isResponsibleForRecourse($recourse) || $recourse->current_instance !== 'Comissao') {
+            return redirect()->back()->with('error', 'Apenas a Comissão responsável pode devolver este recurso ao RH.');
+        }
+
+        $validated = $request->validate([
+            'message' => ['required', 'string', 'min:5'],
+            'return_attachments.*' => ['file', 'max:102400'],
+        ]);
+
+        $user = Auth::user();
+        // Determinar para qual instância será devolvido: sempre para RH neste fluxo
+        $to = 'RH';
+
+        // Atualiza instância e registra devolução
+        $recourse->update([
+            'current_instance' => $to,
+            'workflow_stage' => 'rh_analysis',
+            'last_returned_by_user_id' => $user->id,
+            'last_returned_to_instance' => $to,
+            'last_returned_at' => now(),
+            // Mantemos o status dentro do enum permitido
+            // Se estava respondido/indeferido e foi devolvido para ajustes, marcamos como em_analise
+            'status' => 'em_analise',
+        ]);
+
+        $byName = $user->name;
         $recourse->logs()->create([
             'status' => 'devolvido',
-            'message' => 'Processo devolvido da etapa ' . $from . ' para ' . $to . ($validated['reason'] ? ('. Motivo: ' . $validated['reason']) : ''),
+            'message' => "Recurso devolvido para {$to} por {$byName}. Justificativa: " . $validated['message'],
         ]);
 
-        return back()->with('success', 'Processo devolvido para a instância anterior.');
+        // Armazenar anexos da devolução (se houver)
+        if ($request->hasFile('return_attachments')) {
+            foreach ($request->file('return_attachments') as $file) {
+                $path = $file->store('recourse_transitions', 'public');
+                \App\Models\EvaluationRecourseAttachment::create([
+                    'recourse_id' => $recourse->id,
+                    'file_path' => $path,
+                    'original_name' => $file->getClientOriginalName(),
+                ]);
+            }
+        }
+
+        return redirect()->route('recourses.index')->with('success', 'Recurso devolvido com sucesso.');
     }
 
     public function assignResponsible(Request $request, EvaluationRecourse $recourse)
@@ -819,9 +1568,11 @@ class EvaluationRecourseController extends Controller
         $user = Auth::user();
         $isRH = $this->isRH();
         $isComissao = $user && $user->roles->pluck('name')->contains('Comissão');
+        $isDgp = user_can('recourses.dgpDecision') || $this->hasRole('Diretor RH') || $this->hasRole('DGP');
+        $isSecretary = user_can('recourses.secretaryDecision') || $this->hasRole('Secretario Gestão') || $this->hasRole('Secretário') || $this->hasRole('Secretaria');
         
-        // Apenas RH puro (que não é Comissão) pode atribuir responsáveis
-        if (!$isRH || $isComissao) {
+        // Apenas RH puro (que não é Comissão/DGP/Secretário) pode atribuir responsáveis
+        if (!$isRH || $isComissao || $isDgp || $isSecretary) {
             return redirect()->back()->with('error', 'Apenas o RH pode atribuir responsáveis.');
         }
 
@@ -844,30 +1595,37 @@ class EvaluationRecourseController extends Controller
         $currentUser = Auth::user();
         $assignedBy = Person::where('cpf', $currentUser->cpf)->first();
 
-        // Verifica se a pessoa já é responsável
-        $exists = EvaluationRecourseAssignee::where('recourse_id', $recourse->id)
-                                          ->where('person_id', $validated['person_id'])
-                                          ->exists();
-
-        if ($exists) {
-            return redirect()->back()->with('error', 'Esta pessoa já é responsável por este recurso.');
+        // Nova regra: só pode existir UM presidente (responsável). Se já existir, substitui.
+        $currentAssignee = EvaluationRecourseAssignee::where('recourse_id', $recourse->id)->first();
+        if ($currentAssignee && $currentAssignee->person_id == $validated['person_id']) {
+            return redirect()->back()->with('info', 'Esta pessoa já é o Presidente da Comissão para este recurso.');
         }
 
-        EvaluationRecourseAssignee::create([
-            'recourse_id' => $recourse->id,
-            'person_id' => $validated['person_id'],
-            'assigned_by' => $assignedBy?->id,
-            'assigned_at' => now(),
-        ]);
+        DB::transaction(function () use ($recourse, $validated, $assignedBy, $currentAssignee) {
+            if ($currentAssignee) {
+                $oldPerson = $currentAssignee->person; // eager relation for log
+                $currentAssignee->delete();
+                $recourse->logs()->create([
+                    'status' => 'presidente_removido',
+                    'message' => 'Presidente anterior removido: ' . ($oldPerson?->name ?? '—'),
+                ]);
+            }
 
-        $assignedPerson = Person::find($validated['person_id']);
-        
-        $recourse->logs()->create([
-            'status' => 'responsavel_atribuido',
-            'message' => "Responsável atribuído: {$assignedPerson->name}",
-        ]);
+            EvaluationRecourseAssignee::create([
+                'recourse_id' => $recourse->id,
+                'person_id' => $validated['person_id'],
+                'assigned_by' => $assignedBy?->id,
+                'assigned_at' => now(),
+            ]);
 
-        return redirect()->back()->with('success', 'Responsável atribuído com sucesso!');
+            $newPerson = Person::find($validated['person_id']);
+            $recourse->logs()->create([
+                'status' => 'presidente_atribuido',
+                'message' => 'Presidente da Comissão definido: ' . ($newPerson?->name ?? '—'),
+            ]);
+        });
+
+        return redirect()->back()->with('success', 'Presidente da Comissão definido com sucesso!');
     }
 
     public function removeResponsible(Request $request, EvaluationRecourse $recourse)
@@ -875,9 +1633,11 @@ class EvaluationRecourseController extends Controller
         $user = Auth::user();
         $isRH = $this->isRH();
         $isComissao = $user && $user->roles->pluck('name')->contains('Comissão');
+        $isDgp = user_can('recourses.dgpDecision') || $this->hasRole('Diretor RH') || $this->hasRole('DGP');
+        $isSecretary = user_can('recourses.secretaryDecision') || $this->hasRole('Secretario Gestão') || $this->hasRole('Secretário') || $this->hasRole('Secretaria');
         
-        // Apenas RH puro (que não é Comissão) pode remover responsáveis
-        if (!$isRH || $isComissao) {
+        // Apenas RH puro (que não é Comissão/DGP/Secretário) pode remover responsáveis
+        if (!$isRH || $isComissao || $isDgp || $isSecretary) {
             return redirect()->back()->with('error', 'Apenas o RH pode remover responsáveis.');
         }
 
@@ -897,10 +1657,10 @@ class EvaluationRecourseController extends Controller
         $assignee->delete();
 
         $recourse->logs()->create([
-            'status' => 'responsavel_removido',
-            'message' => "Responsável removido: {$removedPerson->name}",
+            'status' => 'presidente_removido',
+            'message' => "Presidente removido: {$removedPerson->name}",
         ]);
 
-        return redirect()->back()->with('success', 'Responsável removido com sucesso!');
+        return redirect()->back()->with('success', 'Presidente removido com sucesso!');
     }
 }

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, watch } from 'vue';
+import { computed, watch, ref } from 'vue';
 import { Head, useForm, usePage } from '@inertiajs/vue3';
 import DashboardLayout from '@/layouts/DashboardLayout.vue';
 import { Button } from '@/components/ui/button';
@@ -35,6 +35,9 @@ const form = useForm({
     cpf: props.user.cpf || '',
 });
 
+// Erro local (validação client-side) para CPF inválido
+const localCpfError = ref<string | null>(null);
+
 // --- BREADCRUMBS ---
 const breadcrumbs: BreadcrumbItem[] = [
     {
@@ -48,20 +51,40 @@ const breadcrumbs: BreadcrumbItem[] = [
 
 // --- MÉTODOS DE AÇÃO ---
 const submitCpf = () => {
+    // Validação client-side antes de enviar
+    if (!isValidCPF(form.cpf)) {
+        localCpfError.value = 'CPF inválido. Verifique os dígitos informados.';
+        return;
+    }
+    localCpfError.value = null;
     // Usa uma rota PATCH para atualizar o perfil do usuário logado
     form.transform(data => ({
         ...data,
         cpf: data.cpf.replace(/\D/g, ''),
     })).put(route('profile.cpf.update'), {
         preserveScroll: true,
+        onError: () => {
+            // Mantém a máscara mesmo após erro do backend
+            form.cpf = applyCpfMask(form.cpf);
+        },
     });
 };
 
 
-watch(() => form.cpf, (newValue, oldValue) => {
-    // Aplica a máscara e atualiza o valor no formulário
-    // Isso garante que o usuário veja o CPF formatado enquanto digita
-    form.cpf = applyCpfMask(newValue);
+watch(() => form.cpf, (newValue) => {
+    // Aplica máscara
+    const masked = applyCpfMask(newValue);
+    if (masked !== newValue) {
+        form.cpf = masked;
+    }
+    // Limpa erro local se usuário continua digitando e ainda não completou 11 dígitos
+    const digits = masked.replace(/\D/g, '');
+    if (digits.length < 11) {
+        localCpfError.value = null;
+    } else if (digits.length === 11) {
+        // Valida automaticamente quando completa 11 dígitos
+        localCpfError.value = isValidCPF(masked) ? null : 'CPF inválido. Verifique os dígitos.';
+    }
 });
 
 const applyCpfMask = (value: string): string => {
@@ -85,6 +108,30 @@ const applyCpfMask = (value: string): string => {
     }
 
     return maskedValue;
+};
+
+// Validação de CPF (dígitos verificadores)
+const isValidCPF = (value: string): boolean => {
+    if (!value) return false;
+    const cpf = value.replace(/\D/g, '');
+    if (cpf.length !== 11) return false;
+    if (/^(\d)\1{10}$/.test(cpf)) return false; // rejeita sequências repetidas
+
+    const calcCheckDigit = (base: string, factorStart: number): number => {
+        let sum = 0;
+        for (let i = 0; i < base.length; i++) {
+            sum += parseInt(base[i], 10) * (factorStart - i);
+        }
+        const mod = sum % 11;
+        return mod < 2 ? 0 : 11 - mod;
+    };
+
+    const first = calcCheckDigit(cpf.slice(0, 9), 10);
+    if (first !== parseInt(cpf[9], 10)) return false;
+    const second = calcCheckDigit(cpf.slice(0, 10), 11);
+    if (second !== parseInt(cpf[10], 10)) return false;
+
+    return true;
 };
 </script>
 
@@ -120,8 +167,10 @@ const applyCpfMask = (value: string): string => {
                                 autofocus
                                 class="text-base bg-gray-100 border-gray-200 text-gray-900 placeholder:text-gray-500"
                             />
-                            <!-- Exibe o erro de validação para o campo CPF -->
-                            <p v-if="form.errors.cpf" class="text-sm text-red-600">
+                            <!-- Erro de validação local -->
+                            <p v-if="localCpfError" class="text-sm text-red-600">{{ localCpfError }}</p>
+                            <!-- Erro de validação vindo do backend -->
+                            <p v-if="!localCpfError && form.errors.cpf" class="text-sm text-red-600">
                                 {{ form.errors.cpf }}
                             </p>
                         </div>

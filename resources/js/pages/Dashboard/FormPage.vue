@@ -5,9 +5,10 @@ import DashboardLayout from '@/layouts/DashboardLayout.vue';
 import FormCreator from '@/pages/Dashboard/Forms.vue';
 
 // --- Interfaces para Tipagem ---
+// QuestionPayload.weight aqui representa o PESO RELATIVO (%) dentro do grupo (0-100)
 interface QuestionPayload {
   text: string;
-  weight: number | null;
+  weight: number | null; // relativo
 }
 interface GroupPayload {
   name: string;
@@ -73,21 +74,44 @@ const form = useForm({
 
 
 function handleSave(groupsPayload: GroupPayload[]) {
-  form.groups = groupsPayload;
+  // Normaliza pesos relativos das questões para garantir soma 100 exata em cada grupo.
+  const normalized = groupsPayload.map(g => {
+    const qs = g.questions.slice();
+    // Trabalha em centésimos para minimizar erro acumulado
+    let rawCents = qs.map(q => Math.round(((Number(q.weight) || 0)) * 100)); // ex: 16.67 -> 1667
+    let sumCents = rawCents.reduce((a,b) => a+b, 0);
+    const targetCents = 100 * 100; // 100.00%
+    let diff = targetCents - sumCents; // positivo: falta; negativo: sobra
+    if (diff !== 0 && qs.length > 0) {
+      // Distribui ajuste de 1 cent por iteração priorizando maiores pesos quando adicionando
+      const order = rawCents.map((v,i)=>({i,v})).sort((a,b)=> diff>0 ? b.v - a.v : a.v - b.v);
+      let idx=0;
+      while(diff !== 0) {
+        rawCents[order[idx].i] += diff>0 ? 1 : -1;
+        diff += diff>0 ? -1 : 1;
+        idx = (idx + 1) % order.length;
+      }
+    }
+    const finalQuestions = qs.map((q, i) => ({
+      text: q.text,
+      weight: parseFloat((rawCents[i]/100).toFixed(2))
+    }));
+    return { name: g.name, weight: g.weight, questions: finalQuestions };
+  });
+
+  form.groups = normalized as any;
 
   if (isEditing.value) {
-    // Ao editar, usa form.put() que envia uma requisição PUT.
     form.put(route('configs.form.update', { formulario: props.form!.id }), {
-        onError: (errors) => {
-            console.error("Erro ao atualizar:", errors);
-        },
+      onError: (errors) => {
+        console.error('Erro ao atualizar:', errors);
+      },
     });
   } else {
-    // Ao criar, usa form.post() que envia uma requisição POST.
     form.post(route('configs.form.store'), {
-        onError: (errors) => {
-            console.error("Erro ao criar:", errors);
-        },
+      onError: (errors) => {
+        console.error('Erro ao criar:', errors);
+      },
     });
   }
 }

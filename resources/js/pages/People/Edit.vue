@@ -27,7 +27,7 @@ const props = defineProps<{
   organizationalUnits: Array<{ id: number; name: string }>;
   functionalStatuses: Array<string>;
   managerOptions: Array<{ id: number; name: string; registration_number: string | null }>;
-  errors: Object;
+  errors: object;
   subordinates: Array<{ id: number; name: string; registration_number: string | null }>;
 }>();
 

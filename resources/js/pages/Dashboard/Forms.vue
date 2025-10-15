@@ -55,6 +55,52 @@ const groupQuestionWeightSum = (group: Group) => {
     return group.questions.reduce((sum, q) => sum + (Number(q.weight) || 0), 0);
 };
 
+// --- Conversões de Peso ---
+// Armazena-se internamente para questões o PESO RELATIVO (0-100 dentro do grupo)
+// Precisamos exibir/editar o PESO FINAL absoluto (pesoGrupo * pesoRelativo/100)
+// Para evitar soma 49,99 (erro de arredondamento), distribuímos os centésimos que faltam/sobram.
+function buildAdjustedFinalWeights(group: Group): number[] {
+  const g = Number(group.weight) || 0;
+  if (g === 0 || !group.questions.length) return group.questions.map(() => 0);
+  // Calcula pesos finais em centésimos antes de arredondar: (g * rel / 100)
+  const raw = group.questions.map(q => (g * (Number(q.weight) || 0)) / 100);
+  // Converte para centésimos (inteiro) com floor
+  const cents = raw.map(v => Math.floor(v * 100));
+  const currentSumCents = cents.reduce((a, b) => a + b, 0);
+  const targetCents = Math.round(g * 100); // alvo exato em centésimos
+  let diff = targetCents - currentSumCents; // pode ser positivo ou negativo
+  // Estratégia: distribuir +/-1 cent começando pelos maiores restos quando diff>0
+  if (diff !== 0) {
+    const remainders = raw.map((v, i) => ({ i, r: v * 100 - cents[i] }));
+    // Ordena por maior resto desc (para adicionar) ou menor resto asc (para remover)
+    remainders.sort((a, b) => diff > 0 ? b.r - a.r : a.r - b.r);
+    let idx = 0;
+    while (diff !== 0 && idx < remainders.length) {
+      cents[remainders[idx].i] += diff > 0 ? 1 : -1;
+      diff += diff > 0 ? -1 : 1;
+      idx = (idx + 1) % remainders.length;
+    }
+  }
+  return cents.map(c => c / 100);
+}
+
+function getQuestionFinalWeight(group: Group, question: Question, qIndex?: number): number {
+  const adjusted = buildAdjustedFinalWeights(group);
+  const index = qIndex !== undefined ? qIndex : group.questions.indexOf(question);
+  return adjusted[index] ?? 0;
+}
+
+function setQuestionFinalWeight(group: Group, question: Question, finalValue: number) {
+  const g = Number(group.weight) || 0;
+  if (g === 0) {
+    // Se o grupo está com 0, não há como derivar relativo; define 0
+    question.weight = 0;
+    return;
+  }
+  const relative = (finalValue / g) * 100; // volta para relativo
+  question.weight = parseFloat(relative.toFixed(2));
+}
+
 // --- Watcher para limpar erros ---
 watch(groups, () => {
   validationError.value = null;
@@ -454,11 +500,11 @@ function handleCancel() {
 
             <!-- Tabela de Questões do Grupo -->
             <div class="space-y-3 p-4">
-                <div class="flex items-center pb-2 border-b mb-2">
-                    <div class="w-9/12 font-semibold text-gray-600">Questão</div>
-                    <div class="w-2/12 font-semibold text-gray-600 text-center">Peso Relativo (%)</div>
-                    <div class="w-1/12 font-semibold text-gray-600 text-center">Ação</div>
-                </div>
+        <div class="flex items-center pb-2 border-b mb-2">
+          <div class="w-9/12 font-semibold text-gray-600">Questão</div>
+          <div class="w-2/12 font-semibold text-gray-600 text-center">Peso Final (%)</div>
+          <div class="w-1/12 font-semibold text-gray-600 text-center">Ação</div>
+        </div>
                 <div v-for="(question, qIndex) in group.questions" :key="qIndex" class="question-row">
                     <div class="w-9/12">
                         <textarea v-model="question.text" class="form-textarea" rows="1" placeholder="Digite a questão aqui..."></textarea>
@@ -466,7 +512,18 @@ function handleCancel() {
                     <div class="w-2/12 flex justify-center">
                         <div class="relative">
                           <input 
-                            v-model.number="question.weight" 
+                            :value="getQuestionFinalWeight(group, question, qIndex)" 
+                            @input="(e: any) => { 
+                              const val = parseFloat(e.target.value); 
+                              if (!isNaN(val)) { 
+                                setQuestionFinalWeight(group, question, val); 
+                                // Marca edição manual dessa questão
+                                const key = `group-${groupIndex}`; 
+                                if (!manuallyEditedQuestions.get(key)) manuallyEditedQuestions.set(key, new Set());
+                                manuallyEditedQuestions.get(key)!.add(qIndex);
+                                adjustQuestionWeight(groupIndex, qIndex);
+                              }
+                            }"
                             type="number" 
                             min="0" 
                             max="100" 
@@ -475,8 +532,7 @@ function handleCancel() {
                               'form-input weight-input',
                               manuallyEditedQuestions.get(`group-${groupIndex}`)?.has(qIndex) ? 'manual-edited' : ''
                             ]"
-                            placeholder="0" 
-                            @input="adjustQuestionWeight(groupIndex, qIndex)"
+                            placeholder="0"
                           >
                           <span 
                             v-if="manuallyEditedQuestions.get(`group-${groupIndex}`)?.has(qIndex)" 
