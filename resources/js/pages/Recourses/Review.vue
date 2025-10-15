@@ -13,11 +13,36 @@ const props = defineProps<{
     current_instance?: 'RH' | 'Comissao';
     stage?: string | null;
     response: string | null;
-  commission?: { decision?: string | null; response?: string | null; decided_at?: string | null; clarification?: { response?: string | null; responded_at?: string | null; attachments?: Array<{name:string;url:string}> } };
-    dgp?: { decision?: string | null; decided_at?: string | null; notes?: string | null };
+    commission?: {
+      decision?: string | null;
+      response?: string | null;
+      decided_at?: string | null;
+      clarification?: {
+        response?: string | null;
+        responded_at?: string | null;
+        attachments?: Array<{ name: string; url: string }>;
+      };
+    };
+    dgp?: {
+      decision?: string | null;
+      decided_at?: string | null;
+      notes?: string | null;
+      attachments?: Array<{ name: string; url: string }>;
+    };
     second_instance?: { enabled: boolean; requested_at?: string | null; text?: string | null };
-    secretary?: { decision?: string | null; decided_at?: string | null; notes?: string | null };
-  last_return?: { by: string; to: 'RH' | 'Comissao' | null; at: string | null; message?: string | null; attachments?: Array<{name:string;url:string}> } | null;
+    secretary?: {
+      decision?: string | null;
+      decided_at?: string | null;
+      notes?: string | null;
+      attachments?: Array<{ name: string; url: string }>;
+    };
+    last_return?: {
+      by: string;
+      to: 'RH' | 'Comissao' | null;
+      at: string | null;
+      message?: string | null;
+      attachments?: Array<{ name: string; url: string }>;
+    } | null;
     actions?: {
       canForwardToCommission?: boolean;
       forwardToCommissionDisabledReason?: string | null;
@@ -43,7 +68,8 @@ const props = defineProps<{
       is_chef_evaluation: boolean;
       original_evaluation_type: string;
     };
-  logs: Array<{ status: string; message: string | null; created_at: string }>;
+    logs: Array<{ status: string; message: string | null; created_at: string }>;
+    forward?: { at?: string | null; message?: string | null; attachments?: Array<{ name: string; url: string }> } | null;
   };
   availablePersons: Array<{ id: number; name: string; registration_number: string }>;
   canManageAssignees: boolean;
@@ -527,10 +553,21 @@ function returnToPrevious() {
         <div v-if="showLastReturnBanner" class="mt-2 p-3 bg-amber-50 border border-amber-200 rounded">
           <div class="flex items-start gap-2 text-amber-800">
             <icons.Reply class="w-4 h-4 mt-0.5" />
-            <div class="text-sm">
+            <div class="text-sm w-full">
               <p>
                 Recurso devolvido para <strong>{{ recourse.last_return?.to }}</strong> por <strong>{{ recourse.last_return?.by }}</strong> em {{ recourse.last_return?.at }}.
               </p>
+              <p v-if="recourse.last_return?.message" class="mt-1 whitespace-pre-wrap">{{ recourse.last_return.message }}</p>
+              <!-- Anexos da última devolução (se houver) -->
+              <div v-if="recourse.last_return?.attachments?.length" class="mt-2 bg-white/60 border border-amber-200 rounded p-2">
+                <h4 class="text-xs font-semibold text-amber-900 mb-1 flex items-center gap-1"><icons.Paperclip class="w-3 h-3" /> Anexos da devolução</h4>
+                <ul class="space-y-1 max-h-40 overflow-y-auto">
+                  <li v-for="(f,i) in recourse.last_return.attachments" :key="i" class="flex items-center justify-between text-xs bg-amber-50 border rounded px-2 py-1">
+                    <span class="truncate">{{ f.name }}</span>
+                    <a :href="f.url" target="_blank" class="text-amber-700 hover:underline">abrir</a>
+                  </li>
+                </ul>
+              </div>
             </div>
           </div>
         </div>
@@ -655,6 +692,8 @@ function returnToPrevious() {
           </div>
         </div>
       </div>
+
+      
 
     <!-- SEÇÃO: Presidente da Comissão (RH) -->
   <div v-if="canManageAssignees && recourse.current_instance === 'RH' && recourse.stage === 'rh_analysis'" class="bg-white rounded-lg shadow-sm border">
@@ -1115,6 +1154,172 @@ function returnToPrevious() {
         </div>
       </div>
 
+      <!-- Bloco: Decisão da DGP (somente leitura para todos quando houver) -->
+      <div v-if="recourse.dgp?.decision" class="bg-white rounded-lg shadow-sm border">
+        <div class="bg-gray-800 text-white p-4 rounded-t-lg">
+          <div class="flex items-center justify-between gap-3">
+            <h2 class="text-lg font-semibold flex items-center gap-2">
+              <icons.BadgeCheck class="w-5 h-5" />
+              Decisão da DGP
+            </h2>
+            <span class="inline-flex items-center text-xs font-semibold px-2.5 py-1 rounded-full border"
+                  :class="recourse.dgp.decision === 'homologado' ? 'bg-emerald-100 text-emerald-800 border-emerald-300' : 'bg-red-100 text-red-700 border-red-300'">
+              <icons.Stamp class="w-3.5 h-3.5 mr-1" />
+              {{ recourse.dgp.decision === 'homologado' ? 'HOMOLOGADO' : 'NÃO HOMOLOGADO' }}
+            </span>
+          </div>
+          <p class="text-sm text-gray-300 mt-1">Homologação ou não do parecer da Comissão</p>
+        </div>
+        <div class="p-4 space-y-3">
+          <div class="text-xs text-gray-600" v-if="recourse.dgp?.decided_at">
+            <icons.Clock class="w-3 h-3 inline mr-1" /> Decidido em {{ recourse.dgp.decided_at }}
+          </div>
+          <div class="text-sm text-gray-700 whitespace-pre-wrap" v-if="recourse.dgp?.notes">
+            {{ recourse.dgp.notes }}
+          </div>
+          <div v-if="recourse.dgp?.attachments?.length" class="pt-2 border-t border-gray-200">
+            <h4 class="text-xs font-medium text-gray-700 mb-1 flex items-center gap-1"><icons.Paperclip class="w-3 h-3" /> Anexos da Decisão</h4>
+            <ul class="space-y-1 max-h-40 overflow-y-auto">
+              <li v-for="(f,i) in recourse.dgp.attachments" :key="i" class="flex items-center justify-between bg-white border rounded px-2 py-1 text-xs">
+                <span class="truncate">{{ f.name }}</span>
+                <a :href="f.url" target="_blank" class="text-gray-700 hover:underline">abrir</a>
+              </li>
+            </ul>
+          </div>
+        </div>
+      </div>
+
+      <!-- Bloco: Decisão do Secretário (2ª instância, somente leitura) -->
+      <div v-if="recourse.secretary?.decision" class="bg-white rounded-lg shadow-sm border">
+        <div class="bg-gray-800 text-white p-4 rounded-t-lg">
+          <div class="flex items-center justify-between gap-3">
+            <h2 class="text-lg font-semibold flex items-center gap-2">
+              <icons.BadgeCheck class="w-5 h-5" />
+              Decisão do Secretário (2ª instância)
+            </h2>
+            <span class="inline-flex items-center text-xs font-semibold px-2.5 py-1 rounded-full border"
+                  :class="recourse.secretary.decision === 'homologado' ? 'bg-emerald-100 text-emerald-800 border-emerald-300' : 'bg-red-100 text-red-700 border-red-300'">
+              <icons.Stamp class="w-3.5 h-3.5 mr-1" />
+              {{ recourse.secretary.decision === 'homologado' ? 'HOMOLOGADO' : 'NÃO HOMOLOGADO' }}
+            </span>
+          </div>
+          <p class="text-sm text-gray-300 mt-1">Homologação final em 2ª instância</p>
+        </div>
+        <div class="p-4 space-y-3">
+          <div class="text-xs text-gray-600" v-if="recourse.secretary?.decided_at">
+            <icons.Clock class="w-3 h-3 inline mr-1" /> Decidido em {{ recourse.secretary.decided_at }}
+          </div>
+          <div class="text-sm text-gray-700 whitespace-pre-wrap" v-if="recourse.secretary?.notes">
+            {{ recourse.secretary.notes }}
+          </div>
+          <div v-if="recourse.secretary?.attachments?.length" class="pt-2 border-t border-gray-200">
+            <h4 class="text-xs font-medium text-gray-700 mb-1 flex items-center gap-1"><icons.Paperclip class="w-3 h-3" /> Anexos da Decisão</h4>
+            <ul class="space-y-1 max-h-40 overflow-y-auto">
+              <li v-for="(f,i) in recourse.secretary.attachments" :key="i" class="flex items-center justify-between bg-white border rounded px-2 py-1 text-xs">
+                <span class="truncate">{{ f.name }}</span>
+                <a :href="f.url" target="_blank" class="text-gray-700 hover:underline">abrir</a>
+              </li>
+            </ul>
+          </div>
+        </div>
+      </div>
+
+      <!-- Resumo das Decisões (RH após decisão da DGP) -->
+      <div v-if="userRole === 'RH' && recourse.dgp?.decision" class="bg-white rounded-lg shadow-sm border">
+        <div class="bg-gray-700 text-white p-4 rounded-t-lg">
+          <h2 class="text-lg font-semibold flex items-center gap-2">
+            <icons.ClipboardList class="w-5 h-5" /> Resumo das Decisões
+          </h2>
+          <p class="text-sm text-gray-300 mt-1">Visão geral das decisões registradas nas instâncias</p>
+        </div>
+        <div class="p-4 space-y-4">
+          <!-- Comissão -->
+          <div class="bg-gray-50 border rounded-lg p-4" v-if="recourse.commission?.decision || recourse.response">
+            <div class="flex items-center justify-between gap-2">
+              <div class="flex items-center gap-2 text-gray-800 font-semibold">
+                <icons.Scale class="w-4 h-4" /> Comissão
+              </div>
+              <span v-if="recourse.commission?.decision"
+                    class="text-[10px] tracking-wide font-semibold px-2 py-1 rounded-full border"
+                    :class="recourse.commission.decision === 'deferido' ? 'bg-green-100 text-green-700 border-green-300' : 'bg-red-100 text-red-700 border-red-300'">
+                {{ recourse.commission.decision === 'deferido' ? 'DEFERIDO' : 'INDEFERIDO' }}
+              </span>
+            </div>
+            <div class="mt-2 text-xs text-gray-600" v-if="recourse.commission?.decided_at">
+              Decidido em {{ recourse.commission.decided_at }}
+            </div>
+            <div class="mt-2 text-sm text-gray-700 whitespace-pre-wrap" v-if="recourse.response">
+              {{ recourse.response }}
+            </div>
+            <div v-if="recourse.responseAttachments?.length" class="mt-2">
+              <h4 class="text-xs font-medium text-gray-700 mb-1 flex items-center gap-1"><icons.Paperclip class="w-3 h-3" /> Anexos do Parecer</h4>
+              <ul class="space-y-1 max-h-40 overflow-y-auto">
+                <li v-for="(f,i) in recourse.responseAttachments" :key="i" class="flex items-center justify-between bg-white border rounded px-2 py-1 text-xs">
+                  <span class="truncate">{{ f.name }}</span>
+                  <a :href="f.url" target="_blank" class="text-gray-700 hover:underline">abrir</a>
+                </li>
+              </ul>
+            </div>
+          </div>
+
+          <!-- DGP -->
+          <div class="bg-gray-50 border rounded-lg p-4">
+            <div class="flex items-center justify-between gap-2">
+              <div class="flex items-center gap-2 text-gray-800 font-semibold">
+                <icons.Stamp class="w-4 h-4" /> DGP
+              </div>
+              <span class="text-[10px] tracking-wide font-semibold px-2 py-1 rounded-full border"
+                    :class="recourse.dgp?.decision === 'homologado' ? 'bg-green-100 text-green-700 border-green-300' : 'bg-red-100 text-red-700 border-red-300'">
+                {{ recourse.dgp?.decision === 'homologado' ? 'HOMOLOGADO' : 'NÃO HOMOLOGADO' }}
+              </span>
+            </div>
+            <div class="mt-2 text-xs text-gray-600" v-if="recourse.dgp?.decided_at">
+              Decidido em {{ recourse.dgp.decided_at }}
+            </div>
+            <div class="mt-2 text-sm text-gray-700 whitespace-pre-wrap" v-if="recourse.dgp?.notes">
+              {{ recourse.dgp.notes }}
+            </div>
+            <div v-if="recourse.dgp?.attachments?.length" class="mt-2">
+              <h4 class="text-xs font-medium text-gray-700 mb-1 flex items-center gap-1"><icons.Paperclip class="w-3 h-3" /> Anexos da Decisão da DGP</h4>
+              <ul class="space-y-1 max-h-40 overflow-y-auto">
+                <li v-for="(f,i) in recourse.dgp.attachments" :key="i" class="flex items-center justify-between bg-white border rounded px-2 py-1 text-xs">
+                  <span class="truncate">{{ f.name }}</span>
+                  <a :href="f.url" target="_blank" class="text-gray-700 hover:underline">abrir</a>
+                </li>
+              </ul>
+            </div>
+          </div>
+
+          <!-- Secretário (2ª instância) -->
+          <div class="bg-gray-50 border rounded-lg p-4" v-if="recourse.secretary?.decision">
+            <div class="flex items-center justify-between gap-2">
+              <div class="flex items-center gap-2 text-gray-800 font-semibold">
+                <icons.BadgeCheck class="w-4 h-4" /> Secretário (2ª instância)
+              </div>
+              <span class="text-[10px] tracking-wide font-semibold px-2 py-1 rounded-full border"
+                    :class="recourse.secretary?.decision === 'homologado' ? 'bg-green-100 text-green-700 border-green-300' : 'bg-red-100 text-red-700 border-red-300'">
+                {{ recourse.secretary?.decision === 'homologado' ? 'HOMOLOGADO' : 'NÃO HOMOLOGADO' }}
+              </span>
+            </div>
+            <div class="mt-2 text-xs text-gray-600" v-if="recourse.secretary?.decided_at">
+              Decidido em {{ recourse.secretary.decided_at }}
+            </div>
+            <div class="mt-2 text-sm text-gray-700 whitespace-pre-wrap" v-if="recourse.secretary?.notes">
+              {{ recourse.secretary.notes }}
+            </div>
+            <div v-if="recourse.secretary?.attachments?.length" class="mt-2">
+              <h4 class="text-xs font-medium text-gray-700 mb-1 flex items-center gap-1"><icons.Paperclip class="w-3 h-3" /> Anexos da Decisão do Secretário</h4>
+              <ul class="space-y-1 max-h-40 overflow-y-auto">
+                <li v-for="(f,i) in recourse.secretary.attachments" :key="i" class="flex items-center justify-between bg-white border rounded px-2 py-1 text-xs">
+                  <span class="truncate">{{ f.name }}</span>
+                  <a :href="f.url" target="_blank" class="text-gray-700 hover:underline">abrir</a>
+                </li>
+              </ul>
+            </div>
+          </div>
+        </div>
+      </div>
+
       <!-- Ações adicionais de fluxo -->
       <div class="space-y-3">
         <!-- RH: Encaminhar à DGP (removido: agora automático após parecer da Comissão) -->
@@ -1172,6 +1377,16 @@ function returnToPrevious() {
                 </li>
               </ul>
               <p class="text-xs text-gray-500 mt-2">Até 100MB por arquivo.</p>
+              <!-- Anexos já vinculados à decisão da DGP (após salvar) -->
+              <div v-if="recourse.dgp?.attachments?.length" class="mt-3 pt-3 border-t">
+                <h4 class="text-xs font-medium text-gray-700 mb-1 flex items-center gap-1"><icons.Paperclip class="w-3 h-3" /> Anexos da decisão já registrados</h4>
+                <ul class="space-y-1 max-h-40 overflow-y-auto">
+                  <li v-for="(f,i) in recourse.dgp.attachments" :key="i" class="flex items-center justify-between bg-white border rounded px-2 py-1 text-xs">
+                    <span class="truncate">{{ f.name }}</span>
+                    <a :href="f.url" target="_blank" class="text-gray-700 hover:underline">abrir</a>
+                  </li>
+                </ul>
+              </div>
             </div>
 
             <!-- Botão Salvar -->
@@ -1254,6 +1469,16 @@ function returnToPrevious() {
                 <button type="button" class="ml-2 text-red-600 hover:underline" @click="removeSecretaryDecisionAttachment(i)">remover</button>
               </li>
             </ul>
+            <!-- Anexos já vinculados à decisão do Secretário (após salvar) -->
+            <div v-if="recourse.secretary?.attachments?.length" class="mt-3 pt-3 border-t">
+              <h4 class="text-xs font-medium text-gray-700 mb-1 flex items-center gap-1"><icons.Paperclip class="w-3 h-3" /> Anexos da decisão já registrados</h4>
+              <ul class="space-y-1 max-h-40 overflow-y-auto">
+                <li v-for="(f,i) in recourse.secretary.attachments" :key="i" class="flex items-center justify-between bg-white border rounded px-2 py-1 text-xs">
+                  <span class="truncate">{{ f.name }}</span>
+                  <a :href="f.url" target="_blank" class="text-gray-700 hover:underline">abrir</a>
+                </li>
+              </ul>
+            </div>
           </div>
           <div class="flex flex-wrap gap-2 mt-3">
             <button class="px-4 py-2 bg-green-600 text-white rounded text-sm" @click="submitSecretaryDecision('homologado')">Deferir</button>
@@ -1391,6 +1616,23 @@ function returnToPrevious() {
           </div>
           <div v-else class="text-sm text-gray-500 bg-gray-50 border border-dashed border-gray-300 rounded p-4 flex items-center gap-2">
             <icons.AlertCircle class="w-4 h-4 text-gray-500" /> Nenhum Presidente definido (inconsistência). Defina antes de encaminhar próximos recursos.
+          </div>
+          <!-- Contexto do encaminhamento do RH (se houver) -->
+          <div v-if="recourse.forward?.message || recourse.forward?.attachments?.length" class="mt-6 bg-gray-50 border border-gray-200 rounded p-4">
+            <div class="flex items-center gap-2 text-sm font-semibold text-gray-800 mb-1">
+              <icons.Send class="w-4 h-4" /> Encaminhamento à Comissão (RH)
+            </div>
+            <p v-if="recourse.forward?.message" class="text-sm text-gray-700 whitespace-pre-wrap">{{ recourse.forward.message }}</p>
+            <p v-if="recourse.forward?.at" class="text-xs text-gray-500 mt-1">Enviado em: {{ recourse.forward.at }}</p>
+            <div v-if="recourse.forward?.attachments?.length" class="mt-2">
+              <h5 class="text-xs font-medium text-gray-700 mb-1 flex items-center gap-1"><icons.Paperclip class="w-3 h-3" /> Anexos do Encaminhamento</h5>
+              <ul class="space-y-1 max-h-40 overflow-y-auto">
+                <li v-for="(f,i) in recourse.forward.attachments" :key="i" class="flex items-center justify-between bg-white border rounded px-2 py-1 text-xs">
+                  <span class="truncate">{{ f.name }}</span>
+                  <a :href="f.url" target="_blank" class="text-gray-700 hover:underline">abrir</a>
+                </li>
+              </ul>
+            </div>
           </div>
         </div>
       </div>

@@ -106,6 +106,11 @@ function removeSecondFile(i: number) {
   secondFiles.value.splice(i, 1);
 }
 function submitSecondInstance() {
+  // Defesa extra no cliente: se DGP homologou, não permitir abrir 2ª instância
+  if (props.recourse?.dgp?.decision === 'homologado') {
+    alert('Não é possível abrir a 2ª instância após deferimento/homologação da DGP.');
+    return;
+  }
   if (!secondInstanceText.value.trim()) return;
   const fd = new FormData();
   fd.append('text', secondInstanceText.value);
@@ -310,7 +315,7 @@ function goBack() {
             <icons.CheckCircleIcon class="w-4 h-4" /> Registrar ciência (1ª instância)
           </button>
         </div>
-        <div v-if="recourse.actions?.canRequestSecondInstance" class="flex justify-end">
+        <div v-if="recourse.actions?.canRequestSecondInstance && recourse.dgp?.decision !== 'homologado'" class="flex justify-end">
           <button
             class="px-4 py-2 bg-amber-600 text-white rounded hover:bg-amber-700 text-sm flex items-center gap-2"
             @click="showSecondModal = true"
