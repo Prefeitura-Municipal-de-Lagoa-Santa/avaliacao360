@@ -616,6 +616,9 @@ class EvaluationRecourseController extends Controller
                     'enabled' => (bool) $recourse->is_second_instance,
                     'requested_at' => optional($recourse->second_instance_requested_at)?->format('Y-m-d H:i'),
                     'text' => $recourse->second_instance_text,
+                    'deadline_at' => optional($recourse->second_instance_deadline_at)?->format('Y-m-d H:i'),
+                    'deadline_days' => $recourse->second_instance_deadline_days,
+                    'is_deadline_expired' => $recourse->second_instance_deadline_at ? now()->isAfter($recourse->second_instance_deadline_at) : false,
                 ],
                 'second_ack_at' => optional($recourse->second_ack_at)?->format('Y-m-d H:i'),
                 'second_ack_signature_base64' => $recourse->second_ack_signature_base64,
@@ -656,8 +659,8 @@ class EvaluationRecourseController extends Controller
                     $stage = $this->getStage($recourse);
                     return [
                         'canAcknowledgeFirst' => $isOwner && $stage === 'await_first_ack' && is_null($recourse->first_ack_at) && user_can('recourses.acknowledgeFirst'),
-                        // 2ª instância somente quando a DGP NÃO homologou
-                        'canRequestSecondInstance' => $isOwner && $stage === 'first_ack_done' && !$recourse->is_second_instance && ($recourse->dgp_decision === 'nao_homologado') && user_can('recourses.requestSecondInstance'),
+                        // 2ª instância somente quando a DGP NÃO homologou e ainda está dentro do prazo
+                        'canRequestSecondInstance' => $isOwner && $stage === 'first_ack_done' && !$recourse->is_second_instance && ($recourse->dgp_decision === 'nao_homologado') && user_can('recourses.requestSecondInstance') && (!$recourse->second_instance_deadline_at || now()->isBefore($recourse->second_instance_deadline_at)),
                         'canAcknowledgeSecond' => $isOwner && $stage === 'await_second_ack' && is_null($recourse->second_ack_at) && user_can('recourses.acknowledgeSecond'),
                     ];
                 })(),
@@ -759,6 +762,9 @@ class EvaluationRecourseController extends Controller
                     'enabled' => (bool) $recourse->is_second_instance,
                     'requested_at' => optional($recourse->second_instance_requested_at)?->format('Y-m-d H:i'),
                     'text' => $recourse->second_instance_text,
+                    'deadline_at' => optional($recourse->second_instance_deadline_at)?->format('Y-m-d H:i'),
+                    'deadline_days' => $recourse->second_instance_deadline_days,
+                    'is_deadline_expired' => $recourse->second_instance_deadline_at ? now()->isAfter($recourse->second_instance_deadline_at) : false,
                 ],
                 'secretary' => [
                     'decision' => $recourse->secretary_decision,
@@ -1232,6 +1238,9 @@ class EvaluationRecourseController extends Controller
             'first_ack_at' => now(),
             'first_ack_signature_base64' => $data['signature_base64'],
             'workflow_stage' => 'first_ack_done',
+            // Define prazo de 15 dias a partir da ciência para solicitar segunda instância
+            'second_instance_deadline_at' => now()->addDays(15),
+            'second_instance_deadline_days' => 15,
         ]);
 
         $recourse->logs()->create([
@@ -1256,6 +1265,12 @@ class EvaluationRecourseController extends Controller
         if (!$recourse->first_ack_at || $recourse->is_second_instance) {
             return redirect()->back()->with('error', 'Fluxo inválido para 2ª instância.');
         }
+        
+        // Verifica se está dentro do prazo de 15 dias para solicitar segunda instância
+        if ($recourse->second_instance_deadline_at && now()->isAfter($recourse->second_instance_deadline_at)) {
+            return redirect()->back()->with('error', 'O prazo para solicitar a 2ª instância expirou em ' . $recourse->second_instance_deadline_at->format('d/m/Y'));
+        }
+        
         // Bloqueia 2ª instância em caso de homologação da DGP
         if ($recourse->dgp_decision === 'homologado') {
             return redirect()->back()->with('error', 'Não é possível recorrer à 2ª instância quando a DGP homologou a decisão.');

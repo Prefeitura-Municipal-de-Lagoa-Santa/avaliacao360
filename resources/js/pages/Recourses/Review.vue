@@ -29,7 +29,14 @@ const props = defineProps<{
       notes?: string | null;
       attachments?: Array<{ name: string; url: string }>;
     };
-    second_instance?: { enabled: boolean; requested_at?: string | null; text?: string | null };
+    second_instance?: { 
+      enabled: boolean; 
+      requested_at?: string | null; 
+      text?: string | null;
+      deadline_at?: string | null;
+      deadline_days?: number;
+      is_deadline_expired?: boolean;
+    };
     secretary?: {
       decision?: string | null;
       decided_at?: string | null;
@@ -172,6 +179,30 @@ const showLastReturnBanner = computed(() => {
   // Caso haja parecer registrado (texto), considerar tratado
   if (props.recourse.response && props.recourse.response.trim().length > 0) return false;
   return true;
+});
+
+// Mostrar informações sobre o prazo da segunda instância
+const showSecondInstanceDeadlineInfo = computed(() => {
+  const si = props.recourse.second_instance;
+  // Só mostrar se houver prazo definido e ainda não solicitou segunda instância
+  return si?.deadline_at && !si.enabled;
+});
+
+// Formatação do prazo da segunda instância
+const formatSecondInstanceDeadline = computed(() => {
+  if (!props.recourse.second_instance?.deadline_at) return '';
+  try {
+    const date = new Date(props.recourse.second_instance.deadline_at);
+    return date.toLocaleDateString('pt-BR', { 
+      day: '2-digit', 
+      month: '2-digit', 
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    });
+  } catch {
+    return props.recourse.second_instance.deadline_at;
+  }
 });
 
 function markAsAnalyzing() {
@@ -581,6 +612,26 @@ function returnToPrevious() {
                   </li>
                 </ul>
               </div>
+            </div>
+          </div>
+        </div>
+        
+        <!-- Info sobre prazo da segunda instância -->
+        <div v-if="showSecondInstanceDeadlineInfo" class="mt-2 p-3 rounded" 
+             :class="recourse.second_instance?.is_deadline_expired ? 'bg-red-50 border border-red-200' : 'bg-blue-50 border border-blue-200'">
+          <div class="flex items-start gap-2" 
+               :class="recourse.second_instance?.is_deadline_expired ? 'text-red-800' : 'text-blue-800'">
+            <icons.Clock class="w-4 h-4 mt-0.5" />
+            <div class="text-sm w-full">
+              <p v-if="recourse.second_instance?.is_deadline_expired" class="font-medium">
+                <strong>Prazo expirado:</strong> O prazo para solicitar a 2ª instância expirou em {{ formatSecondInstanceDeadline }}.
+              </p>
+              <p v-else class="font-medium">
+                <strong>Prazo para 2ª instância:</strong> {{ recourse.second_instance?.deadline_days }} dias após a ciência (até {{ formatSecondInstanceDeadline }}).
+              </p>
+              <p v-if="!recourse.second_instance?.is_deadline_expired" class="mt-1 text-xs opacity-75">
+                Caso discorde da decisão da DGP, você pode solicitar recurso em segunda instância ao Secretário dentro do prazo.
+              </p>
             </div>
           </div>
         </div>
