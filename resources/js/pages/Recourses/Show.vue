@@ -14,7 +14,14 @@ const props = defineProps<{
     response?: string;
     responded_at?: string;
     final_score?: number | null;
-    second_instance?: { enabled: boolean; requested_at?: string | null; text?: string | null };
+    second_instance?: { 
+      enabled: boolean; 
+      requested_at?: string | null; 
+      text?: string | null;
+      deadline_at?: string | null;
+      deadline_days?: number;
+      is_deadline_expired?: boolean;
+    };
     dgp?: { decision?: string | null; decided_at?: string | null; notes?: string | null };
     secretary?: { decision?: string | null; decided_at?: string | null; notes?: string | null };
     attachments: Array<{ name: string; url: string }>;
@@ -54,6 +61,23 @@ function formatStageLabel(stage?: string | null): string {
   if (!stage) return '—';
   return stageLabels[stage] ?? stage.replaceAll('_', ' ').toUpperCase();
 }
+
+// Formatação do prazo da segunda instância
+const formatSecondInstanceDeadline = (deadline?: string | null) => {
+  if (!deadline) return '';
+  try {
+    const date = new Date(deadline);
+    return date.toLocaleDateString('pt-BR', { 
+      day: '2-digit', 
+      month: '2-digit', 
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    });
+  } catch {
+    return deadline;
+  }
+};
 
 const secondInstanceText = ref('');
 const showSecondModal = ref(false);
@@ -128,6 +152,13 @@ function submitSecondInstance() {
     alert('Não é possível abrir a 2ª instância após deferimento/homologação da DGP.');
     return;
   }
+  
+  // Verificar se o prazo ainda está válido
+  if (props.recourse?.second_instance?.is_deadline_expired) {
+    alert('O prazo para solicitar a 2ª instância já expirou.');
+    return;
+  }
+  
   if (!secondInstanceText.value.trim()) return;
   const fd = new FormData();
   fd.append('text', secondInstanceText.value);
@@ -347,13 +378,38 @@ function goBack() {
             <icons.CheckCircleIcon class="w-4 h-4" /> Registrar ciência (1ª instância)
           </button>
         </div>
-        <div v-if="recourse.actions?.canRequestSecondInstance && recourse.dgp?.decision !== 'homologado'" class="flex justify-end">
-          <button
-            class="px-4 py-2 bg-amber-600 text-white rounded hover:bg-amber-700 text-sm flex items-center gap-2"
-            @click="showSecondModal = true"
-          >
-            <icons.MessageSquareIcon class="w-4 h-4" /> Questionar ao Secretário (2ª instância)
-          </button>
+        <div v-if="recourse.actions?.canRequestSecondInstance && recourse.dgp?.decision !== 'homologado'" class="space-y-2">
+          <!-- Informações sobre o prazo -->
+          <div v-if="recourse.second_instance?.deadline_at" class="p-3 rounded-lg" 
+               :class="recourse.second_instance?.is_deadline_expired ? 'bg-red-50 border border-red-200' : 'bg-blue-50 border border-blue-200'">
+            <div class="flex items-start gap-2" 
+                 :class="recourse.second_instance?.is_deadline_expired ? 'text-red-800' : 'text-blue-800'">
+              <icons.Clock class="w-4 h-4 mt-0.5" />
+              <div class="text-sm">
+                <p v-if="recourse.second_instance?.is_deadline_expired" class="font-medium">
+                  <strong>Prazo expirado:</strong> O prazo para solicitar a 2ª instância expirou em {{ formatSecondInstanceDeadline(recourse.second_instance?.deadline_at) }}.
+                </p>
+                <p v-else class="font-medium">
+                  <strong>Prazo para 2ª instância:</strong> Você tem {{ recourse.second_instance?.deadline_days }} dias após a ciência para questionar ao Secretário.
+                </p>
+                <p v-if="!recourse.second_instance?.is_deadline_expired" class="mt-1 text-xs opacity-75">
+                  Prazo válido até: {{ formatSecondInstanceDeadline(recourse.second_instance?.deadline_at) }}
+                </p>
+              </div>
+            </div>
+          </div>
+          
+          <!-- Botão para solicitar segunda instância -->
+          <div class="flex justify-end">
+            <button
+              class="px-4 py-2 bg-amber-600 text-white rounded hover:bg-amber-700 text-sm flex items-center gap-2"
+              :disabled="recourse.second_instance?.is_deadline_expired"
+              :class="recourse.second_instance?.is_deadline_expired ? 'opacity-50 cursor-not-allowed' : ''"
+              @click="recourse.second_instance?.is_deadline_expired ? null : (showSecondModal = true)"
+            >
+              <icons.MessageSquareIcon class="w-4 h-4" /> Questionar ao Secretário (2ª instância)
+            </button>
+          </div>
         </div>
         <div v-if="recourse.actions?.canAcknowledgeSecond" class="flex justify-end">
           <button

@@ -38,6 +38,8 @@ class EvaluationRecourse extends Model
         'is_second_instance',
         'second_instance_requested_at',
         'second_instance_text',
+        'second_instance_deadline_at',
+        'second_instance_deadline_days',
         'secretary_decision',
         'secretary_decided_at',
         'secretary_notes',
@@ -54,6 +56,7 @@ class EvaluationRecourse extends Model
         'first_ack_at' => 'datetime',
         'is_second_instance' => 'boolean',
         'second_instance_requested_at' => 'datetime',
+        'second_instance_deadline_at' => 'datetime',
         'secretary_decided_at' => 'datetime',
         'second_ack_at' => 'datetime',
     ];
